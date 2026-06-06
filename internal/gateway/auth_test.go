@@ -15,15 +15,16 @@ func TestRequireBearer(t *testing.T) {
 	h := gateway.RequireBearer("sekrit", next)
 
 	cases := []struct {
-		name   string
-		header string
-		want   int
+		name     string
+		header   string
+		want     int
+		wantAuth bool
 	}{
-		{"no header", "", http.StatusUnauthorized},
-		{"wrong scheme", "Basic sekrit", http.StatusUnauthorized},
-		{"wrong token", "Bearer nope", http.StatusUnauthorized},
-		{"token as prefix", "Bearer sekrit2", http.StatusUnauthorized},
-		{"correct", "Bearer sekrit", http.StatusOK},
+		{"no header", "", http.StatusUnauthorized, true},
+		{"wrong scheme", "Basic sekrit", http.StatusUnauthorized, true},
+		{"wrong token", "Bearer nope", http.StatusUnauthorized, true},
+		{"token as prefix", "Bearer sekrit2", http.StatusUnauthorized, true},
+		{"correct", "Bearer sekrit", http.StatusOK, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,6 +36,9 @@ func TestRequireBearer(t *testing.T) {
 			h.ServeHTTP(rec, req)
 			if rec.Code != tc.want {
 				t.Errorf("got %d, want %d", rec.Code, tc.want)
+			}
+			if gotAuth := rec.Header().Get("WWW-Authenticate"); tc.wantAuth && gotAuth != "Bearer" {
+				t.Errorf("WWW-Authenticate: got %q, want %q", gotAuth, "Bearer")
 			}
 		})
 	}
