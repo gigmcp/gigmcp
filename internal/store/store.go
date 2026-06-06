@@ -18,5 +18,9 @@ type Store interface {
 	EnsureServer(ctx context.Context, name, binary string) (Server, error)
 	// ListServers returns all registered servers ordered by name.
 	ListServers(ctx context.Context) ([]Server, error)
+	// PutCredential upserts a credential by (server, tenant).
+	PutCredential(ctx context.Context, c Credential) error
+	// GetCredential fetches a credential by (server, tenant); returns error if not found.
+	GetCredential(ctx context.Context, server, tenant string) (Credential, error)
 	Close() error
 }

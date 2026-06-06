@@ -28,7 +28,12 @@ func OpenSQLite(path string) (Store, error) {
 	}
 	// NOTE: modernc/sqlite serialises writes; if write contention appears,
 	// cap the pool with db.SetMaxOpenConns(1).
-	if _, err := db.ExecContext(context.Background(), schema); err != nil {
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, schema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.ExecContext(ctx, credSchema); err != nil {
 		db.Close()
 		return nil, err
 	}
