@@ -141,6 +141,50 @@ func TestCommandArgvHardening(t *testing.T) {
 	}
 }
 
+func TestEgressCommandArgv(t *testing.T) {
+	spec := sandbox.Spec{
+		Exec:   "/app/server",
+		Mounts: []sandbox.Mount{{Src: "/h/server", Dst: "/app/server"}},
+		Egress: &sandbox.Egress{
+			BootstrapPath: "/usr/local/bin/bootstrap",
+			SandboxCIDR:   "10.88.0.2/30",
+			ProxyIP:       "10.88.0.1",
+			PeerVeth:      "vs0",
+			InfoFD:        5,
+		},
+	}
+	cmd := sandbox.Command(spec)
+	args := cmd.Args
+
+	// Egress mode must NOT use --unshare-all (it sequences net wrong) ...
+	if indexOf(args, "--unshare-all") != -1 {
+		t.Error("egress mode must not pass --unshare-all")
+	}
+	// ... but MUST keep --unshare-net (bwrap creates the netns) and the others.
+	for _, f := range []string{"--unshare-net", "--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts", "--unshare-cgroup"} {
+		if indexOf(args, f) == -1 {
+			t.Errorf("egress mode missing %s", f)
+		}
+	}
+	// Runs the bootstrap, with the real server after a literal --.
+	// lastIndexOf is used for the separator and server because the
+	// mount args also contain /app/server and /usr/local/bin/bootstrap
+	// as dst/src values; the last occurrence of each is the entrypoint.
+	idxBoot := lastIndexOf(args, "/usr/local/bin/bootstrap")
+	idxSep := lastIndexOf(args, "--")
+	idxServer := lastIndexOf(args, "/app/server")
+	if idxBoot == -1 || idxServer == -1 || !(idxBoot < idxSep && idxSep < idxServer) {
+		t.Fatalf("expected bootstrap ... -- /app/server; args=%v", args)
+	}
+	// uid/gid 65534 and info-fd present.
+	if !hasPair(args, "--uid", "65534") || !hasPair(args, "--gid", "65534") {
+		t.Error("egress mode must drop to uid/gid 65534")
+	}
+	if !hasPair(args, "--info-fd", "5") {
+		t.Error("egress mode must pass --info-fd")
+	}
+}
+
 func indexOf(s []string, v string) int {
 	for i, x := range s {
 		if x == v {
@@ -148,6 +192,24 @@ func indexOf(s []string, v string) int {
 		}
 	}
 	return -1
+}
+
+func lastIndexOf(s []string, v string) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == v {
+			return i
+		}
+	}
+	return -1
+}
+
+func hasPair(s []string, flag, val string) bool {
+	for i := 0; i+1 < len(s); i++ {
+		if s[i] == flag && s[i+1] == val {
+			return true
+		}
+	}
+	return false
 }
 
 func indexOfPair(s []string, flag, a, b string) int {
