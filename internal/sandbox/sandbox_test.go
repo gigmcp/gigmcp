@@ -180,9 +180,12 @@ func TestEgressCommandArgv(t *testing.T) {
 	if idxBoot == -1 || idxServer == -1 || !(idxBoot < idxSep && idxSep < idxServer) {
 		t.Fatalf("expected bootstrap ... -- /app/server; args=%v", args)
 	}
-	// uid/gid 65534 and info-fd present.
-	if !hasPair(args, "--uid", "65534") || !hasPair(args, "--gid", "65534") {
-		t.Error("egress mode must drop to uid/gid 65534")
+	// info-fd must be present; --uid/--gid are NOT passed to bwrap because the
+	// bootstrap must run as uid 0 in the user namespace to hold CAP_NET_ADMIN for
+	// network configuration. Bootstrap itself does setuid(65534)/setgid(65534)
+	// before exec'ing the untrusted server.
+	if hasPair(args, "--uid", "65534") || hasPair(args, "--gid", "65534") {
+		t.Error("egress mode must NOT pass --uid/--gid 65534 to bwrap (bootstrap needs uid 0 for NET_ADMIN)")
 	}
 	if !hasPair(args, "--info-fd", "5") {
 		t.Error("egress mode must pass --info-fd")

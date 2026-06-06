@@ -52,7 +52,9 @@ func run() error {
 
 	args := os.Args[1:]
 	sep := indexOf(args, "--")
-	if sep < 4 {
+	// Need at least 3 positional args (cidr, proxyIP, peerVeth) before --.
+	// With 3 positional args, sep=3; require sep >= 3 and at least one server arg.
+	if sep < 3 || len(args) <= sep+1 {
 		return fmt.Errorf("usage: bootstrap <cidr> <proxyIP> <peerVeth> -- <server> [args...]")
 	}
 	cidr, proxyIP, peerVeth := args[0], args[1], args[2]
@@ -87,6 +89,10 @@ func run() error {
 	}
 
 	// 5. Drop all capabilities, then exec the untrusted server.
+	// bwrap creates a user namespace where bootstrap runs as uid 0 (to hold
+	// CAP_NET_ADMIN for network config). After the capability drop, the server
+	// runs with no capabilities. The uid inside the user namespace is 0, which
+	// maps to an unprivileged uid in the parent namespace (no real host root).
 	// Nothing between the drop and Exec except the syscall itself.
 	if err := dropAllCaps(); err != nil {
 		return fmt.Errorf("drop caps: %w", err)

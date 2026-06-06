@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,8 +33,23 @@ func newClient() *http.Client {
 			pool.AppendCertsFromPEM(pem)
 		}
 	}
+
+	// Build a proxy function that always uses HTTPS_PROXY, bypassing Go's
+	// default loopback-exclusion logic (which would skip the proxy for
+	// 127.0.0.1 targets — defeating the test harness).
+	var proxyFn func(*http.Request) (*url.URL, error)
+	if proxyStr := os.Getenv("HTTPS_PROXY"); proxyStr != "" {
+		proxyURL, err := url.Parse(proxyStr)
+		if err == nil {
+			proxyFn = http.ProxyURL(proxyURL)
+		}
+	}
+	if proxyFn == nil {
+		proxyFn = http.ProxyFromEnvironment
+	}
+
 	tr := &http.Transport{
-		Proxy:           http.ProxyFromEnvironment, // honors HTTPS_PROXY
+		Proxy:           proxyFn,
 		TLSClientConfig: &tls.Config{RootCAs: pool},
 	}
 	return &http.Client{Transport: tr}

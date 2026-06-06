@@ -115,7 +115,10 @@ func commandEgress(spec Spec) *exec.Cmd {
 		// Decomposed: KEEP --unshare-net (bwrap creates the netns); drop --unshare-all.
 		"--unshare-user", "--unshare-net", "--unshare-pid",
 		"--unshare-ipc", "--unshare-uts", "--unshare-cgroup",
-		"--uid", "65534", "--gid", "65534",
+		// NOTE: --uid/--gid are intentionally omitted here. The bootstrap entrypoint
+		// must run as uid 0 in the new user namespace so it holds CAP_NET_ADMIN to
+		// configure the veth (AddrAdd, LinkSetUp, RouteAdd). Bootstrap drops all caps
+		// and does setuid(65534)/setgid(65534) before exec'ing the untrusted server.
 		"--info-fd", strconv.Itoa(e.InfoFD),
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
@@ -140,9 +143,6 @@ func commandEgress(spec Spec) *exec.Cmd {
 		args = append(args, flag, m.Src, m.Dst)
 	}
 
-	// The bootstrap binary itself must be mounted in.
-	args = append(args, "--ro-bind", e.BootstrapPath, e.BootstrapPath)
-
 	// Fixed isolation mounts.
 	args = append(args,
 		"--proc", "/proc",
@@ -150,6 +150,13 @@ func commandEgress(spec Spec) *exec.Cmd {
 		"--tmpfs", "/tmp",
 		"--chdir", "/",
 	)
+
+	// The bootstrap binary itself must be mounted in AFTER --tmpfs /tmp so that
+	// if the binary lives under /tmp (e.g. in a test TempDir), the bind mount
+	// overlays the tmpfs and the binary is visible inside the sandbox. In bwrap,
+	// mounts are applied in the order they appear in argv; a later --ro-bind wins
+	// over an earlier --tmpfs on the same path prefix.
+	args = append(args, "--ro-bind", e.BootstrapPath, e.BootstrapPath)
 
 	// Bootstrap is the entrypoint; the real server follows after --.
 	args = append(args, e.BootstrapPath, e.SandboxCIDR, e.ProxyIP, e.PeerVeth, "--", spec.Exec)

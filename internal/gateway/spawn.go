@@ -116,6 +116,8 @@ func SpawnEgressBackend(
 
 	// ExtraFiles[0]→fd3 (r3), ExtraFiles[1]→fd4 (w4), ExtraFiles[2]→fd5 (wInfo).
 	cmd.ExtraFiles = []*os.File{r3, w4, wInfo}
+	// Route bwrap/bootstrap stderr to the process stderr so failures are visible.
+	cmd.Stderr = os.Stderr
 	// cmd.Env controls the bwrap process itself (not the sandboxed server):
 	// bwrap uses --clearenv, so sandbox-internal vars are passed via Egress.Env
 	// which commandEgress emits as --setenv K V flags in the bwrap argv.
