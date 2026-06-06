@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -206,18 +205,17 @@ func SpawnEgressBackend(
 // bwrap writes {"child-pid": N} to the fd once the child has been forked.
 func readChildPid(r *os.File) (int, error) {
 	defer r.Close()
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return 0, fmt.Errorf("read info-fd: %w", err)
-	}
 	var info struct {
 		ChildPid int `json:"child-pid"`
 	}
-	if err := json.Unmarshal(data, &info); err != nil {
-		return 0, fmt.Errorf("parse info-fd: %w (raw=%s)", err, data)
+	// bwrap writes one JSON object to --info-fd at startup and keeps the fd
+	// open for the container lifetime, so we must decode a single object
+	// rather than read to EOF (which would block forever).
+	if err := json.NewDecoder(r).Decode(&info); err != nil {
+		return 0, fmt.Errorf("parse bwrap info-fd: %w", err)
 	}
 	if info.ChildPid == 0 {
-		return 0, fmt.Errorf("info-fd had no child-pid: %s", data)
+		return 0, fmt.Errorf("bwrap info-fd had no child-pid")
 	}
 	return info.ChildPid, nil
 }
