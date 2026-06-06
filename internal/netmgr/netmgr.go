@@ -30,7 +30,6 @@ type Allocator struct {
 	mu   sync.Mutex
 	base net.IP
 	used map[int]bool
-	next int
 }
 
 // NewAllocator parses base (e.g. "10.88.0.0/16") and returns an allocator.

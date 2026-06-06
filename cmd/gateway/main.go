@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/gigemcp/gigemcp/internal/config"
@@ -40,6 +41,13 @@ func run(ctx context.Context) error {
 	if !sandbox.Available() {
 		return fmt.Errorf("bwrap sandboxing unavailable: gigemcp requires Linux with bubblewrap installed")
 	}
+
+	// Belt-and-suspenders FORWARD-drop: ip_forward=1 is the default in the
+	// container, so sandboxes could otherwise reach each other or the internet
+	// directly. Route isolation (unique /30 per sandbox, only route = proxy) is
+	// the primary control; this is defense-in-depth. Best-effort: a warning is
+	// logged on failure but the gateway does NOT crash — route isolation remains.
+	applyForwardDrop()
 
 	// Build vault from GIGE_MASTER_KEY (hex-encoded 32 bytes).
 	if cfg.MasterKey == "" {
@@ -164,6 +172,32 @@ func seedDemoCredential(ctx context.Context, st store.Store, v *vault.Vault, cfg
 		Placeholder:  "PLACEHOLDER",
 		AllowedHosts: allowed,
 	})
+}
+
+// applyForwardDrop sets the iptables FORWARD chain default policy to DROP.
+// This is a belt-and-suspenders measure: ip_forward=1 is on by default in the
+// container, which would let sandboxes route to each other or the internet.
+// Route isolation (unique /30 per sandbox, only route = proxy) is the primary
+// enforcement; this adds a kernel-level fallback.
+//
+// Implementation: exec "iptables -P FORWARD DROP". This requires iptables to be
+// installed in the container image (see Dockerfile). It is BEST-EFFORT: if the
+// call fails (iptables not installed, permission denied, or running on a kernel
+// without netfilter), a warning is logged and the gateway continues — route
+// isolation is still enforced. Do not use this guarantee for security-critical
+// decisions; treat it as defense-in-depth.
+func applyForwardDrop() {
+	if path, err := exec.LookPath("iptables"); err != nil {
+		log.Printf("WARN: applyForwardDrop: iptables not found in PATH; FORWARD policy not set (route isolation still enforced): %v", err)
+		return
+	} else {
+		out, err := exec.Command(path, "-P", "FORWARD", "DROP").CombinedOutput()
+		if err != nil {
+			log.Printf("WARN: applyForwardDrop: iptables -P FORWARD DROP failed (route isolation still enforced): %v — %s", err, out)
+			return
+		}
+	}
+	log.Printf("iptables FORWARD policy set to DROP (defense-in-depth; route isolation is primary)")
 }
 
 // writeTempCA writes PEM bytes to a temp file and returns its path.

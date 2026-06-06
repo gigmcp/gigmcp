@@ -170,15 +170,34 @@ func TestEgressCommandArgv(t *testing.T) {
 			t.Errorf("egress mode missing %s", f)
 		}
 	}
-	// Runs the bootstrap, with the real server after a literal --.
-	// lastIndexOf is used for the separator and server because the
-	// mount args also contain /app/server and /usr/local/bin/bootstrap
-	// as dst/src values; the last occurrence of each is the entrypoint.
+	// Egress argv must contain TWO literal "--" separators:
+	//   1st "--": ends bwrap option parsing (before bootstrap path)
+	//   2nd "--": bootstrap's own arg separator (before the real server)
+	// Ordering assertion: first "--" < bootstrap (as cmd) < last "--" < server.
+	//
+	// Note: the mount args also contain "/usr/local/bin/bootstrap" and
+	// "/app/server" as --ro-bind values; lastIndexOf finds the last occurrence
+	// of each, which is the entrypoint/server position (after the 1st "--").
+	var sepIndices []int
+	for i, v := range args {
+		if v == "--" {
+			sepIndices = append(sepIndices, i)
+		}
+	}
+	if len(sepIndices) < 2 {
+		t.Fatalf("expected at least two '--' in egress argv (got %d); args=%v", len(sepIndices), args)
+	}
+	firstSep := sepIndices[0]
+	lastSep := sepIndices[len(sepIndices)-1]
 	idxBoot := lastIndexOf(args, "/usr/local/bin/bootstrap")
-	idxSep := lastIndexOf(args, "--")
 	idxServer := lastIndexOf(args, "/app/server")
-	if idxBoot == -1 || idxServer == -1 || !(idxBoot < idxSep && idxSep < idxServer) {
-		t.Fatalf("expected bootstrap ... -- /app/server; args=%v", args)
+	if idxBoot == -1 || idxServer == -1 {
+		t.Fatalf("bootstrap or server path not found in egress argv; args=%v", args)
+	}
+	// first "--" < bootstrap (entrypoint) < last "--" < server
+	if !(firstSep < idxBoot && idxBoot < lastSep && lastSep < idxServer) {
+		t.Fatalf("expected: first '--' (%d) < bootstrap (%d) < last '--' (%d) < server (%d); args=%v",
+			firstSep, idxBoot, lastSep, idxServer, args)
 	}
 	// info-fd must be present; --uid/--gid are NOT passed to bwrap because the
 	// bootstrap must run as uid 0 in the user namespace to hold CAP_NET_ADMIN for

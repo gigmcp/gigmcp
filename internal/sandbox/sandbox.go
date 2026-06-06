@@ -77,11 +77,11 @@ func commandNoNet(spec Spec) *exec.Cmd {
 		"--unshare-all", // user, pid, net, mount, ipc, uts, cgroup
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
-		// --tmpfs /etc must precede caller mounts so that any bind into /etc
-		// (e.g. a CA cert at /etc/gigemcp-ca.pem) lands on a world-accessible
-		// tmpfs (mode 0755) rather than a bwrap-created 0700 directory.
-		// After a uid/gid drop to 65534, paths inside a 0700 root-owned
-		// directory are inaccessible even when the leaf file is mode 0644.
+		// --tmpfs /etc: consistency/future-proofing: gives the sandbox an empty
+		// /etc rather than none. Must precede caller mounts so that any bind
+		// into /etc (e.g. a CA cert at /etc/gigemcp-ca.pem) lands on a
+		// world-accessible tmpfs (mode 0755) rather than a bwrap-created 0700
+		// directory (which would be inaccessible if a uid drop is later added).
 		"--tmpfs", "/etc",
 	}
 
@@ -174,8 +174,11 @@ func commandEgress(spec Spec) *exec.Cmd {
 	// over an earlier --tmpfs on the same path prefix.
 	args = append(args, "--ro-bind", e.BootstrapPath, e.BootstrapPath)
 
-	// Bootstrap is the entrypoint; the real server follows after --.
-	args = append(args, e.BootstrapPath, e.SandboxCIDR, e.ProxyIP, e.PeerVeth, "--", spec.Exec)
+	// -- ends bwrap option parsing; bootstrap is the entrypoint (belt-and-suspenders,
+	// mirroring commandNoNet — the path is trusted but consistency is good).
+	// The real server follows after a second -- (bootstrap's own arg separator).
+	// Argv order: ... -- <bootstrap> <cidr> <proxyIP> <peerVeth> -- <server> [args]
+	args = append(args, "--", e.BootstrapPath, e.SandboxCIDR, e.ProxyIP, e.PeerVeth, "--", spec.Exec)
 	args = append(args, spec.Args...)
 	return exec.Command("bwrap", args...)
 }

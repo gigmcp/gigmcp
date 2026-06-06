@@ -78,6 +78,12 @@ type EgressBackend struct {
 // /proc/<bwrapChildPID>/task/<bwrapChildPID>/children gives the list of
 // children of the intermediate child.
 //
+// This is BEST-EFFORT: if /proc/<pid>/task/<pid>/children is unreadable
+// (kernel built without CONFIG_PROC_CHILDREN, or a permission issue), the
+// function returns 0 and logs a warning rather than failing the spawn. The
+// payload PID is only used for a log line and the E2E test assertion; the
+// sandbox still runs correctly without it.
+//
 // We retry briefly because the intermediate child may not have forked the
 // payload immediately when we read.
 func sandboxPayloadPID(bwrapChildPID int) (int, error) {
@@ -85,7 +91,10 @@ func sandboxPayloadPID(bwrapChildPID int) (int, error) {
 	for i := 0; i < 20; i++ {
 		raw, err := os.ReadFile(childrenPath)
 		if err != nil {
-			return 0, fmt.Errorf("read children of pid %d: %w", bwrapChildPID, err)
+			// CONFIG_PROC_CHILDREN not available or permission denied —
+			// fall back gracefully. The bwrap child PID is still logged.
+			log.Printf("WARN: sandboxPayloadPID: cannot read %s (kernel may lack CONFIG_PROC_CHILDREN); falling back to bwrap child PID %d: %v", childrenPath, bwrapChildPID, err)
+			return 0, nil
 		}
 		fields := strings.Fields(string(raw))
 		if len(fields) > 0 {
@@ -98,7 +107,9 @@ func sandboxPayloadPID(bwrapChildPID int) (int, error) {
 		// Child not yet forked; wait briefly.
 		time.Sleep(10 * time.Millisecond)
 	}
-	return 0, fmt.Errorf("no child found for pid %d after retries", bwrapChildPID)
+	// No child appeared after retries — log and fall back.
+	log.Printf("WARN: sandboxPayloadPID: no child found for pid %d after retries; falling back to 0", bwrapChildPID)
+	return 0, nil
 }
 
 // SpawnEgressBackend launches one MCP server in an egress-isolated sandbox and
@@ -331,13 +342,9 @@ func SpawnEgressBackend(
 	// childPid is the bwrap intermediate supervisor child. The real server runs as
 	// childPid's child (PID 1 inside the new PID namespace, seen from outside as
 	// childPid+1 in a quiet system, but reliably found via /proc/<pid>/task/<pid>/children).
-	payloadPID, err := sandboxPayloadPID(childPid)
-	if err != nil {
-		netmgr.DeleteVeth(netlinkVeth)
-		reg.Unbind(sub.SandboxIP.String())
-		earlyCleanup()
-		return nil, fmt.Errorf("find payload pid: %w", err)
-	}
+	// sandboxPayloadPID is best-effort: if it cannot resolve the PID (e.g. kernel
+	// lacks CONFIG_PROC_CHILDREN), it returns 0 with a warning rather than failing.
+	payloadPID, _ := sandboxPayloadPID(childPid)
 
 	finalCleanup := func() {
 		sess.Close()

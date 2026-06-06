@@ -34,7 +34,7 @@ proxy make trust unnecessary." Credentials can also stay entirely on user hardwa
 |---|----------|--------|
 | 1 | v1 product slice | Secure runtime/gateway. Marketplace UI deferred (registry repo is the interim marketplace). |
 | 2 | Deployment target | Docker-native from the start; Linux-only runtime. Runs on homelab/VPS; on Mac dev machines it runs inside Docker. |
-| 3 | Sandbox provisioning | **No Docker socket.** Gateway spawns MCP servers as bwrap sandboxed child processes inside its own container (user/pid/mount/net namespaces + seccomp + Landlock + cgroups). Requires `seccomp=unconfined`/`systempaths=unconfined` (until a custom seccomp profile allowing unprivileged userns ships). **Egress networking validated NET_ADMIN-only (no SYS_ADMIN, no privileged):** bwrap creates the netns via userns (`--unshare-net`), the gateway moves a veth into the bwrap *child* (found via `--info-fd`) by host PID with `LinkSetNsPid` (avoids the named-netns bind-mount that needs SYS_ADMIN), and a trusted in-sandbox bootstrap configures the link, then drops **all** caps (`CapEff=0`) and execs the untrusted server as uid 65534. |
+| 3 | Sandbox provisioning | **No Docker socket.** Gateway spawns MCP servers as bwrap sandboxed child processes inside its own container (user/pid/mount/net namespaces + seccomp + Landlock + cgroups). Requires `seccomp=unconfined`/`systempaths=unconfined` (until a custom seccomp profile allowing unprivileged userns ships — see §3 KNOWN HARDENING GAP). **Egress networking validated NET_ADMIN-only (no SYS_ADMIN, no privileged):** bwrap creates the netns via userns (`--unshare-net`); the gateway uses `--userns-block-fd` to pause the child, writes a uid/gid map covering uids 0..65534 to `/proc/<child>/uid_map` + `gid_map` (enabling both uid 0 for bootstrap's CAP_NET_ADMIN and uid 65534 for the server), then unblocks the child; moves a veth into the bwrap child's netns by host PID via `LinkSetNsPid` (avoids the named-netns bind-mount that needs SYS_ADMIN); and a trusted in-sandbox bootstrap (`cmd/bootstrap`) configures the link + default route, drops **all** caps (`CapEff=0`), drops to uid/gid 65534 (nobody), and `execve`s the untrusted server. **The server process runs as uid 65534 with zero capabilities — verified.** |
 | 4 | Hosted product shape | Hosted control plane is fine holding keys (users who object can self-host). Same codebase self-hosts. |
 | 5 | Multi-tenancy granularity | Shared **code/image**, never shared **process**: one sandboxed instance per (server × user/profile), idle-reaped, spawned in milliseconds. |
 | 6 | Credential model | **Tier 1 "Sealed"** (default): placeholder token in sandbox env; embedded MITM egress proxy swaps in the real key per tenant. Key never enters the sandbox. **Tier 2 "Entrusted"**: real secret in sandbox env (DB strings, cert-pinned clients), egress allowlist still applies. **Tier 3 / local-resource servers: out of scope** (catalog targets SaaS APIs: Ubiquiti, Google, Slack, GitHub...). |
@@ -92,9 +92,32 @@ manifest allowlist → swaps placeholder for the user's real key from the vault 
 untrusted; the kernel (namespaces/seccomp/Landlock) is the boundary between them; keys
 live only on the trusted side.
 
+> **SECURITY NOTE — KNOWN HARDENING GAP:** the sandbox currently runs with
+> `seccomp=unconfined`, which lets untrusted code call `unshare(CLONE_NEWUSER)`
+> and gain full capabilities inside a **nested user namespace**. The outer uid
+> 65534 + cap-drop do **NOT** prevent this: a nested userns grants the process
+> all capabilities scoped to that new namespace, which can be used to access
+> `/proc` and other resources visible through the shared kernel. A scoped seccomp
+> profile denying namespace-creation syscalls (`unshare`/`setns`/`clone` with
+> `CLONE_NEWUSER`) and `ptrace`/`keyctl` is **required before running genuinely
+> hostile code** and is the **single most important remaining confinement item**.
+> This is tracked in DESIGN.md §5 item 7 ("hardening pass"). Route isolation and
+> the vault are unaffected — the gap is about sandbox-internal privilege
+> escalation, not credential leakage through the proxy.
+
+**Egress networking:** the gateway holds only `CAP_NET_ADMIN` (no `SYS_ADMIN`,
+no privileged). Route isolation — not environment variables — is the actual
+enforcement: each sandbox's only route is `default via <proxy-IP>`, so all egress
+hits the embedded MITM proxy regardless of what the sandboxed process does with
+`HTTPS_PROXY`. The proxy identifies the tenant by the connection's source IP
+(unforgeable — the netns can only source its own /30). Belt-and-suspenders:
+the gateway sets the `iptables FORWARD` policy to `DROP` at startup (requires
+iptables in the image; best-effort — route isolation remains if this step fails).
+
 **Known residual risks (accepted, documented):**
 - Tier 2 servers can exfiltrate their own secret *through* an allowed domain (e.g. write it into a gist). Tier label surfaces this.
 - Shared-kernel isolation: a kernel 0-day breaks tenant separation. Acceptable for self-host / curated catalog; revisit (gVisor/microVMs) if hosting truly hostile workloads.
+- `seccomp=unconfined`: see KNOWN HARDENING GAP note above.
 - Compose env vars are visible via `docker inspect`; `*_FILE` secrets supported for everything sensitive.
 
 ---

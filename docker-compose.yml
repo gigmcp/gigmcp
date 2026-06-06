@@ -5,13 +5,32 @@ services:
       - "8080:8080"
     environment:
       GIGE_BEARER_TOKEN: ${GIGE_BEARER_TOKEN:?set GIGE_BEARER_TOKEN in .env or the environment}
+      # GIGE_MASTER_KEY: hex-encoded 32-byte master KEK for the credential vault.
+      # Generate with: openssl rand -hex 32
+      # Required — the gateway will refuse to start without it.
+      GIGE_MASTER_KEY: ${GIGE_MASTER_KEY:?set GIGE_MASTER_KEY (openssl rand -hex 32)}
+      # Optional: seed a demo credential for the echo server on startup.
+      # GIGE_DEMO_TOKEN and GIGE_DEMO_ALLOW are pass-through; unset = no demo cred.
+      GIGE_DEMO_TOKEN: ${GIGE_DEMO_TOKEN:-}
+      GIGE_DEMO_ALLOW: ${GIGE_DEMO_ALLOW:-}
     volumes:
       - gigemcp-data:/data
+    # NET_ADMIN is required: the egress proxy creates a veth pair per sandbox and
+    # moves the peer end into the bwrap child's network namespace (LinkSetNsPid).
+    # No SYS_ADMIN or privileged mode is needed — NET_ADMIN is sufficient.
+    cap_add:
+      - NET_ADMIN
     # bwrap needs unprivileged user namespaces, which Docker's default
     # seccomp/apparmor profiles block. A scoped allow-userns seccomp profile
     # replaces 'unconfined' in the hardening plan (DESIGN.md §5 item 7).
     # systempaths=unconfined unmasks /proc so bwrap can mount a fresh procfs
     # in the sandbox's pid namespace (see Makefile test target).
+    #
+    # KNOWN HARDENING GAP: seccomp=unconfined lets untrusted code call
+    # unshare(CLONE_NEWUSER) and gain full capabilities inside a nested user
+    # namespace. A scoped seccomp profile denying namespace-creation syscalls
+    # (unshare/setns/clone-newuser) and ptrace/keyctl is required before
+    # running genuinely hostile code. See DESIGN.md §3 for the full note.
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined
