@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"sync"
 	"time"
 )
@@ -87,11 +88,16 @@ func (c *CA) LeafFor(host string) (*tls.Certificate, error) {
 	tmpl := &x509.Certificate{
 		SerialNumber: sn,
 		Subject:      pkix.Name{CommonName: host},
-		DNSNames:     []string{host},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().AddDate(1, 0, 0),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	// Use IPAddresses SAN for bare IP addresses; DNSNames for hostnames.
+	if ip := net.ParseIP(host); ip != nil {
+		tmpl.IPAddresses = []net.IP{ip}
+	} else {
+		tmpl.DNSNames = []string{host}
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, c.caCert, &key.PublicKey, c.caKey)
 	if err != nil {
