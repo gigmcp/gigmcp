@@ -42,3 +42,51 @@ func TestFromEnvRequiresEchoBin(t *testing.T) {
 		t.Fatal("expected error when GIGE_ECHO_BIN is empty")
 	}
 }
+
+func TestFromEnvNewFields(t *testing.T) {
+	t.Setenv("GIGE_BEARER_TOKEN", "tok")
+	t.Setenv("GIGE_ECHO_BIN", "/bin/echo-mcp")
+	t.Setenv("GIGE_MASTER_KEY", "abc123")
+	t.Setenv("GIGE_PROXY_PORT", "9090")
+	t.Setenv("GIGE_BOOTSTRAP_PATH", "/usr/local/bin/bootstrap")
+	t.Setenv("GIGE_DEMO_TOKEN", "demotoken")
+	t.Setenv("GIGE_DEMO_ALLOW", "api.example.com")
+
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.MasterKey != "abc123" {
+		t.Errorf("MasterKey: got %q", cfg.MasterKey)
+	}
+	if cfg.ProxyPort != 9090 {
+		t.Errorf("ProxyPort: got %d, want 9090", cfg.ProxyPort)
+	}
+	if cfg.BootstrapPath != "/usr/local/bin/bootstrap" {
+		t.Errorf("BootstrapPath: got %q", cfg.BootstrapPath)
+	}
+	if cfg.DemoToken != "demotoken" {
+		t.Errorf("DemoToken: got %q", cfg.DemoToken)
+	}
+	if cfg.DemoAllow != "api.example.com" {
+		t.Errorf("DemoAllow: got %q", cfg.DemoAllow)
+	}
+}
+
+func TestFromEnvProxyPortDefault(t *testing.T) {
+	t.Setenv("GIGE_BEARER_TOKEN", "tok")
+	t.Setenv("GIGE_ECHO_BIN", "/bin/echo-mcp")
+	t.Setenv("GIGE_PROXY_PORT", "")
+	t.Setenv("GIGE_BOOTSTRAP_PATH", "")
+
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.ProxyPort != 8081 {
+		t.Errorf("ProxyPort default: got %d, want 8081", cfg.ProxyPort)
+	}
+	if cfg.BootstrapPath != "/usr/local/bin/bootstrap" {
+		t.Errorf("BootstrapPath default: got %q", cfg.BootstrapPath)
+	}
+}
