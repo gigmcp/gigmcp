@@ -35,20 +35,17 @@ func Available() bool {
 // fresh namespaces, a private /tmp, and a cleared environment. Stdio is
 // inherited/wired by the caller (the MCP CommandTransport uses it).
 //
-// NOTE: We use --ro-bind /proc /proc rather than --proc /proc because
-// mounting a fresh procfs inside a Docker container requires CAP_SYS_ADMIN
-// on the new PID namespace, which Docker Desktop for Mac does not grant even
-// with seccomp/apparmor unconfined. The bind-mounted /proc still reports the
-// correct network namespace (net isolation test passes) but it does expose
-// the host process list. In production the gateway should run on a bare Linux
-// host where --proc works correctly; this adaptation is test-environment-only.
+// --proc /proc mounts a fresh procfs inside the sandbox's new PID namespace,
+// so the sandboxed process sees only its own process tree and never the host's.
+// This requires that Docker's /proc masks are removed; run the dev container
+// with --security-opt systempaths=unconfined (see Makefile test target).
 func Command(spec Spec) *exec.Cmd {
 	args := []string{
 		"--die-with-parent", // no orphaned servers if the gateway dies
 		"--unshare-all",     // user, pid, net, mount, ipc, uts, cgroup
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
-		"--ro-bind", "/proc", "/proc", // see NOTE above
+		"--proc", "/proc", // fresh procfs — sandbox sees only its own pid namespace
 		"--dev", "/dev",
 		"--tmpfs", "/tmp",
 		"--chdir", "/",

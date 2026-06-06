@@ -3,6 +3,7 @@ package sandbox_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,5 +74,26 @@ func TestEnvCleared(t *testing.T) {
 	}
 	if strings.Contains(out, "GIGE_SECRET_CANARY") {
 		t.Errorf("host environment leaked into sandbox:\n%s", out)
+	}
+}
+
+func TestProcIsPrivate(t *testing.T) {
+	requireSandbox(t)
+	// A fresh procfs in the sandbox's pid namespace reflects only the
+	// sandbox's own process tree. We detect a host /proc leak by
+	// checking /proc/self/status: in a fresh pid namespace the kernel
+	// assigns low PIDs (≤ 10) starting from 1; a bind-mounted /proc
+	// exposes the outer-namespace PID, which is always higher because
+	// the host already has many longer-lived processes allocated below it.
+	out, err := runShell(t, "while read f v; do case $f in Pid:) echo $v; break;; esac; done < /proc/self/status")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		t.Fatalf("parse %q: %v", out, err)
+	}
+	if n > 10 {
+		t.Errorf("sandbox /proc/self/status shows Pid %d — host /proc is leaking (expected ≤ 10 in fresh pid namespace)", n)
 	}
 }
