@@ -147,6 +147,11 @@ digest present, schema valid. Manifest diff on version bump ⇒ runner forces re
 8. BYO OAuth: provider client id/secret via compose env / Docker secrets; per-provider setup guides
 9. Compose file: `gateway` + `web` (+ optional `postgres`)
 
+**Known follow-ups (from skeleton code review):** `gateway.New` needs tool-namespace
+collision handling once multiple backends exist — reject/deduplicate duplicate backend
+names and backend names containing `_` (ambiguous `backend_tool` parsing). Deferred to the
+multi-backend/registry plan; harmless at skeleton stage (single hardcoded backend).
+
 **Explicit roadmap (NOT v1):** hosted control plane & managed OAuth broker, marketplace
 website, meta-tools mode default-on, npx escape hatch, full impersonation toggle,
 groups/RBAC beyond two roles, gVisor/microVM isolation option, trademark registration.
