@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -25,6 +26,20 @@ import (
 )
 
 func main() {
+	// Hidden self-exec mode for the cap-drop unit test (see cmd/bootstrap/capdrop_test.go).
+	// Triggered only when GIGE_CAPTEST=1; normal operation is unaffected.
+	if os.Getenv("GIGE_CAPTEST") == "1" {
+		runtime.LockOSThread()
+		if err := dropAllCaps(); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap captest: dropAllCaps:", err)
+			os.Exit(1)
+		}
+		if err := syscall.Exec("/bin/cat", []string{"cat", "/proc/self/status"}, os.Environ()); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap captest: exec:", err)
+			os.Exit(1)
+		}
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "bootstrap:", err)
 		os.Exit(1)
@@ -32,6 +47,9 @@ func main() {
 }
 
 func run() error {
+	// Pin to one OS thread: capabilities and NO_NEW_PRIVS are per-thread, and the execve at the end MUST run on the same thread that dropped them. No Unlock — syscall.Exec replaces the image.
+	runtime.LockOSThread()
+
 	args := os.Args[1:]
 	sep := indexOf(args, "--")
 	if sep < 4 {
@@ -61,13 +79,17 @@ func run() error {
 		ready.Close()
 	}
 
-	// 4. Drop all capabilities, then exec the untrusted server.
-	if err := dropAllCaps(); err != nil {
-		return fmt.Errorf("drop caps: %w", err)
-	}
+	// 4. Resolve server path BEFORE dropping caps so os.Stat is not a
+	// goroutine-migration point between the cap-drop and execve.
 	path, err := lookPath(serverArgv[0])
 	if err != nil {
 		return err
+	}
+
+	// 5. Drop all capabilities, then exec the untrusted server.
+	// Nothing between the drop and Exec except the syscall itself.
+	if err := dropAllCaps(); err != nil {
+		return fmt.Errorf("drop caps: %w", err)
 	}
 	return syscall.Exec(path, serverArgv, os.Environ())
 }
@@ -109,14 +131,15 @@ func dropAllCaps() error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
+	// Drop caps 0..40; covers through CAP_CHECKPOINT_RESTORE(40), fine for current kernels.
 	for i := 0; i <= 40; i++ {
 		// Ignore EINVAL for caps above the kernel max.
 		unix.Prctl(unix.PR_CAPBSET_DROP, uintptr(i), 0, 0, 0)
 	}
 	unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)
 	hdr := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3, Pid: 0}
-	var data unix.CapUserData // all zero
-	return unix.Capset(&hdr, &data)
+	var data [2]unix.CapUserData // V3 = two 32-bit words (caps 0-31 and 32-63); kernel reads both
+	return unix.Capset(&hdr, &data[0])
 }
 
 func indexOf(s []string, v string) int {
