@@ -2,8 +2,8 @@
 
 Open-source, security-first MCP gateway: run community MCP servers
 **sandboxed**, with credentials injected at the
-network boundary so one compromised tool never exposes your keys
-*(credential injection is on the roadmap; see below)*. See [DESIGN.md](DESIGN.md)
+network boundary so one compromised tool never exposes your keys.
+See [DESIGN.md](DESIGN.md)
 for the full architecture and decision record. AGPL-3.0.
 
 > **Status: egress proxy + credential vault complete.** One bundled echo server,
