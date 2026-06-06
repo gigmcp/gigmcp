@@ -9,6 +9,7 @@ package sandbox
 import (
 	"os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 )
 
@@ -24,11 +25,12 @@ type Mount struct {
 // PID), the cmd/bootstrap entrypoint configures the link + default route via
 // the proxy and drops all caps before exec'ing Exec. See DESIGN.md decision #13.
 type Egress struct {
-	BootstrapPath string // host path to the bootstrap binary (mounted into the sandbox)
-	SandboxCIDR   string // e.g. "10.88.0.2/30"
-	ProxyIP       string // default route / proxy host-side IP
-	PeerVeth      string // injected interface name inside the netns
-	InfoFD        int    // bwrap --info-fd target (gateway reads child PID from it)
+	BootstrapPath string            // host path to the bootstrap binary (mounted into the sandbox)
+	SandboxCIDR   string            // e.g. "10.88.0.2/30"
+	ProxyIP       string            // default route / proxy host-side IP
+	PeerVeth      string            // injected interface name inside the netns
+	InfoFD        int               // bwrap --info-fd target (gateway reads child PID from it)
+	Env           map[string]string // extra env set INSIDE the sandbox via --setenv (non-secret only: proxy URL, CA path, placeholder)
 }
 
 // Spec describes a process to run inside the sandbox.
@@ -117,6 +119,16 @@ func commandEgress(spec Spec) *exec.Cmd {
 		"--info-fd", strconv.Itoa(e.InfoFD),
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
+	}
+
+	// Emit extra sandbox env vars in deterministic (sorted) order so argv is stable/testable.
+	keys := make([]string, 0, len(e.Env))
+	for k := range e.Env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		args = append(args, "--setenv", k, e.Env[k])
 	}
 
 	// Caller mounts first so fixed isolation mounts win on collision.

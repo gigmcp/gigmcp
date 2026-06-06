@@ -151,6 +151,10 @@ func TestEgressCommandArgv(t *testing.T) {
 			ProxyIP:       "10.88.0.1",
 			PeerVeth:      "vs0",
 			InfoFD:        5,
+			Env: map[string]string{
+				"HTTPS_PROXY":      "http://10.88.0.1:8081",
+				"GIGE_PLACEHOLDER": "PLACEHOLDER",
+			},
 		},
 	}
 	cmd := sandbox.Command(spec)
@@ -183,6 +187,14 @@ func TestEgressCommandArgv(t *testing.T) {
 	if !hasPair(args, "--info-fd", "5") {
 		t.Error("egress mode must pass --info-fd")
 	}
+	// Env vars must be emitted as --setenv K V triples inside the sandbox (not cmd.Env,
+	// which is wiped by --clearenv).
+	if !hasTriple(args, "--setenv", "HTTPS_PROXY", "http://10.88.0.1:8081") {
+		t.Error("egress mode missing --setenv HTTPS_PROXY http://10.88.0.1:8081")
+	}
+	if !hasTriple(args, "--setenv", "GIGE_PLACEHOLDER", "PLACEHOLDER") {
+		t.Error("egress mode missing --setenv GIGE_PLACEHOLDER PLACEHOLDER")
+	}
 }
 
 func indexOf(s []string, v string) int {
@@ -206,6 +218,15 @@ func lastIndexOf(s []string, v string) int {
 func hasPair(s []string, flag, val string) bool {
 	for i := 0; i+1 < len(s); i++ {
 		if s[i] == flag && s[i+1] == val {
+			return true
+		}
+	}
+	return false
+}
+
+func hasTriple(s []string, flag, key, val string) bool {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == flag && s[i+1] == key && s[i+2] == val {
 			return true
 		}
 	}

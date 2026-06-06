@@ -75,6 +75,16 @@ func SpawnEgressBackend(
 			ProxyIP:       proxyIP,
 			PeerVeth:      sub.PeerVeth,
 			InfoFD:        5, // child fd 5 = ExtraFiles[2] = wInfo
+			// These vars must reach the server INSIDE the sandbox.
+			// cmd.Env is useless here because bwrap uses --clearenv;
+			// they are emitted as --setenv K V flags by commandEgress.
+			// None of these are secrets: proxy URL, CA path, placeholder.
+			Env: map[string]string{
+				"HTTPS_PROXY":          fmt.Sprintf("http://%s:%d", proxyIP, proxyPort),
+				"SSL_CERT_FILE":        "/etc/gigemcp-ca.pem",
+				"NODE_EXTRA_CA_CERTS":  "/etc/gigemcp-ca.pem",
+				"GIGE_PLACEHOLDER":     "PLACEHOLDER",
+			},
 		},
 	}
 
@@ -106,12 +116,10 @@ func SpawnEgressBackend(
 
 	// ExtraFiles[0]→fd3 (r3), ExtraFiles[1]→fd4 (w4), ExtraFiles[2]→fd5 (wInfo).
 	cmd.ExtraFiles = []*os.File{r3, w4, wInfo}
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("HTTPS_PROXY=http://%s:%d", proxyIP, proxyPort),
-		"SSL_CERT_FILE=/etc/gigemcp-ca.pem",
-		"NODE_EXTRA_CA_CERTS=/etc/gigemcp-ca.pem",
-		"GIGE_PLACEHOLDER=PLACEHOLDER",
-	)
+	// cmd.Env controls the bwrap process itself (not the sandboxed server):
+	// bwrap uses --clearenv, so sandbox-internal vars are passed via Egress.Env
+	// which commandEgress emits as --setenv K V flags in the bwrap argv.
+	cmd.Env = os.Environ()
 
 	if err := cmd.Start(); err != nil {
 		r3.Close()
