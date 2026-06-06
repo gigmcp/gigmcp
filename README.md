@@ -1,8 +1,9 @@
 # gigemcp
 
 Open-source, security-first MCP gateway: run community MCP servers
-**sandboxed**, with credentials injected at the network boundary — one
-compromised tool can never expose your keys. See [DESIGN.md](DESIGN.md)
+**sandboxed**, with credentials injected at the
+network boundary so one compromised tool can never expose your keys
+*(credential injection is on the roadmap; see below)*. See [DESIGN.md](DESIGN.md)
 for the full architecture and decision record. AGPL-3.0.
 
 > **Status: walking skeleton.** One bundled echo server, bearer auth,

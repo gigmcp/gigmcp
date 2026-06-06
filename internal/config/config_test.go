@@ -34,3 +34,11 @@ func TestFromEnvRequiresToken(t *testing.T) {
 		t.Fatal("expected error when GIGE_BEARER_TOKEN is empty")
 	}
 }
+
+func TestFromEnvRequiresEchoBin(t *testing.T) {
+	t.Setenv("GIGE_BEARER_TOKEN", "tok")
+	t.Setenv("GIGE_ECHO_BIN", "")
+	if _, err := config.FromEnv(); err == nil {
+		t.Fatal("expected error when GIGE_ECHO_BIN is empty")
+	}
+}

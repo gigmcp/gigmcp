@@ -10,6 +10,8 @@ services:
     # bwrap needs unprivileged user namespaces, which Docker's default
     # seccomp/apparmor profiles block. A scoped allow-userns seccomp profile
     # replaces 'unconfined' in the hardening plan (DESIGN.md §5 item 7).
+    # systempaths=unconfined unmasks /proc so bwrap can mount a fresh procfs
+    # in the sandbox's pid namespace (see Makefile test target).
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined

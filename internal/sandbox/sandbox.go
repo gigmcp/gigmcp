@@ -1,6 +1,9 @@
 // Package sandbox builds bubblewrap commands that run untrusted MCP servers
 // in fresh user/pid/net/mount/ipc/uts/cgroup namespaces with a read-only view of
 // exactly the files they were granted (DESIGN.md decisions #3, #5).
+// Landlock, per-sandbox seccomp, and cgroup limits are deferred to the
+// hardening plan (DESIGN.md §5 item 7); this skeleton relies on namespaces,
+// --clearenv, read-only binds, and a private procfs.
 package sandbox
 
 import (
