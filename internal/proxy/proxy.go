@@ -18,6 +18,8 @@ type Credential struct {
 	RealSecret   string
 	InjectHeader string
 	InjectFormat string // contains "{token}"
+	// Placeholder must be a high-entropy sentinel — it is matched as a substring;
+	// a short/common value risks unintended matches.
 	Placeholder  string
 	AllowedHosts []string
 }
@@ -46,10 +48,13 @@ func New(reg *Registry, res CredentialResolver) (*Proxy, error) {
 	return &Proxy{reg: reg, res: res, ca: ca}, nil
 }
 
-func (p *Proxy) CACertPEM() []byte                   { return p.ca.CertPEM() }
-func (p *Proxy) SetAddr(a string)                    { p.addr = a }
-func (p *Proxy) Addr() string                        { return p.addr }
-func (p *Proxy) SetUpstreamRoots(c *x509.CertPool)   { p.upstreamRoots = c }
+func (p *Proxy) CACertPEM() []byte { return p.ca.CertPEM() }
+
+// SetAddr and SetUpstreamRoots must be called before Serve; the values are
+// read by request handlers without locking.
+func (p *Proxy) SetAddr(a string)                  { p.addr = a }
+func (p *Proxy) Addr() string                      { return p.addr }
+func (p *Proxy) SetUpstreamRoots(c *x509.CertPool) { p.upstreamRoots = c }
 
 // Serve accepts connections; only CONNECT is supported.
 func (p *Proxy) Serve(ln net.Listener) error {
@@ -134,12 +139,18 @@ func (p *Proxy) pump(client *tls.Conn, hostport string, id Identity, cred Creden
 		if err != nil {
 			return err
 		}
-		// Tier-1 injection: if the header value contains the placeholder,
-		// replace the placeholder substring with the real secret.
+		// Inject only when the sandbox put the placeholder in the configured header
+		// (signals intent to use the credential). The final value is dictated by the
+		// TRUSTED InjectFormat, not by whatever framing the untrusted sandbox sent —
+		// so a sandbox sending "Basic PLACEHOLDER" still gets the server-defined
+		// "Bearer <realkey>", and the real secret never depends on sandbox input.
 		if cred.InjectHeader != "" && cred.Placeholder != "" {
-			val := req.Header.Get(cred.InjectHeader)
-			if strings.Contains(val, cred.Placeholder) {
-				req.Header.Set(cred.InjectHeader, strings.ReplaceAll(val, cred.Placeholder, cred.RealSecret))
+			if v := req.Header.Get(cred.InjectHeader); strings.Contains(v, cred.Placeholder) {
+				injected := cred.RealSecret
+				if cred.InjectFormat != "" {
+					injected = strings.ReplaceAll(cred.InjectFormat, "{token}", cred.RealSecret)
+				}
+				req.Header.Set(cred.InjectHeader, injected)
 			}
 		}
 		// Clear RequestURI so req.Write uses the URL path (HTTP/1.1, not proxy form).
