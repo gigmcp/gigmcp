@@ -4,6 +4,7 @@ package gateway_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -108,34 +109,51 @@ func TestEgressEndToEnd(t *testing.T) {
 	assertKeyNotInSandboxEnv(t, gw)
 }
 
-// assertKeyNotInSandboxEnv documents and enforces the key-isolation guarantee.
-// The assertion has two parts:
-//  1. The behavioral assertion (above, in the main test): the upstream received the
-//     real key, which can ONLY happen if the proxy — not the sandbox — injected it.
-//  2. The structural assertion here: SpawnEgressBackend exposes a way to confirm
-//     the spawn environment (the bwrap argv seen by the process) never contains
-//     "REALKEY". We read this from the gateway harness.
+// assertKeyNotInSandboxEnv reads the real /proc/<ChildPID>/environ of the live
+// sandbox child process and enforces the key-isolation guarantee:
+//   - REALKEY must NOT appear anywhere in the child's environment.
+//   - GIGE_PLACEHOLDER=PLACEHOLDER must be present.
+//
+// The test runs as container root, so it can read /proc/<pid>/environ for any
+// process. The backend must still be alive at assertion time (before Close()).
 func assertKeyNotInSandboxEnv(t *testing.T, gw *gateway.EgressTestGateway) {
 	t.Helper()
-	// Read the bwrap command line that was used to spawn the sandbox.
-	// This is available from the harness for exactly this assertion.
-	spawnEnv := gw.SpawnEnv()
-	for _, v := range spawnEnv {
-		if strings.Contains(v, "REALKEY") {
-			t.Errorf("REALKEY found in spawn environment: %q", v)
+
+	pid := gw.ChildPID
+	if pid == 0 {
+		t.Fatal("assertKeyNotInSandboxEnv: ChildPID is 0 — sandbox not started")
+	}
+
+	environPath := fmt.Sprintf("/proc/%d/environ", pid)
+	raw, err := os.ReadFile(environPath)
+	if err != nil {
+		t.Fatalf("read %s: %v (is the sandbox still alive?)", environPath, err)
+	}
+
+	// /proc/<pid>/environ is NUL-separated "KEY=VALUE\0KEY=VALUE\0..." entries.
+	entries := strings.Split(string(raw), "\x00")
+	t.Logf("sandbox environ (%d entries from %s):", len(entries), environPath)
+	for _, e := range entries {
+		if e != "" {
+			t.Logf("  %s", e)
 		}
 	}
-	t.Log("REALKEY absent from spawn environment — key isolation confirmed")
 
-	// Also confirm the placeholder IS present (proves the sandbox knew what to send).
+	for _, e := range entries {
+		if strings.Contains(e, "REALKEY") {
+			t.Errorf("REALKEY found in sandbox /proc environ: %q", e)
+		}
+	}
+	t.Log("REALKEY absent from sandbox /proc environ — key isolation confirmed")
+
 	foundPlaceholder := false
-	for _, v := range spawnEnv {
-		if strings.Contains(v, "PLACEHOLDER") {
+	for _, e := range entries {
+		if e == "GIGE_PLACEHOLDER=PLACEHOLDER" {
 			foundPlaceholder = true
 			break
 		}
 	}
 	if !foundPlaceholder {
-		t.Errorf("PLACEHOLDER not found in spawn environment — sandbox may not have sent the placeholder header")
+		t.Errorf("GIGE_PLACEHOLDER=PLACEHOLDER not found in sandbox /proc environ — bwrap --setenv may not have worked")
 	}
 }

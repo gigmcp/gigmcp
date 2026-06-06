@@ -118,13 +118,13 @@ func run(ctx context.Context) error {
 	var backends []gw.Backend
 	var cleanups []func()
 	for _, srv := range servers {
-		sess, cleanup, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath)
+		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath)
 		if err != nil {
 			return fmt.Errorf("spawn egress backend %q: %w", srv.Name, err)
 		}
-		cleanups = append(cleanups, cleanup)
-		backends = append(backends, gw.Backend{Name: srv.Name, Session: sess})
-		log.Printf("backend %q running in egress sandbox", srv.Name)
+		cleanups = append(cleanups, eb.Cleanup)
+		backends = append(backends, gw.Backend{Name: srv.Name, Session: eb.Session})
+		log.Printf("backend %q running in egress sandbox (pid=%d)", srv.Name, eb.ChildPID)
 	}
 	defer func() {
 		for _, c := range cleanups {

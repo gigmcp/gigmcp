@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -28,10 +29,20 @@ import (
 func main() {
 	// Hidden self-exec mode for the cap-drop unit test (see cmd/bootstrap/capdrop_test.go).
 	// Triggered only when GIGE_CAPTEST=1; normal operation is unaffected.
+	// Mirrors the real sequence: dropAllCaps (bset drop, needs uid=0+CAP_SETPCAP)
+	// → dropPrivs (setgroups/setgid/setuid→65534) → capsZero → exec.
 	if os.Getenv("GIGE_CAPTEST") == "1" {
 		runtime.LockOSThread()
 		if err := dropAllCaps(); err != nil {
 			fmt.Fprintln(os.Stderr, "bootstrap captest: dropAllCaps:", err)
+			os.Exit(1)
+		}
+		if err := dropPrivs(); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap captest: dropPrivs:", err)
+			os.Exit(1)
+		}
+		if err := capsZero(); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap captest: capsZero:", err)
 			os.Exit(1)
 		}
 		if err := syscall.Exec("/bin/cat", []string{"cat", "/proc/self/status"}, os.Environ()); err != nil {
@@ -81,23 +92,51 @@ func run() error {
 		ready.Close()
 	}
 
-	// 4. Resolve server path BEFORE dropping caps so os.Stat is not a
-	// goroutine-migration point between the cap-drop and execve.
+	// 4. Resolve server path and open it as an fd BEFORE dropping privileges.
+	//
+	// We open the binary as uid 0 (while we still have full access) and keep the fd
+	// open across the uid/cap drop. After the drop, we exec via execveat(2) with
+	// AT_EMPTY_PATH, which uses the fd directly (bypasses path-based DAC checks).
+	// This is necessary on container environments where bind-mounted overlay
+	// filesystems in user namespaces deny path-based access to non-root uids even
+	// for world-readable/executable files (a known Docker Desktop overlay quirk).
 	path, err := lookPath(serverArgv[0])
 	if err != nil {
 		return err
 	}
+	serverFD, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open server binary: %w", err)
+	}
+	// Note: do NOT close serverFD — it must stay open for execveat below.
 
-	// 5. Drop all capabilities, then exec the untrusted server.
-	// bwrap creates a user namespace where bootstrap runs as uid 0 (to hold
-	// CAP_NET_ADMIN for network config). After the capability drop, the server
-	// runs with no capabilities. The uid inside the user namespace is 0, which
-	// maps to an unprivileged uid in the parent namespace (no real host root).
-	// Nothing between the drop and Exec except the syscall itself.
+	// 5. Drop uid/gid to 65534 (nobody), then drop all capabilities.
+	//
+	// Exact order (security-critical — do not reorder):
+	//   a. NO_NEW_PRIVS + CapBnd drop: must run while uid=0 (userns-root) holds
+	//      CAP_SETPCAP in the effective set; PR_CAPBSET_DROP fails silently after
+	//      the 0→nonzero uid transition clears the effective caps.
+	//   b. dropPrivs (Setgroups/Setgid/Setuid→65534): needs CAP_SETGID/SETUID,
+	//      which are still in the effective set from step (a). The kernel clears
+	//      CapPrm and CapEff on the 0→nonzero uid transition, but CapBnd (already
+	//      zeroed) and CapInh (zeroed by Capset below) are not affected.
+	//   c. Capset-zero: zeroes CapPrm/CapEff/CapInh (CapBnd already zero from (a),
+	//      CapAmb cleared by AMBIENT_CLEAR_ALL in (a)). Belt-and-suspenders after
+	//      the kernel's own cap clear on uid transition.
+	//
+	// configureNet (step 2) required CAP_NET_ADMIN as userns-root; that is
+	// complete before we enter the drop sequence here.
 	if err := dropAllCaps(); err != nil {
 		return fmt.Errorf("drop caps: %w", err)
 	}
-	return syscall.Exec(path, serverArgv, os.Environ())
+	if err := dropPrivs(); err != nil {
+		return fmt.Errorf("drop privs: %w", err)
+	}
+	if err := capsZero(); err != nil {
+		return fmt.Errorf("caps zero: %w", err)
+	}
+	// exec via the fd using execveat(AT_EMPTY_PATH) to bypass path-based DAC.
+	return fexecve(int(serverFD.Fd()), serverArgv, os.Environ())
 }
 
 func configureNet(cidr, proxyIP, peerVeth string) error {
@@ -133,19 +172,86 @@ func configureNet(cidr, proxyIP, peerVeth string) error {
 	return nil
 }
 
+// dropPrivs drops supplementary groups, gid, and uid to 65534 (nobody/nogroup).
+// Must be called AFTER dropAllCaps (which drops CapBnd while CAP_SETPCAP is still
+// in the effective set at uid 0) and BEFORE capsZero. CAP_SETGID and CAP_SETUID
+// are available as userns-root (uid 0) even after the bset drop because they are
+// in the permitted/effective set, not just the bset. The 0→nonzero uid transition
+// clears CapPrm and CapEff; capsZero() thereafter forces CapInh to zero too.
+//
+// Setgroups may return EPERM when running inside a bwrap user namespace: bwrap
+// writes "deny" to /proc/<pid>/setgroups before establishing uid/gid maps, which
+// makes setgroups(2) permanently unavailable. EPERM from Setgroups is safe to
+// ignore — it means the kernel has already locked out supplementary-group changes
+// (which is strictly more secure than allowing them). All other errors abort.
+func dropPrivs() error {
+	if err := unix.Setgroups([]int{65534}); err != nil && err != unix.EPERM {
+		return fmt.Errorf("setgroups: %w", err)
+	}
+	if err := unix.Setgid(65534); err != nil {
+		return fmt.Errorf("setgid: %w", err)
+	}
+	if err := unix.Setuid(65534); err != nil {
+		return fmt.Errorf("setuid: %w", err)
+	}
+	return nil
+}
+
+// dropAllCaps sets NO_NEW_PRIVS, drops the capability bounding set (0..40), and
+// clears ambient caps. Must be called while uid=0 (userns-root) so that
+// CAP_SETPCAP is in the effective set — PR_CAPBSET_DROP fails silently without it.
 func dropAllCaps() error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
 	// Drop caps 0..40; covers through CAP_CHECKPOINT_RESTORE(40), fine for current kernels.
+	// EINVAL is returned for cap numbers above the kernel's last_cap; ignore it.
 	for i := 0; i <= 40; i++ {
-		// Ignore EINVAL for caps above the kernel max.
 		unix.Prctl(unix.PR_CAPBSET_DROP, uintptr(i), 0, 0, 0)
 	}
 	unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)
+	return nil
+}
+
+// capsZero zeroes all cap sets (Prm, Eff, Inh) via capset(2). Call after
+// dropAllCaps + dropPrivs: by this point CapPrm/CapEff are already cleared by
+// the 0→nonzero uid transition; this call forces CapInh to zero as well.
+func capsZero() error {
 	hdr := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3, Pid: 0}
 	var data [2]unix.CapUserData // V3 = two 32-bit words (caps 0-31 and 32-63); kernel reads both
 	return unix.Capset(&hdr, &data[0])
+}
+
+// fexecve calls execveat(2) with AT_EMPTY_PATH on an already-open file descriptor.
+// This performs exec without a path lookup, so no DAC check is done on the file
+// path — only the fd itself must be valid and pointing to an executable binary.
+// Required when the server binary lives on a bind-mounted overlay filesystem that
+// restricts path-based access for non-root uids inside a user namespace.
+func fexecve(fd int, argv, envv []string) error {
+	// Convert argv and envv to C-style null-terminated byte pointer slices.
+	argvp, err := syscall.SlicePtrFromStrings(argv)
+	if err != nil {
+		return err
+	}
+	envvp, err := syscall.SlicePtrFromStrings(envv)
+	if err != nil {
+		return err
+	}
+	// execveat(fd, "", argv, envp, AT_EMPTY_PATH)
+	// AT_EMPTY_PATH = 0x1000: when pathname is "", kernel uses fd directly.
+	// We must pass a pointer to an actual empty (NUL-only) string, not NULL;
+	// the kernel checks the pointer and returns EFAULT for a NULL pathname.
+	emptyPath := []byte{0}
+	_, _, errno := unix.Syscall6(
+		unix.SYS_EXECVEAT,
+		uintptr(fd),
+		uintptr(unsafe.Pointer(&emptyPath[0])), // pointer to empty C-string ""
+		uintptr(unsafe.Pointer(&argvp[0])),
+		uintptr(unsafe.Pointer(&envvp[0])),
+		unix.AT_EMPTY_PATH,
+		0,
+	)
+	return errno
 }
 
 func indexOf(s []string, v string) int {

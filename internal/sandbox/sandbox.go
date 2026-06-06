@@ -30,6 +30,7 @@ type Egress struct {
 	ProxyIP       string            // default route / proxy host-side IP
 	PeerVeth      string            // injected interface name inside the netns
 	InfoFD        int               // bwrap --info-fd target (gateway reads child PID from it)
+	UsernsBlockFD int               // bwrap --userns-block-fd target (gateway unblocks after writing uid/gid maps)
 	Env           map[string]string // extra env set INSIDE the sandbox via --setenv (non-secret only: proxy URL, CA path, placeholder)
 }
 
@@ -76,6 +77,12 @@ func commandNoNet(spec Spec) *exec.Cmd {
 		"--unshare-all", // user, pid, net, mount, ipc, uts, cgroup
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
+		// --tmpfs /etc must precede caller mounts so that any bind into /etc
+		// (e.g. a CA cert at /etc/gigemcp-ca.pem) lands on a world-accessible
+		// tmpfs (mode 0755) rather than a bwrap-created 0700 directory.
+		// After a uid/gid drop to 65534, paths inside a 0700 root-owned
+		// directory are inaccessible even when the leaf file is mode 0644.
+		"--tmpfs", "/etc",
 	}
 
 	// Caller mounts come first so that the fixed isolation mounts below
@@ -115,13 +122,22 @@ func commandEgress(spec Spec) *exec.Cmd {
 		// Decomposed: KEEP --unshare-net (bwrap creates the netns); drop --unshare-all.
 		"--unshare-user", "--unshare-net", "--unshare-pid",
 		"--unshare-ipc", "--unshare-uts", "--unshare-cgroup",
-		// NOTE: --uid/--gid are intentionally omitted here. The bootstrap entrypoint
-		// must run as uid 0 in the new user namespace so it holds CAP_NET_ADMIN to
-		// configure the veth (AddrAdd, LinkSetUp, RouteAdd). Bootstrap drops all caps
-		// and does setuid(65534)/setgid(65534) before exec'ing the untrusted server.
+		// Do NOT pass --uid/--gid: bwrap would write a single-uid uid_map (0→0, count=1),
+		// making setuid(65534) impossible. Instead, the gateway writes its own uid_map
+		// and gid_map (via writeUIDGIDMaps in spawn.go) after reading the child PID from
+		// --info-fd, then unblocks the child via --userns-block-fd. The gateway maps
+		// uids 0..65534 (all of them), which lets bootstrap start as uid 0 (CAP_NET_ADMIN
+		// in the new netns) and then setuid/setgid(65534) before exec'ing the server.
 		"--info-fd", strconv.Itoa(e.InfoFD),
+		"--userns-block-fd", strconv.Itoa(e.UsernsBlockFD),
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
+		// --tmpfs /etc must precede caller mounts (see commandNoNet for rationale):
+		// bwrap creates 0700 directories for bind-mount parents; after dropPrivs() drops
+		// to uid 65534, /etc (if bwrap-created) is inaccessible. A tmpfs at /etc is
+		// created with mode 0755, so any bind mount overlaid on it (e.g. the CA cert
+		// at /etc/gigemcp-ca.pem) remains readable by the server process at uid 65534.
+		"--tmpfs", "/etc",
 	}
 
 	// Emit extra sandbox env vars in deterministic (sorted) order so argv is stable/testable.

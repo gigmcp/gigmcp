@@ -3,3 +3,7 @@
 .env
 .mcp.json
 .claude/
+/fetch-mcp
+/echo-mcp
+/gateway
+/bootstrap

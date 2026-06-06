@@ -25,9 +25,9 @@ import (
 // EgressTestGateway is a live egress gateway assembled for an integration test.
 // Call Close to tear down.
 type EgressTestGateway struct {
-	sess      *mcp.ClientSession
-	cleanup   func()
-	spawnEnv  []string // bwrap argv environment (--setenv K V flags expanded to "K=V") for key-not-in-sandbox assertions
+	sess     *mcp.ClientSession
+	cleanup  func()
+	ChildPID int // sandbox child PID (bwrap --info-fd child); valid until Close() is called
 }
 
 // Close tears down the egress gateway (kills the sandbox, removes veth, etc.).
@@ -35,14 +35,6 @@ func (g *EgressTestGateway) Close() {
 	if g.cleanup != nil {
 		g.cleanup()
 	}
-}
-
-// SpawnEnv returns the environment variables extracted from the bwrap command
-// that was used to spawn the sandbox. These are the K=V pairs derived from the
-// --setenv K V flags in the bwrap argv (set via sandbox.Egress.Env). Used by
-// the key-not-in-sandbox assertion.
-func (g *EgressTestGateway) SpawnEnv() []string {
-	return g.spawnEnv
 }
 
 // CallTool calls a tool on the backend session directly (tool name "fetch", not "fetch_fetch").
@@ -161,29 +153,13 @@ func StartEgressGatewayForTest(
 	srv := store.Server{Name: "fetch", Binary: fetchBin}
 
 	// 8. Spawn the egress sandbox.
-	sess, cleanup, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin)
+	eb, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin)
 	if err != nil {
 		t.Fatalf("SpawnEgressBackend: %v", err)
 	}
-	t.Logf("egress backend spawned; proxy on 0.0.0.0:%d, upstream on %s:%d", proxyPort, upstreamHost, upstream.Port)
+	t.Logf("egress backend spawned; proxy on 0.0.0.0:%d, upstream on %s:%d, child pid=%d", proxyPort, upstreamHost, upstream.Port, eb.ChildPID)
 
-	// Reconstruct the sandbox env from what SpawnEgressBackend injects via --setenv.
-	// We know the fixed env vars set in the Egress.Env map (see spawn.go):
-	//   HTTPS_PROXY, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS, GIGE_PLACEHOLDER.
-	// We use the first allocated /30's host IP (10.88.0.1) since alloc starts fresh.
-	// proxyIP = sub.HostIP = 10.88.0.1 for the first allocation.
-	// NOTE: This reconstructs the expected env to verify REALKEY is absent.
-	// bwrap --clearenv + these --setenv flags is the complete sandbox environment.
-	firstHostIP := "10.88.0.1" // first /30 from 10.88.0.0/16 → k=0, host=10.88.0.1
-	spawnEnv := []string{
-		"PATH=/usr/bin:/bin",
-		fmt.Sprintf("HTTPS_PROXY=http://%s:%d", firstHostIP, proxyPort),
-		"SSL_CERT_FILE=/etc/gigemcp-ca.pem",
-		"NODE_EXTRA_CA_CERTS=/etc/gigemcp-ca.pem",
-		"GIGE_PLACEHOLDER=PLACEHOLDER",
-	}
-
-	return &EgressTestGateway{sess: sess, cleanup: cleanup, spawnEnv: spawnEnv}
+	return &EgressTestGateway{sess: eb.Session, cleanup: eb.Cleanup, ChildPID: eb.ChildPID}
 }
 
 // TLSServerInfo carries the information from a httptest.TLSServer that the harness needs.

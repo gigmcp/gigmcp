@@ -44,6 +44,9 @@ func TestCapDropDeterministic(t *testing.T) {
 		"CapAmb:\t0000000000000000",
 	}
 	wantNNP := "NoNewPrivs:\t1"
+	// All four uid fields (real, effective, saved, filesystem) must be 65534.
+	wantUID := "Uid:\t65534\t65534\t65534\t65534"
+	wantGID := "Gid:\t65534\t65534\t65534\t65534"
 
 	for i := 0; i < 10; i++ {
 		cmd := exec.Command(binPath)
@@ -61,6 +64,12 @@ func TestCapDropDeterministic(t *testing.T) {
 		}
 		if !strings.Contains(status, wantNNP) {
 			t.Errorf("iteration %d: missing %q in /proc/self/status:\n%s", i, wantNNP, status)
+		}
+		if !strings.Contains(status, wantUID) {
+			t.Errorf("iteration %d: missing %q in /proc/self/status:\n%s", i, wantUID, status)
+		}
+		if !strings.Contains(status, wantGID) {
+			t.Errorf("iteration %d: missing %q in /proc/self/status:\n%s", i, wantGID, status)
 		}
 	}
 }
