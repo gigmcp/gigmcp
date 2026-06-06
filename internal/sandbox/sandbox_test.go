@@ -55,13 +55,29 @@ func TestNoNetworkInterfaces(t *testing.T) {
 
 func TestHostFilesHidden(t *testing.T) {
 	requireSandbox(t)
-	secret := filepath.Join(t.TempDir(), "secret.txt")
-	if err := os.WriteFile(secret, []byte("key-material"), 0o644); err != nil {
+	// Canary in the current working directory (e.g. /src in the dev
+	// container), which is NOT bind-mounted into the sandbox — and NOT
+	// under /tmp, so the --tmpfs mask is not what hides it.
+	secret, err := os.CreateTemp(".", "gige-canary-*.txt")
+	if err != nil {
 		t.Fatal(err)
 	}
-	// The host path is not bind-mounted, so reading it must fail.
-	if _, err := runShell(t, "cat "+secret); err == nil {
-		t.Fatal("sandbox could read an unmounted host file")
+	defer os.Remove(secret.Name())
+	if _, err := secret.WriteString("key-material"); err != nil {
+		t.Fatal(err)
+	}
+	secret.Close()
+	abs, err := filepath.Abs(secret.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runShell(t, "cat "+abs); err == nil {
+		t.Fatal("sandbox could read an unmounted host file outside /tmp")
+	}
+	// A host file that definitely exists must also be invisible: the
+	// sandbox only sees the read-only binds it was granted.
+	if _, err := runShell(t, "cat /etc/os-release"); err == nil {
+		t.Fatal("sandbox could read host /etc/os-release")
 	}
 }
 
@@ -96,4 +112,49 @@ func TestProcIsPrivate(t *testing.T) {
 	if n > 10 {
 		t.Errorf("sandbox /proc/self/status shows Pid %d — host /proc is leaking (expected ≤ 10 in fresh pid namespace)", n)
 	}
+}
+
+func TestCommandArgvHardening(t *testing.T) {
+	cmd := sandbox.Command(sandbox.Spec{
+		Exec:   "--share-net", // adversarial, option-like
+		Args:   []string{"-c", "true"},
+		Mounts: []sandbox.Mount{{Src: "/host/x", Dst: "/proc"}}, // tries to clobber /proc
+	})
+	args := cmd.Args // args[0] == "bwrap"
+
+	// The caller's /proc bind must appear BEFORE the fixed --proc, so the
+	// fixed fresh procfs wins (later mount overrides earlier in bwrap).
+	idxBind := indexOfPair(args, "--ro-bind", "/host/x", "/proc")
+	idxProc := indexOf(args, "--proc")
+	if idxBind == -1 {
+		t.Fatal("caller --ro-bind for /proc not found")
+	}
+	if idxProc == -1 || idxProc < idxBind {
+		t.Fatalf("fixed --proc (%d) must come after caller /proc bind (%d)", idxProc, idxBind)
+	}
+
+	// A literal -- must precede the option-like Exec.
+	idxSep := indexOf(args, "--")
+	idxExec := indexOf(args, "--share-net")
+	if idxSep == -1 || idxExec == -1 || idxSep >= idxExec {
+		t.Fatalf("-- (%d) must come before Exec (%d)", idxSep, idxExec)
+	}
+}
+
+func indexOf(s []string, v string) int {
+	for i, x := range s {
+		if x == v {
+			return i
+		}
+	}
+	return -1
+}
+
+func indexOfPair(s []string, flag, a, b string) int {
+	for i := 0; i+2 < len(s); i++ {
+		if s[i] == flag && s[i+1] == a && s[i+2] == b {
+			return i
+		}
+	}
+	return -1
 }

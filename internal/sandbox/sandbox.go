@@ -1,5 +1,5 @@
 // Package sandbox builds bubblewrap commands that run untrusted MCP servers
-// in fresh user/pid/net/mount/ipc/uts namespaces with a read-only view of
+// in fresh user/pid/net/mount/ipc/uts/cgroup namespaces with a read-only view of
 // exactly the files they were granted (DESIGN.md decisions #3, #5).
 package sandbox
 
@@ -42,14 +42,15 @@ func Available() bool {
 func Command(spec Spec) *exec.Cmd {
 	args := []string{
 		"--die-with-parent", // no orphaned servers if the gateway dies
-		"--unshare-all",     // user, pid, net, mount, ipc, uts, cgroup
+		// --new-session blocks TIOCSTI terminal-injection from sandboxed code.
+		"--new-session",
+		"--unshare-all", // user, pid, net, mount, ipc, uts, cgroup
 		"--clearenv",
 		"--setenv", "PATH", "/usr/bin:/bin",
-		"--proc", "/proc", // fresh procfs — sandbox sees only its own pid namespace
-		"--dev", "/dev",
-		"--tmpfs", "/tmp",
-		"--chdir", "/",
 	}
+
+	// Caller mounts come first so that the fixed isolation mounts below
+	// can override them on path collisions.
 	for _, m := range spec.Mounts {
 		flag := "--ro-bind"
 		if m.Optional {
@@ -57,6 +58,17 @@ func Command(spec Spec) *exec.Cmd {
 		}
 		args = append(args, flag, m.Src, m.Dst)
 	}
+
+	// Fixed isolation mounts come AFTER caller mounts so they always win on path collisions (bwrap applies mounts last-one-wins).
+	args = append(args,
+		"--proc", "/proc", // fresh procfs — sandbox sees only its own pid namespace
+		"--dev", "/dev",
+		"--tmpfs", "/tmp",
+		"--chdir", "/",
+	)
+
+	// -- ends bwrap option parsing; Exec is always treated as the command.
+	args = append(args, "--")
 	args = append(args, spec.Exec)
 	args = append(args, spec.Args...)
 	return exec.Command("bwrap", args...)
