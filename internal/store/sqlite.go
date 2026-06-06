@@ -11,6 +11,8 @@ type sqliteStore struct {
 	db *sql.DB
 }
 
+var _ Store = (*sqliteStore)(nil)
+
 const schema = `
 CREATE TABLE IF NOT EXISTS servers (
 	id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +26,9 @@ func OpenSQLite(path string) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(schema); err != nil {
+	// NOTE: modernc/sqlite serialises writes; if write contention appears,
+	// cap the pool with db.SetMaxOpenConns(1).
+	if _, err := db.ExecContext(context.Background(), schema); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -32,16 +36,12 @@ func OpenSQLite(path string) (Store, error) {
 }
 
 func (s *sqliteStore) EnsureServer(ctx context.Context, name, binary string) (Server, error) {
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO servers (name, binary) VALUES (?, ?)
-		 ON CONFLICT(name) DO UPDATE SET binary = excluded.binary`,
-		name, binary); err != nil {
-		return Server{}, err
-	}
 	var srv Server
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, binary FROM servers WHERE name = ?`, name).
-		Scan(&srv.ID, &srv.Name, &srv.Binary)
+		`INSERT INTO servers (name, binary) VALUES (?, ?)
+		 ON CONFLICT(name) DO UPDATE SET binary = excluded.binary
+		 RETURNING id, name, binary`,
+		name, binary).Scan(&srv.ID, &srv.Name, &srv.Binary)
 	return srv, err
 }
 
