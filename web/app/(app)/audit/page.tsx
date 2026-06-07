@@ -1,8 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useFormatter, useTranslations } from "next-intl";
+import { ScrollText } from "lucide-react";
 import { useMe, keys } from "@/lib/queries";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,34 +26,26 @@ import type { Column } from "@/components/data-table";
 
 type KindFilter = "egress" | "auth" | "admin";
 
-function kindVariant(
-  kind: string,
-): "default" | "secondary" | "outline" {
-  if (kind === "egress") return "default";
+function kindVariant(kind: string): "info" | "secondary" | "outline" {
+  if (kind === "egress") return "info";
   if (kind === "auth") return "secondary";
   return "outline";
 }
 
 function decisionVariant(
   decision: string,
-): "default" | "destructive" | "secondary" {
+): "success" | "destructive" | "secondary" {
   const d = decision.toLowerCase();
-  if (d === "resolved" || d === "allow") return "default";
+  if (d === "resolved" || d === "allow") return "success";
   if (d === "denied" || d === "error" || d === "deny") return "destructive";
   return "secondary";
-}
-
-function formatTs(ts: string): string {
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
 }
 
 const ALL_KINDS: KindFilter[] = ["egress", "auth", "admin"];
 
 export default function AuditPage() {
+  const t = useTranslations("audit");
+  const format = useFormatter();
   const me = useMe();
   const isAdmin = me.data?.user.role === "admin";
   const isImpersonating = me.data?.impersonating ?? false;
@@ -73,6 +68,28 @@ export default function AuditPage() {
       }
       return next;
     });
+  }
+
+  function formatTs(ts: string): string {
+    try {
+      return format.dateTime(new Date(ts), {
+        dateStyle: "medium",
+        timeStyle: "medium",
+      });
+    } catch {
+      return ts;
+    }
+  }
+
+  // Kind/decision values come from server data; translate the known ones and
+  // fall back to the raw value for anything unexpected.
+  function kindLabel(kind: string): string {
+    return t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind;
+  }
+
+  function decisionLabel(decision: string): string {
+    const key = `decisions.${decision.toLowerCase()}`;
+    return t.has(key) ? t(key) : decision;
   }
 
   const parsedUserId = userIdFilter.trim()
@@ -108,97 +125,115 @@ export default function AuditPage() {
 
   const columns: Column<AuditEvent>[] = [
     {
-      header: "Time",
+      header: t("columns.time"),
       cell: (e) => (
-        <span className="whitespace-nowrap text-xs text-muted-foreground">
+        <span className="font-mono text-xs whitespace-nowrap text-muted-foreground tabular-nums">
           {formatTs(e.ts)}
         </span>
       ),
     },
     {
-      header: "Kind",
+      header: t("columns.kind"),
       cell: (e) => (
-        <Badge variant={kindVariant(e.kind)}>{e.kind}</Badge>
+        <Badge variant={kindVariant(e.kind)}>{kindLabel(e.kind)}</Badge>
       ),
     },
     {
-      header: "Decision",
+      header: t("columns.decision"),
       cell: (e) => (
-        <Badge variant={decisionVariant(e.decision)}>{e.decision}</Badge>
+        <Badge variant={decisionVariant(e.decision)}>
+          {decisionLabel(e.decision)}
+        </Badge>
       ),
     },
     {
-      header: "Server",
+      header: t("columns.server"),
       cell: (e) => (
-        <span className="font-mono text-xs">{e.server || "—"}</span>
+        <span className="font-mono text-xs">{e.server || t("noValue")}</span>
       ),
     },
     {
-      header: "Host",
+      header: t("columns.host"),
       cell: (e) => (
-        <span className="font-mono text-xs">{e.host || "—"}</span>
+        <span className="font-mono text-xs">{e.host || t("noValue")}</span>
       ),
     },
     {
-      header: "User",
-      cell: (e) => e.user_id ?? "—",
+      header: t("columns.user"),
+      cell: (e) =>
+        e.user_id != null ? (
+          <span className="font-mono text-xs tabular-nums">{e.user_id}</span>
+        ) : (
+          <span className="text-muted-foreground">{t("noValue")}</span>
+        ),
     },
     {
-      header: "Profile",
-      cell: (e) => e.profile_id ?? "—",
+      header: t("columns.profile"),
+      cell: (e) =>
+        e.profile_id != null ? (
+          <span className="font-mono text-xs tabular-nums">
+            {e.profile_id}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">{t("noValue")}</span>
+        ),
     },
     {
-      header: "Detail",
+      header: t("columns.detail"),
       cell: (e) =>
         e.detail ? (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
-                <span className="block max-w-[200px] truncate text-xs cursor-default">
+                <span className="block max-w-[200px] cursor-default truncate font-mono text-xs">
                   {e.detail}
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-sm whitespace-pre-wrap break-words">
+                <p className="max-w-sm font-mono break-words whitespace-pre-wrap">
                   {e.detail}
                 </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">{t("noValue")}</span>
         ),
     },
   ];
 
   return (
     <div className="space-y-6">
+      {/* Page header */}
       <div>
-        <h1 className="text-2xl font-semibold">Audit log</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Event history for all MCP activity.
+          {t("description")}
         </p>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-4">
         {/* Kind filter chips — client-side only (server has no kind filter in v1) */}
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Kind</Label>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">
+            {t("filters.kind")}
+          </Label>
           <div className="flex gap-2">
             {ALL_KINDS.map((k) => (
               <button
                 key={k}
                 type="button"
+                aria-pressed={activeKinds.has(k)}
                 onClick={() => toggleKind(k)}
-                className={[
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
                   activeKinds.has(k)
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-transparent text-muted-foreground hover:border-foreground hover:text-foreground",
-                ].join(" ")}
+                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
               >
-                {k}
+                {kindLabel(k)}
               </button>
             ))}
           </div>
@@ -206,15 +241,18 @@ export default function AuditPage() {
 
         {/* Admin user_id filter (non-impersonating admins only) */}
         {isAdmin && !isImpersonating && (
-          <div className="space-y-1">
-            <Label htmlFor="uid-filter" className="text-xs text-muted-foreground">
-              User ID
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="uid-filter"
+              className="text-xs text-muted-foreground"
+            >
+              {t("filters.userId")}
             </Label>
             <Input
               id="uid-filter"
               type="number"
-              placeholder="filter by user id"
-              className="h-8 w-40 text-xs"
+              placeholder={t("filters.userIdPlaceholder")}
+              className="h-8 w-44 text-xs"
               value={userIdFilter}
               onChange={(e) => setUserIdFilter(e.target.value)}
             />
@@ -223,24 +261,33 @@ export default function AuditPage() {
       </div>
 
       {query.isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
-          ))}
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="divide-y divide-border">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex h-12 items-center px-3">
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No audit events found.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border py-16 text-center">
+          <ScrollText
+            className="mb-1 size-6 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <p className="text-sm font-medium">{t("empty.title")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("empty.description")}
+          </p>
+        </div>
       ) : (
         <>
-          <DataTable
-            columns={columns}
-            data={filtered}
-            getKey={(e) => e.id}
-          />
+          <div className="overflow-hidden rounded-lg border border-border">
+            <DataTable columns={columns} data={filtered} getKey={(e) => e.id} />
+          </div>
 
-          {query.hasNextPage && (
+          {query.hasNextPage ? (
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"
@@ -248,9 +295,13 @@ export default function AuditPage() {
                 disabled={query.isFetchingNextPage}
                 onClick={() => query.fetchNextPage()}
               >
-                {query.isFetchingNextPage ? "Loading…" : "Load more"}
+                {query.isFetchingNextPage ? t("loadingMore") : t("loadMore")}
               </Button>
             </div>
+          ) : (
+            <p className="pt-2 text-center text-xs text-muted-foreground">
+              {t("endOfList")}
+            </p>
           )}
         </>
       )}

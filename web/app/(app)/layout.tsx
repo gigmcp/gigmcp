@@ -25,8 +25,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (me.isLoading) {
     return (
-      <div className="flex h-screen">
-        <Skeleton className="h-screen w-60" />
+      <div className="flex h-screen bg-background">
+        <div className="h-screen w-60 shrink-0 space-y-2 border-r border-border p-4">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
         <div className="flex-1 p-8">
           <Skeleton className="h-8 w-48" />
         </div>
@@ -35,11 +40,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
   if (!me.data) return null; // redirect in flight (error path above fires)
   return (
-    <div className="flex h-screen overflow-hidden">
-      <AppSidebar role={me.data.user.role} />
+    <div className="flex h-screen overflow-hidden bg-background">
+      <AppSidebar role={me.data.user.role} user={me.data.user} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <ImpersonationBanner me={me.data} />
-        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl p-8">{children}</div>
+        </main>
       </div>
     </div>
   );

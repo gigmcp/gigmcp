@@ -1,0 +1,32 @@
+{
+  "title": "Server",
+  "description": "Installierte MCP-Server, die für Profile verfügbar sind.",
+  "readOnlyTooltip": "Schreibgeschützt bei Ansicht als anderer Benutzer",
+  "table": {
+    "id": "ID",
+    "name": "Name",
+    "actions": "Aktionen"
+  },
+  "install": {
+    "button": "Server installieren",
+    "dialogTitle": "Server installieren",
+    "dialogDescription": "Gib eine Server-Referenz an: einen Namen, name@version oder sha256:digest — z. B. \"bitwarden\".",
+    "refLabel": "Server-Referenz",
+    "refPlaceholder": "bitwarden",
+    "submit": "Installieren",
+    "submitting": "Wird installiert…",
+    "success": "Server \"{name}\" installiert",
+    "error": "Installation fehlgeschlagen"
+  },
+  "uninstall": {
+    "button": "Deinstallieren",
+    "confirmTitle": "\"{name}\" deinstallieren?",
+    "confirmDescription": "Dadurch wird der Server aus allen Profilen entfernt, die auf ihn verweisen.",
+    "confirmLabel": "Deinstallieren",
+    "success": "Server \"{name}\" deinstalliert",
+    "error": "Deinstallation fehlgeschlagen"
+  },
+  "empty": {
+    "title": "Noch keine Server installiert"
+  }
+}

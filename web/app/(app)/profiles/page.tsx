@@ -2,6 +2,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useFormatter, useTranslations } from "next-intl";
+import { Layers } from "lucide-react";
 import {
   useProfiles,
   useCreateProfile,
@@ -31,19 +33,53 @@ import { Label } from "@/components/ui/label";
 import type { Profile } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-const READ_ONLY_TITLE = "Read-only while viewing as another user";
+function CreateProfileTrigger({
+  disabled,
+  onClick,
+}: {
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const t = useTranslations("profiles");
 
-function CreateProfileDialog({ disabled }: { disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
+  const trigger = (
+    <Button onClick={onClick} disabled={disabled}>
+      {t("create.trigger")}
+    </Button>
+  );
+
+  if (!disabled) return trigger;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger>
+          <span tabIndex={0}>{trigger}</span>
+        </TooltipTrigger>
+        <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function CreateProfileDialog({
+  open,
+  onOpenChange,
+  onReveal,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onReveal: (token: string) => void;
+}) {
+  const t = useTranslations("profiles");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [revealToken, setRevealToken] = useState<string | null>(null);
 
   const create = useCreateProfile();
 
   function handleOpen(o: boolean) {
-    setOpen(o);
+    onOpenChange(o);
     if (!o) {
       setName("");
       setSlug("");
@@ -58,118 +94,89 @@ function CreateProfileDialog({ disabled }: { disabled?: boolean }) {
       { name: name.trim(), slug: slug.trim() },
       {
         onSuccess: (profile) => {
-          setOpen(false);
+          onOpenChange(false);
           setName("");
           setSlug("");
           if (profile.token) {
-            setRevealToken(profile.token);
+            onReveal(profile.token);
           } else {
-            toast.success(`Profile "${profile.name}" created`);
+            toast.success(t("create.successToast", { name: profile.name }));
           }
         },
         onError: (err) => {
           if (err instanceof ApiError) {
             if (err.code === "conflict") {
-              setError("Slug is already taken. Please choose a different slug.");
+              setError(t("create.errors.slugTaken"));
             } else {
               setError(err.message);
             }
           } else {
-            setError("Failed to create profile");
+            setError(t("create.errors.generic"));
           }
         },
       },
     );
   }
 
-  const trigger = (
-    <Button onClick={() => setOpen(true)} disabled={disabled}>
-      Create profile
-    </Button>
-  );
-
   return (
-    <>
-      {disabled ? (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <span tabIndex={0}>{trigger}</span>
-            </TooltipTrigger>
-            <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        trigger
-      )}
-
-      <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create profile</DialogTitle>
-            <DialogDescription>
-              A profile provides an MCP endpoint with a curated set of servers.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="profile-name">Name</Label>
-              <Input
-                id="profile-name"
-                placeholder="My profile"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-slug">Slug</Label>
-              <Input
-                id="profile-slug"
-                placeholder="my-profile"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Lowercase letters, digits, and hyphens (2–63 chars, must start
-                with a letter/digit).
-              </p>
-            </div>
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("create.title")}</DialogTitle>
+          <DialogDescription>{t("create.description")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="profile-name">{t("create.nameLabel")}</Label>
+            <Input
+              id="profile-name"
+              placeholder={t("create.namePlaceholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
-          <DialogFooter>
-            <Button
-              onClick={handleCreate}
-              disabled={
-                create.isPending || !name.trim() || !slug.trim()
-              }
-            >
-              {create.isPending ? "Creating…" : "Create"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <TokenRevealDialog
-        open={!!revealToken}
-        token={revealToken ?? ""}
-        onClose={() => setRevealToken(null)}
-      />
-    </>
+          <div className="space-y-2">
+            <Label htmlFor="profile-slug">{t("create.slugLabel")}</Label>
+            <Input
+              id="profile-slug"
+              className="font-mono"
+              placeholder={t("create.slugPlaceholder")}
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("create.slugHint")}
+            </p>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleCreate}
+            disabled={create.isPending || !name.trim() || !slug.trim()}
+          >
+            {create.isPending ? t("create.submitting") : t("create.submit")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export default function ProfilesPage() {
+  const t = useTranslations("profiles");
+  const format = useFormatter();
   const profiles = useProfiles();
   const readOnly = useReadOnly();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [revealToken, setRevealToken] = useState<string | null>(null);
 
   const columns: Column<Profile>[] = [
     {
-      header: "Name",
+      header: t("list.columns.name"),
       cell: (p) => (
         <Link
           href={`/profiles/${p.id}`}
@@ -179,9 +186,12 @@ export default function ProfilesPage() {
         </Link>
       ),
     },
-    { header: "Slug", cell: (p) => p.slug },
     {
-      header: "Endpoint",
+      header: t("list.columns.slug"),
+      cell: (p) => <span className="font-mono text-xs">{p.slug}</span>,
+    },
+    {
+      header: t("list.columns.endpoint"),
       cell: (p) => (
         <span className="font-mono text-xs text-muted-foreground">
           {p.endpoint}
@@ -189,40 +199,74 @@ export default function ProfilesPage() {
       ),
     },
     {
-      header: "Servers",
-      cell: (p) => p.servers.length,
+      header: t("list.columns.servers"),
+      cell: (p) => (
+        <span className="tabular-nums">{format.number(p.servers.length)}</span>
+      ),
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Profiles</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("list.title")}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            MCP endpoint profiles with bundled server sets.
+            {t("list.description")}
           </p>
         </div>
-        <CreateProfileDialog disabled={readOnly} />
+        <CreateProfileTrigger
+          disabled={readOnly}
+          onClick={() => setCreateOpen(true)}
+        />
       </div>
 
       {profiles.isLoading ? (
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
-          ))}
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="divide-y divide-border">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex h-12 items-center px-3">
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : profiles.data && profiles.data.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No profiles yet. Create one to get started.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border px-6 py-16 text-center">
+          <Layers className="size-8 text-muted-foreground" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t("list.empty.title")}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("list.empty.description")}
+            </p>
+          </div>
+          <Button disabled={readOnly} onClick={() => setCreateOpen(true)}>
+            {t("create.trigger")}
+          </Button>
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={profiles.data ?? []}
-          getKey={(p) => p.id}
-        />
+        <div className="overflow-hidden rounded-lg border border-border">
+          <DataTable
+            columns={columns}
+            data={profiles.data ?? []}
+            getKey={(p) => p.id}
+          />
+        </div>
       )}
+
+      <CreateProfileDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onReveal={setRevealToken}
+      />
+
+      <TokenRevealDialog
+        open={!!revealToken}
+        token={revealToken ?? ""}
+        onClose={() => setRevealToken(null)}
+      />
     </div>
   );
 }

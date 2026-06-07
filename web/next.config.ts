@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 // GATEWAY_INTERNAL_URL: where the Go gateway listens. In compose the service
 // name resolves to the gateway container; locally it's localhost:8080.
@@ -19,4 +20,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// i18n without locale routing: cookie-based locale, config in i18n/request.ts.
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
+
+export default withNextIntl(nextConfig);

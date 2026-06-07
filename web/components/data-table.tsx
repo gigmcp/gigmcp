@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -25,10 +26,11 @@ export function DataTable<T>({
   data,
   getKey = (_row, index) => index,
 }: DataTableProps<T>) {
+  const t = useTranslations("common");
   return (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="hover:bg-transparent">
           {columns.map((col) => (
             <TableHead key={col.header}>{col.header}</TableHead>
           ))}
@@ -36,12 +38,12 @@ export function DataTable<T>({
       </TableHeader>
       <TableBody>
         {data.length === 0 ? (
-          <TableRow>
+          <TableRow className="hover:bg-transparent">
             <TableCell
               colSpan={columns.length}
-              className="py-8 text-center text-muted-foreground"
+              className="py-10 text-center text-muted-foreground"
             >
-              No data.
+              {t("table.empty")}
             </TableCell>
           </TableRow>
         ) : (

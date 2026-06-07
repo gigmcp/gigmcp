@@ -1,11 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { api, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
+  const t = useTranslations("login");
   const [disabled, setDisabled] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
 
@@ -32,31 +40,42 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-center">Sign in to gigmcp</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {disabled ? (
-            <Alert variant="destructive">
-              <p className="text-sm font-medium">Control plane not configured</p>
-              <p className="mt-1 text-sm">{disabled}</p>
-            </Alert>
-          ) : (
-            <Button
-              className="w-full"
-              disabled={!checked}
-              onClick={() => {
-                // Full-page navigation — NOT fetch. The browser must follow the
-                // 302 → Zitadel → callback (Set-Cookie) → 302 / chain itself.
-                window.location.href = "/api/auth/login";
-              }}
-            >
-              Continue with Zitadel
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center text-lg font-semibold tracking-tight">
+          {t("wordmark")}
+        </div>
+        <Card>
+          <CardHeader className="justify-items-center text-center">
+            <CardTitle>{t("title")}</CardTitle>
+            <CardDescription>{t("description")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {disabled ? (
+              <Alert variant="destructive">
+                <AlertTitle>{t("controlPlaneDisabled")}</AlertTitle>
+                <AlertDescription>{disabled}</AlertDescription>
+              </Alert>
+            ) : (
+              <Button
+                className="w-full"
+                disabled={!checked}
+                onClick={() => {
+                  // Full-page navigation — NOT fetch. The browser must follow the
+                  // 302 → Zitadel → callback (Set-Cookie) → 302 / chain itself.
+                  window.location.href = "/api/auth/login";
+                }}
+              >
+                {t("continueWithZitadel")}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+        {!disabled && (
+          <p className="text-center text-xs text-muted-foreground">
+            {t("redirectNotice")}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

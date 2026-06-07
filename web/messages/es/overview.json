@@ -1,0 +1,38 @@
+{
+  "title": "Inicio",
+  "welcome": "Bienvenido, {name}",
+  "description": "Tu plano de control de gigmcp de un vistazo.",
+  "placeholder": "—",
+  "stats": {
+    "profiles": "Perfiles",
+    "servers": "Servidores",
+    "credentials": "Credenciales",
+    "users": "Usuarios"
+  },
+  "activity": {
+    "title": "Actividad reciente",
+    "empty": "Sin actividad aún.",
+    "columns": {
+      "time": "Hora",
+      "kind": "Tipo",
+      "server": "Servidor",
+      "host": "Host",
+      "decision": "Decisión",
+      "detail": "Detalle"
+    }
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Permitido",
+    "deny": "Denegado",
+    "denied": "Denegado",
+    "resolved": "Resuelto",
+    "error": "Error",
+    "login": "Inicio de sesión",
+    "logout": "Cierre de sesión"
+  }
+}

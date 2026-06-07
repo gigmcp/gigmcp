@@ -1,74 +1,44 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { useFormatter, useTranslations } from "next-intl";
+import { Activity } from "lucide-react";
 import { useMe, useProfiles, useServers, useCredentials, useUsers, keys } from "@/lib/queries";
 import { api } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/data-table";
 import type { AuditEvent } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-function StatCard({ title, value }: { title: string; value: number | string }) {
+function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
       <CardContent>
-        <p className="text-3xl font-bold">{value}</p>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
+          {value}
+        </p>
       </CardContent>
     </Card>
   );
 }
 
+// Soft tinted pills per kind (Vercel style); unknown kinds fall back to a
+// neutral outline pill.
 const kindVariant = {
-  egress: "default",
+  egress: "info",
   auth: "secondary",
   admin: "outline",
 } as const;
 
+// Same gating as before: "allow" is the only non-alarming decision.
 const decisionVariant = (d: string) =>
-  d === "allow" ? ("secondary" as const) : ("destructive" as const);
-
-const auditColumns: Column<AuditEvent>[] = [
-  {
-    header: "Time",
-    cell: (e) =>
-      new Date(e.ts).toLocaleString(undefined, {
-        dateStyle: "short",
-        timeStyle: "medium",
-      }),
-  },
-  {
-    header: "Kind",
-    cell: (e) => (
-      <Badge variant={kindVariant[e.kind] ?? "outline"}>{e.kind}</Badge>
-    ),
-  },
-  {
-    header: "Server",
-    cell: (e) => e.server || <span className="text-muted-foreground">—</span>,
-  },
-  {
-    header: "Host",
-    cell: (e) => e.host || <span className="text-muted-foreground">—</span>,
-  },
-  {
-    header: "Decision",
-    cell: (e) => (
-      <Badge variant={decisionVariant(e.decision)}>{e.decision}</Badge>
-    ),
-  },
-  {
-    header: "Detail",
-    cell: (e) => (
-      <span className="text-muted-foreground text-xs">{e.detail}</span>
-    ),
-  },
-];
+  d === "allow" ? ("success" as const) : ("destructive" as const);
 
 export default function OverviewPage() {
+  const t = useTranslations("overview");
+  const format = useFormatter();
   const me = useMe();
   const profiles = useProfiles();
   const servers = useServers();
@@ -83,56 +53,111 @@ export default function OverviewPage() {
 
   const displayName = me.data?.user.display_name || me.data?.user.email || "";
 
+  const statValue = (q: { isLoading: boolean; data?: unknown[] }) =>
+    q.isLoading ? t("placeholder") : format.number(q.data?.length ?? 0);
+
+  const auditColumns: Column<AuditEvent>[] = [
+    {
+      header: t("activity.columns.time"),
+      cell: (e) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {format.dateTime(new Date(e.ts), {
+            dateStyle: "short",
+            timeStyle: "medium",
+          })}
+        </span>
+      ),
+    },
+    {
+      header: t("activity.columns.kind"),
+      cell: (e) => (
+        <Badge variant={kindVariant[e.kind] ?? "outline"}>
+          {t.has(`kinds.${e.kind}`) ? t(`kinds.${e.kind}`) : e.kind}
+        </Badge>
+      ),
+    },
+    {
+      header: t("activity.columns.server"),
+      cell: (e) =>
+        e.server ? (
+          <span className="font-mono text-xs">{e.server}</span>
+        ) : (
+          <span className="text-muted-foreground">{t("placeholder")}</span>
+        ),
+    },
+    {
+      header: t("activity.columns.host"),
+      cell: (e) =>
+        e.host ? (
+          <span className="font-mono text-xs">{e.host}</span>
+        ) : (
+          <span className="text-muted-foreground">{t("placeholder")}</span>
+        ),
+    },
+    {
+      header: t("activity.columns.decision"),
+      cell: (e) => (
+        <Badge variant={decisionVariant(e.decision)}>
+          {t.has(`decisions.${e.decision}`)
+            ? t(`decisions.${e.decision}`)
+            : e.decision}
+        </Badge>
+      ),
+    },
+    {
+      header: t("activity.columns.detail"),
+      cell: (e) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {e.detail}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">
-          {displayName ? `Welcome, ${displayName}` : "Overview"}
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {displayName ? t("welcome", { name: displayName }) : t("title")}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your gigmcp control plane at a glance.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label={t("stats.profiles")} value={statValue(profiles)} />
+        <StatCard label={t("stats.servers")} value={statValue(servers)} />
         <StatCard
-          title="Profiles"
-          value={profiles.isLoading ? "—" : (profiles.data?.length ?? 0)}
+          label={t("stats.credentials")}
+          value={statValue(credentials)}
         />
-        <StatCard
-          title="Servers"
-          value={servers.isLoading ? "—" : (servers.data?.length ?? 0)}
-        />
-        <StatCard
-          title="Credentials"
-          value={credentials.isLoading ? "—" : (credentials.data?.length ?? 0)}
-        />
-        {isAdmin && (
-          <StatCard
-            title="Users"
-            value={users.isLoading ? "—" : (users.data?.length ?? 0)}
-          />
-        )}
+        {isAdmin && <StatCard label={t("stats.users")} value={statValue(users)} />}
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold">Recent activity</h2>
+        <h2 className="mb-4 text-base font-semibold tracking-tight">
+          {t("activity.title")}
+        </h2>
         {audit.isLoading ? (
-          <div className="space-y-2">
+          <div className="space-y-3 rounded-lg border border-border p-4">
             {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-md" />
+              <Skeleton key={i} className="h-8 w-full rounded-md" />
             ))}
           </div>
         ) : audit.data?.events.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No activity yet.
-          </p>
+          <div className="flex flex-col items-center gap-2 rounded-lg border border-border py-12">
+            <Activity className="size-5 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              {t("activity.empty")}
+            </p>
+          </div>
         ) : (
-          <DataTable
-            columns={auditColumns}
-            data={audit.data?.events ?? []}
-            getKey={(e) => e.id}
-          />
+          <div className="overflow-hidden rounded-lg border border-border">
+            <DataTable
+              columns={auditColumns}
+              data={audit.data?.events ?? []}
+              getKey={(e) => e.id}
+            />
+          </div>
         )}
       </div>
     </div>

@@ -1,0 +1,39 @@
+{
+  "title": "Registro de auditoría",
+  "description": "Historial de eventos de toda la actividad MCP.",
+  "filters": {
+    "kind": "Tipo",
+    "userId": "ID de usuario",
+    "userIdPlaceholder": "Filtrar por ID de usuario"
+  },
+  "kinds": {
+    "egress": "egress",
+    "auth": "auth",
+    "admin": "admin"
+  },
+  "decisions": {
+    "allow": "allow",
+    "deny": "deny",
+    "denied": "denied",
+    "error": "error",
+    "resolved": "resolved"
+  },
+  "columns": {
+    "time": "Hora",
+    "kind": "Tipo",
+    "decision": "Decisión",
+    "server": "Servidor",
+    "host": "Host",
+    "user": "Usuario",
+    "profile": "Perfil",
+    "detail": "Detalle"
+  },
+  "empty": {
+    "title": "Sin eventos de auditoría",
+    "description": "Los eventos aparecerán aquí a medida que ocurra actividad MCP."
+  },
+  "loadMore": "Cargar más",
+  "loadingMore": "Cargando…",
+  "endOfList": "Has llegado al final del registro de auditoría.",
+  "noValue": "—"
+}

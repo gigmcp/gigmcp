@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { ChevronDownIcon, ChevronRightIcon, KeyRoundIcon } from "lucide-react";
 import { useCredentials, usePutCredential, useDeleteCredential, useReadOnly } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
@@ -27,7 +29,19 @@ import { Separator } from "@/components/ui/separator";
 import type { Credential, CredentialPutBody } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-const READ_ONLY_TITLE = "Read-only while viewing as another user";
+/* Validation patterns shown as hints — technical literals, interpolated into
+   the translated hint messages so they are never themselves translated. */
+const SERVER_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
+const HEADER_PATTERN = "^[A-Za-z0-9-]+$";
+const HOST_PATTERN = "^(\\*\\.)?[a-z0-9.-]+$";
+
+/* Geist-style textarea matching ui/input.tsx (mono — secrets and host lists). */
+const textareaClass =
+  "min-h-20 w-full min-w-0 resize-none rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground transition-colors duration-150 ease-out outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-50";
+
+const codeTag = {
+  code: (chunks: ReactNode) => <span className="font-mono">{chunks}</span>,
+};
 
 interface CredentialDialogProps {
   open: boolean;
@@ -40,6 +54,7 @@ function CredentialDialog({
   onOpenChange,
   prefillServer,
 }: CredentialDialogProps) {
+  const t = useTranslations("credentials");
   const [server, setServer] = useState(prefillServer ?? "");
   const [secret, setSecret] = useState("");
   const [injectHeader, setInjectHeader] = useState("");
@@ -86,14 +101,14 @@ function CredentialDialog({
       { server: server.trim(), body },
       {
         onSuccess: () => {
-          toast.success(`Credential for "${server.trim()}" saved`);
+          toast.success(t("toast.saved", { server: server.trim() }));
           handleOpenChange(false);
         },
         onError: (err) => {
           if (err instanceof ApiError) {
             setError(err.message);
           } else {
-            setError("Failed to save credential");
+            setError(t("errors.saveFailed"));
           }
         },
       },
@@ -105,35 +120,35 @@ function CredentialDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {prefillServer ? `Update credential — ${prefillServer}` : "Add credential"}
+            {prefillServer
+              ? t("dialog.updateTitle", { server: prefillServer })
+              : t("dialog.addTitle")}
           </DialogTitle>
-          <DialogDescription>
-            Secrets are write-only. Saving replaces the existing secret; nothing
-            is ever displayed.
-          </DialogDescription>
+          <DialogDescription>{t("dialog.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="cred-server">Server name</Label>
+            <Label htmlFor="cred-server">{t("form.server.label")}</Label>
             <Input
               id="cred-server"
-              placeholder="e.g. my-server"
+              placeholder={t("form.server.placeholder")}
               value={server}
               onChange={(e) => setServer(e.target.value)}
               disabled={!!prefillServer}
+              className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Pattern: <span className="font-mono">^[a-z0-9][a-z0-9_-]&#123;0,63&#125;$</span>
+              {t.rich("form.server.hint", { ...codeTag, pattern: SERVER_PATTERN })}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="cred-secret">Secret</Label>
+            <Label htmlFor="cred-secret">{t("form.secret.label")}</Label>
             <textarea
               id="cred-secret"
-              className="h-20 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-              placeholder="Paste your secret here…"
+              className={textareaClass}
+              placeholder={t("form.secret.placeholder")}
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               autoComplete="off"
@@ -145,78 +160,91 @@ function CredentialDialog({
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
             >
-              <span>{showAdvanced ? "▾" : "▸"}</span>
-              Advanced (transitional)
+              {showAdvanced ? (
+                <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronRightIcon className="size-3.5" aria-hidden="true" />
+              )}
+              {t("form.advanced.toggle")}
             </button>
 
             {showAdvanced && (
               <div className="mt-3 space-y-4">
                 <Separator />
                 <p className="text-xs text-muted-foreground">
-                  These fields will be sourced from the manifest in a future
-                  release.
+                  {t("form.advanced.note")}
                 </p>
 
                 <div className="space-y-2">
                   <Label htmlFor="cred-inject-header">
-                    Inject header
+                    {t("form.injectHeader.label")}
                   </Label>
                   <Input
                     id="cred-inject-header"
-                    placeholder="Authorization"
+                    placeholder={t("form.injectHeader.placeholder")}
                     value={injectHeader}
                     onChange={(e) => setInjectHeader(e.target.value)}
+                    className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Pattern: <span className="font-mono">^[A-Za-z0-9-]+$</span>, max 64 chars.
+                    {t.rich("form.injectHeader.hint", {
+                      ...codeTag,
+                      pattern: HEADER_PATTERN,
+                    })}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="cred-inject-format">
-                    Inject format
+                    {t("form.injectFormat.label")}
                   </Label>
                   <Input
                     id="cred-inject-format"
-                    placeholder="Bearer {token}"
+                    placeholder={t("form.injectFormat.placeholder")}
                     value={injectFormat}
                     onChange={(e) => setInjectFormat(e.target.value)}
+                    className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Must contain <span className="font-mono">&#123;token&#125;</span>, max 256 chars.
+                    {t.rich("form.injectFormat.hint", codeTag)}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="cred-placeholder">Placeholder</Label>
+                  <Label htmlFor="cred-placeholder">
+                    {t("form.placeholder.label")}
+                  </Label>
                   <Input
                     id="cred-placeholder"
-                    placeholder="REPLACE_ME"
+                    placeholder={t("form.placeholder.placeholder")}
                     value={placeholder}
                     onChange={(e) => setPlaceholder(e.target.value)}
+                    className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    8–256 chars.
+                    {t("form.placeholder.hint")}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="cred-allowed-hosts">
-                    Allowed hosts
+                    {t("form.allowedHosts.label")}
                   </Label>
                   <textarea
                     id="cred-allowed-hosts"
-                    className="h-20 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                    placeholder={"api.example.com\n*.other.com"}
+                    className={textareaClass}
+                    placeholder={t("form.allowedHosts.placeholder")}
                     value={allowedHosts}
                     onChange={(e) => setAllowedHosts(e.target.value)}
                     spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    One host per line (or comma-separated). Each up to 253 chars,
-                    pattern <span className="font-mono">^(\*\.)?[a-z0-9.-]+$</span>.
+                    {t.rich("form.allowedHosts.hint", {
+                      ...codeTag,
+                      pattern: HOST_PATTERN,
+                    })}
                   </p>
                 </div>
               </div>
@@ -231,7 +259,7 @@ function CredentialDialog({
             onClick={handleSubmit}
             disabled={put.isPending || !server.trim() || !secret}
           >
-            {put.isPending ? "Saving…" : "Save credential"}
+            {put.isPending ? t("dialog.saving") : t("dialog.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -239,7 +267,34 @@ function CredentialDialog({
   );
 }
 
+/** Primary action, disabled with an explanatory tooltip while impersonating. */
+function AddCredentialButton({
+  readOnly,
+  onClick,
+}: {
+  readOnly: boolean;
+  onClick: () => void;
+}) {
+  const t = useTranslations("credentials");
+  if (readOnly) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <span tabIndex={0}>
+              <Button disabled>{t("add")}</Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+  return <Button onClick={onClick}>{t("add")}</Button>;
+}
+
 export default function CredentialsPage() {
+  const t = useTranslations("credentials");
   const credentials = useCredentials();
   const deleteCredential = useDeleteCredential();
   const readOnly = useReadOnly();
@@ -247,27 +302,32 @@ export default function CredentialsPage() {
   const [editServer, setEditServer] = useState<string | null>(null);
 
   const columns: Column<Credential>[] = [
-    { header: "Server", cell: (c) => <span className="font-mono text-sm">{c.server}</span> },
     {
-      header: "Inject header",
+      header: t("table.server"),
+      cell: (c) => <span className="font-mono">{c.server}</span>,
+    },
+    {
+      header: t("table.injectHeader"),
       cell: (c) =>
         c.inject_header ? (
           <span className="font-mono text-xs">{c.inject_header}</span>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">{t("table.none")}</span>
         ),
     },
     {
-      header: "Allowed hosts",
+      header: t("table.allowedHosts"),
       cell: (c) =>
         c.allowed_hosts.length > 0 ? (
-          <span>{c.allowed_hosts.length} host{c.allowed_hosts.length === 1 ? "" : "s"}</span>
+          <span className="tabular-nums">
+            {t("table.hostCount", { count: c.allowed_hosts.length })}
+          </span>
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">{t("table.none")}</span>
         ),
     },
     {
-      header: "Actions",
+      header: t("table.actions"),
       cell: (c) => {
         const updateBtn = (
           <Button
@@ -276,7 +336,7 @@ export default function CredentialsPage() {
             disabled={readOnly}
             onClick={() => !readOnly && setEditServer(c.server)}
           >
-            Update
+            {t("actions.update")}
           </Button>
         );
         const deleteBtn = (
@@ -285,7 +345,7 @@ export default function CredentialsPage() {
             size="sm"
             disabled={deleteCredential.isPending || readOnly}
           >
-            Delete
+            {t("actions.delete")}
           </Button>
         );
 
@@ -297,7 +357,7 @@ export default function CredentialsPage() {
                   <TooltipTrigger>
                     <span tabIndex={0}>{updateBtn}</span>
                   </TooltipTrigger>
-                  <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                  <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider>
@@ -305,7 +365,7 @@ export default function CredentialsPage() {
                   <TooltipTrigger>
                     <span tabIndex={0}>{deleteBtn}</span>
                   </TooltipTrigger>
-                  <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                  <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -317,17 +377,19 @@ export default function CredentialsPage() {
             {updateBtn}
             <ConfirmDialog
               trigger={deleteBtn}
-              title={`Delete credential for "${c.server}"?`}
-              description="The stored secret will be permanently removed."
-              confirmLabel="Delete"
+              title={t("deleteDialog.title", { server: c.server })}
+              description={t("deleteDialog.description")}
+              confirmLabel={t("deleteDialog.confirm")}
               isPending={deleteCredential.isPending}
               onConfirm={() => {
                 deleteCredential.mutate(c.server, {
                   onSuccess: () =>
-                    toast.success(`Credential for "${c.server}" deleted`),
+                    toast.success(t("toast.deleted", { server: c.server })),
                   onError: (err) => {
                     const msg =
-                      err instanceof ApiError ? err.message : "Delete failed";
+                      err instanceof ApiError
+                        ? err.message
+                        : t("toast.deleteFailed");
                     toast.error(msg);
                   },
                 });
@@ -341,46 +403,49 @@ export default function CredentialsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Credentials</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Write-only secrets injected into MCP server requests. Secrets are
-            never displayed.
-          </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("title")}
+          </h1>
+          <p className="text-sm text-muted-foreground">{t("description")}</p>
         </div>
-        {readOnly ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <span tabIndex={0}>
-                  <Button disabled>Add credential</Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <Button onClick={() => setAddOpen(true)}>Add credential</Button>
-        )}
+        <AddCredentialButton readOnly={readOnly} onClick={() => setAddOpen(true)} />
       </div>
 
       {credentials.isLoading ? (
-        <div className="space-y-2">
+        <div className="overflow-hidden rounded-lg border border-border">
           {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
+            <div
+              key={i}
+              className="flex h-12 items-center border-b border-border px-3 last:border-b-0"
+            >
+              <Skeleton className="h-4 w-full" />
+            </div>
           ))}
         </div>
       ) : credentials.data && credentials.data.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No credentials yet. Add one to enable secret injection for a server.
-        </p>
+        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border py-16">
+          <KeyRoundIcon
+            className="size-8 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-muted-foreground">
+            {t("empty.description")}
+          </p>
+          <AddCredentialButton
+            readOnly={readOnly}
+            onClick={() => setAddOpen(true)}
+          />
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={credentials.data ?? []}
-          getKey={(c) => c.server}
-        />
+        <div className="overflow-hidden rounded-lg border border-border">
+          <DataTable
+            columns={columns}
+            data={credentials.data ?? []}
+            getKey={(c) => c.server}
+          />
+        </div>
       )}
 
       {/* Add dialog */}

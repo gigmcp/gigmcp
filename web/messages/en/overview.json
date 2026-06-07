@@ -1,0 +1,38 @@
+{
+  "title": "Overview",
+  "welcome": "Welcome, {name}",
+  "description": "Your gigmcp control plane at a glance.",
+  "placeholder": "—",
+  "stats": {
+    "profiles": "Profiles",
+    "servers": "Servers",
+    "credentials": "Credentials",
+    "users": "Users"
+  },
+  "activity": {
+    "title": "Recent activity",
+    "empty": "No activity yet.",
+    "columns": {
+      "time": "Time",
+      "kind": "Kind",
+      "server": "Server",
+      "host": "Host",
+      "decision": "Decision",
+      "detail": "Detail"
+    }
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Allow",
+    "deny": "Deny",
+    "denied": "Denied",
+    "resolved": "Resolved",
+    "error": "Error",
+    "login": "Login",
+    "logout": "Logout"
+  }
+}

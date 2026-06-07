@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ interface ConfirmDialogProps {
   trigger: React.ReactNode;
   title: string;
   description?: string;
+  /** Defaults to the translated "Delete". Pages may pass their own string. */
   confirmLabel?: string;
   onConfirm: () => void;
   isPending?: boolean;
@@ -24,10 +26,11 @@ export function ConfirmDialog({
   trigger,
   title,
   description,
-  confirmLabel = "Delete",
+  confirmLabel,
   onConfirm,
   isPending = false,
 }: ConfirmDialogProps) {
+  const t = useTranslations("common");
   return (
     <Dialog>
       <DialogTrigger render={trigger as React.ReactElement} />
@@ -44,7 +47,7 @@ export function ConfirmDialog({
             disabled={isPending}
             onClick={onConfirm}
           >
-            {isPending ? "Working…" : confirmLabel}
+            {isPending ? t("dialog.working") : (confirmLabel ?? t("dialog.delete"))}
           </Button>
         </DialogFooter>
       </DialogContent>

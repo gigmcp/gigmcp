@@ -1,0 +1,38 @@
+{
+  "title": "Panoramica",
+  "welcome": "Benvenuto, {name}",
+  "description": "Il tuo control plane gigmcp a colpo d'occhio.",
+  "placeholder": "—",
+  "stats": {
+    "profiles": "Profili",
+    "servers": "Server",
+    "credentials": "Credenziali",
+    "users": "Utenti"
+  },
+  "activity": {
+    "title": "Attività recente",
+    "empty": "Nessuna attività.",
+    "columns": {
+      "time": "Ora",
+      "kind": "Tipo",
+      "server": "Server",
+      "host": "Host",
+      "decision": "Decisione",
+      "detail": "Dettaglio"
+    }
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Consentito",
+    "deny": "Negato",
+    "denied": "Negato",
+    "resolved": "Risolto",
+    "error": "Errore",
+    "login": "Login",
+    "logout": "Logout"
+  }
+}

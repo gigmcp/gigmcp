@@ -1,0 +1,8 @@
+{
+  "wordmark": "gigmcp",
+  "title": "Accedi a gigmcp",
+  "description": "Usa il tuo account aziendale per continuare.",
+  "continueWithZitadel": "Continua con Zitadel",
+  "controlPlaneDisabled": "Control plane non configurato",
+  "redirectNotice": "Verrai reindirizzato al tuo identity provider."
+}

@@ -1,0 +1,32 @@
+{
+  "title": "Servidores",
+  "description": "Servidores MCP instalados disponibles para los perfiles.",
+  "readOnlyTooltip": "Solo lectura mientras se visualiza como otro usuario",
+  "table": {
+    "id": "ID",
+    "name": "Nombre",
+    "actions": "Acciones"
+  },
+  "install": {
+    "button": "Instalar servidor",
+    "dialogTitle": "Instalar servidor",
+    "dialogDescription": "Proporciona una referencia de servidor: un nombre, nombre@versión o sha256:digest — p. ej. \"bitwarden\".",
+    "refLabel": "Referencia del servidor",
+    "refPlaceholder": "bitwarden",
+    "submit": "Instalar",
+    "submitting": "Instalando…",
+    "success": "Servidor \"{name}\" instalado",
+    "error": "Error al instalar"
+  },
+  "uninstall": {
+    "button": "Desinstalar",
+    "confirmTitle": "¿Desinstalar \"{name}\"?",
+    "confirmDescription": "Esto eliminará el servidor de todos los perfiles que lo referencien.",
+    "confirmLabel": "Desinstalar",
+    "success": "Servidor \"{name}\" desinstalado",
+    "error": "Error al desinstalar"
+  },
+  "empty": {
+    "title": "Sin servidores instalados aún"
+  }
+}

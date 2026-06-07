@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { ServerIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useMe, useServers, useInstallServer, useUninstallServer, useReadOnly } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
@@ -26,9 +28,8 @@ import { Label } from "@/components/ui/label";
 import type { Server } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-const READ_ONLY_TITLE = "Read-only while viewing as another user";
-
 function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disabled?: boolean }) {
+  const t = useTranslations("servers");
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
   const install = useInstallServer();
@@ -37,22 +38,22 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
     if (!ref.trim()) return;
     install.mutate(ref.trim(), {
       onSuccess: (server) => {
-        toast.success(`Installed server "${server.name}"`);
+        toast.success(t("install.success", { name: server.name }));
         setRef("");
         setOpen(false);
         onSuccess();
       },
       onError: (err) => {
         const msg =
-          err instanceof ApiError ? err.message : "Install failed";
+          err instanceof ApiError ? err.message : t("install.error");
         toast.error(msg);
       },
     });
   }
 
   const trigger = (
-    <Button onClick={() => setOpen(true)} disabled={disabled}>
-      Install server
+    <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
+      {t("install.button")}
     </Button>
   );
 
@@ -64,7 +65,7 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
             <TooltipTrigger>
               <span tabIndex={0}>{trigger}</span>
             </TooltipTrigger>
-            <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+            <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       ) : (
@@ -73,16 +74,17 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Install server</DialogTitle>
+            <DialogTitle>{t("install.dialogTitle")}</DialogTitle>
             <DialogDescription>
-              Provide a server ref (e.g. a registry name or URL).
+              {t("install.dialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="ref">Server ref</Label>
+            <Label htmlFor="ref">{t("install.refLabel")}</Label>
             <Input
               id="ref"
-              placeholder="e.g. acme/my-server"
+              className="font-mono"
+              placeholder={t("install.refPlaceholder")}
               value={ref}
               onChange={(e) => setRef(e.target.value)}
               onKeyDown={(e) => {
@@ -95,7 +97,7 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
               onClick={handleInstall}
               disabled={install.isPending || !ref.trim()}
             >
-              {install.isPending ? "Installing…" : "Install"}
+              {install.isPending ? t("install.submitting") : t("install.submit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -105,6 +107,7 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
 }
 
 export default function ServersPage() {
+  const t = useTranslations("servers");
   const me = useMe();
   const servers = useServers();
   const uninstall = useUninstallServer();
@@ -112,12 +115,22 @@ export default function ServersPage() {
   const isAdmin = me.data?.user.role === "admin";
 
   const columns: Column<Server>[] = [
-    { header: "ID", cell: (s) => s.id },
-    { header: "Name", cell: (s) => s.name },
+    {
+      header: t("table.id"),
+      cell: (s) => (
+        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+          {s.id}
+        </span>
+      ),
+    },
+    {
+      header: t("table.name"),
+      cell: (s) => <span className="font-mono">{s.name}</span>,
+    },
     ...(isAdmin
       ? [
           {
-            header: "Actions",
+            header: t("table.actions"),
             cell: (s: Server) => {
               const btn = (
                 <Button
@@ -125,7 +138,7 @@ export default function ServersPage() {
                   size="sm"
                   disabled={uninstall.isPending || readOnly}
                 >
-                  Uninstall
+                  {t("uninstall.button")}
                 </Button>
               );
               if (readOnly) {
@@ -135,7 +148,7 @@ export default function ServersPage() {
                       <TooltipTrigger>
                         <span tabIndex={0}>{btn}</span>
                       </TooltipTrigger>
-                      <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                      <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 );
@@ -143,19 +156,19 @@ export default function ServersPage() {
               return (
                 <ConfirmDialog
                   trigger={btn}
-                  title={`Uninstall "${s.name}"?`}
-                  description="This will remove the server from all profiles that reference it."
-                  confirmLabel="Uninstall"
+                  title={t("uninstall.confirmTitle", { name: s.name })}
+                  description={t("uninstall.confirmDescription")}
+                  confirmLabel={t("uninstall.confirmLabel")}
                   isPending={uninstall.isPending}
                   onConfirm={() => {
                     uninstall.mutate(s.name, {
                       onSuccess: () =>
-                        toast.success(`Uninstalled server "${s.name}"`),
+                        toast.success(t("uninstall.success", { name: s.name })),
                       onError: (err) => {
                         const msg =
                           err instanceof ApiError
                             ? err.message
-                            : "Uninstall failed";
+                            : t("uninstall.error");
                         toast.error(msg);
                       },
                     });
@@ -170,34 +183,45 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Servers</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("title")}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Installed MCP servers available for profiles.
+            {t("description")}
           </p>
         </div>
         {isAdmin && <InstallDialog onSuccess={() => {}} disabled={readOnly} />}
       </div>
 
       {servers.isLoading ? (
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full rounded-md" />
-          ))}
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="divide-y divide-border">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex h-12 items-center gap-6 px-3">
+                <Skeleton className="h-4 w-10" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : servers.data && servers.data.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {isAdmin
-            ? "No servers installed yet. Use the Install server button to add one."
-            : "No servers installed yet."}
-        </p>
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border py-16">
+          <ServerIcon className="size-5 text-muted-foreground" aria-hidden />
+          <p className="text-sm text-muted-foreground">{t("empty.title")}</p>
+          {isAdmin && (
+            <InstallDialog onSuccess={() => {}} disabled={readOnly} />
+          )}
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={servers.data ?? []}
-          getKey={(s) => s.id}
-        />
+        <div className="overflow-hidden rounded-lg border border-border">
+          <DataTable
+            columns={columns}
+            data={servers.data ?? []}
+            getKey={(s) => s.id}
+          />
+        </div>
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import {
   useProfile,
   useServers,
@@ -18,8 +19,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -27,8 +35,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Profile } from "@/lib/types";
-
-const READ_ONLY_TITLE = "Read-only while viewing as another user";
 
 interface ProfileDetailProps {
   profile: Profile;
@@ -45,6 +51,7 @@ function ProfileDetail({
   initialServers,
   readOnly,
 }: ProfileDetailProps) {
+  const t = useTranslations("profiles");
   const router = useRouter();
 
   const setServersMut = useSetProfileServers();
@@ -76,9 +83,10 @@ function ProfileDetail({
     setServersMut.mutate(
       { id: p.id, servers: Array.from(selectedServers) },
       {
-        onSuccess: () => toast.success("Bundle saved"),
+        onSuccess: () => toast.success(t("detail.bundle.savedToast")),
         onError: (err) => {
-          const msg = err instanceof ApiError ? err.message : "Save failed";
+          const msg =
+            err instanceof ApiError ? err.message : t("detail.bundle.saveFailed");
           toast.error(msg);
         },
       },
@@ -91,9 +99,10 @@ function ProfileDetail({
     rename.mutate(
       { id: p.id, name: trimmed },
       {
-        onSuccess: () => toast.success("Profile renamed"),
+        onSuccess: () => toast.success(t("detail.rename.successToast")),
         onError: (err) => {
-          const msg = err instanceof ApiError ? err.message : "Rename failed";
+          const msg =
+            err instanceof ApiError ? err.message : t("detail.rename.failed");
           toast.error(msg);
         },
       },
@@ -106,11 +115,12 @@ function ProfileDetail({
         if (updated.token) {
           setRevealToken(updated.token);
         } else {
-          toast.success("Token rotated");
+          toast.success(t("detail.rotate.successToast"));
         }
       },
       onError: (err) => {
-        const msg = err instanceof ApiError ? err.message : "Rotate failed";
+        const msg =
+          err instanceof ApiError ? err.message : t("detail.rotate.failed");
         toast.error(msg);
       },
     });
@@ -119,20 +129,21 @@ function ProfileDetail({
   function handleDelete() {
     deleteProfile.mutate(p.id, {
       onSuccess: () => {
-        toast.success("Profile deleted");
+        toast.success(t("detail.delete.successToast"));
         router.push("/profiles");
       },
       onError: (err) => {
-        const msg = err instanceof ApiError ? err.message : "Delete failed";
+        const msg =
+          err instanceof ApiError ? err.message : t("detail.delete.failed");
         toast.error(msg);
       },
     });
   }
 
   function copyEndpoint() {
-    navigator.clipboard.writeText(endpoint).then(() =>
-      toast.success("Endpoint URL copied"),
-    );
+    navigator.clipboard
+      .writeText(endpoint)
+      .then(() => toast.success(t("detail.endpoint.copiedToast")));
   }
 
   function maybeWrapTooltip(btn: React.ReactNode) {
@@ -143,104 +154,122 @@ function ProfileDetail({
           <TooltipTrigger>
             <span tabIndex={0}>{btn}</span>
           </TooltipTrigger>
-          <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+          <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
     );
   }
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">{p.name}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Profile detail — slug: <span className="font-mono">{p.slug}</span>
+          {t.rich("detail.description", {
+            slug: p.slug,
+            mono: (chunks) => (
+              <span className="font-mono text-foreground">{chunks}</span>
+            ),
+          })}
         </p>
       </div>
 
       {/* Endpoint URL */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">Endpoint URL</h2>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 overflow-x-auto rounded-lg bg-muted px-3 py-2 font-mono text-xs">
-            {endpoint}
-          </code>
-          <Button variant="outline" size="sm" onClick={copyEndpoint}>
-            Copy
-          </Button>
-        </div>
-      </section>
-
-      <Separator />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("detail.endpoint.title")}</CardTitle>
+          <CardDescription>{t("detail.endpoint.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs whitespace-nowrap">
+              {endpoint}
+            </code>
+            <Button variant="outline" size="sm" onClick={copyEndpoint}>
+              {t("detail.endpoint.copy")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Bundle editor */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Server bundle</h2>
-        {servers.isLoading ? (
-          <div className="space-y-2">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-6 w-48 rounded" />
-            ))}
-          </div>
-        ) : servers.data && servers.data.length > 0 ? (
-          <div className="space-y-2">
-            {servers.data.map((s) => (
-              <label
-                key={s.name}
-                className={[
-                  "flex cursor-pointer items-center gap-3",
-                  readOnly ? "opacity-60 cursor-not-allowed" : "",
-                ].join(" ")}
-              >
-                <Checkbox
-                  checked={selectedServers.has(s.name)}
-                  disabled={readOnly}
-                  onCheckedChange={(checked) =>
-                    !readOnly && toggleServer(s.name, checked as boolean)
-                  }
-                />
-                <span className="text-sm">{s.name}</span>
-              </label>
-            ))}
-            <div className="pt-2">
-              {maybeWrapTooltip(
-                <Button
-                  onClick={handleSaveBundle}
-                  disabled={setServersMut.isPending || readOnly}
-                  size="sm"
-                >
-                  {setServersMut.isPending ? "Saving…" : "Save bundle"}
-                </Button>,
-              )}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("detail.bundle.title")}</CardTitle>
+          <CardDescription>{t("detail.bundle.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {servers.isLoading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-6 w-48 rounded" />
+              ))}
             </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No servers installed yet.
-          </p>
+          ) : servers.data && servers.data.length > 0 ? (
+            <div className="space-y-2">
+              {servers.data.map((s) => (
+                <label
+                  key={s.name}
+                  className={[
+                    "flex cursor-pointer items-center gap-3",
+                    readOnly ? "opacity-60 cursor-not-allowed" : "",
+                  ].join(" ")}
+                >
+                  <Checkbox
+                    checked={selectedServers.has(s.name)}
+                    disabled={readOnly}
+                    onCheckedChange={(checked) =>
+                      !readOnly && toggleServer(s.name, checked as boolean)
+                    }
+                  />
+                  <span className="font-mono text-[13px]">{s.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t("detail.bundle.noServers")}
+            </p>
+          )}
+        </CardContent>
+        {servers.data && servers.data.length > 0 && (
+          <CardFooter className="justify-end">
+            {maybeWrapTooltip(
+              <Button
+                onClick={handleSaveBundle}
+                disabled={setServersMut.isPending || readOnly}
+                size="sm"
+              >
+                {setServersMut.isPending
+                  ? t("detail.bundle.saving")
+                  : t("detail.bundle.save")}
+              </Button>,
+            )}
+          </CardFooter>
         )}
-      </section>
-
-      <Separator />
+      </Card>
 
       {/* Rename */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Rename profile</h2>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 space-y-1">
-            <Label htmlFor="rename-input" className="sr-only">
-              Profile name
-            </Label>
-            <Input
-              id="rename-input"
-              value={profileName}
-              disabled={readOnly}
-              onChange={(e) => setProfileName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !readOnly) handleRename();
-              }}
-            />
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("detail.rename.title")}</CardTitle>
+          <CardDescription>{t("detail.rename.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Label htmlFor="rename-input" className="sr-only">
+            {t("detail.rename.inputLabel")}
+          </Label>
+          <Input
+            id="rename-input"
+            value={profileName}
+            disabled={readOnly}
+            onChange={(e) => setProfileName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !readOnly) handleRename();
+            }}
+          />
+        </CardContent>
+        <CardFooter className="justify-end">
           {maybeWrapTooltip(
             <Button
               variant="outline"
@@ -253,62 +282,71 @@ function ProfileDetail({
                 profileName.trim() === p.name
               }
             >
-              {rename.isPending ? "Saving…" : "Rename"}
+              {rename.isPending
+                ? t("detail.rename.submitting")
+                : t("detail.rename.submit")}
             </Button>,
           )}
-        </div>
-      </section>
-
-      <Separator />
+        </CardFooter>
+      </Card>
 
       {/* Token rotation */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Rotate token</h2>
-        <p className="text-sm text-muted-foreground">
-          Generates a new token and immediately invalidates the previous one.
-        </p>
-        {maybeWrapTooltip(
-          <Button
-            variant="outline"
-            onClick={handleRotateToken}
-            disabled={rotateToken.isPending || readOnly}
-          >
-            {rotateToken.isPending ? "Rotating…" : "Rotate token"}
-          </Button>,
-        )}
-      </section>
-
-      <Separator />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("detail.rotate.title")}</CardTitle>
+          <CardDescription>{t("detail.rotate.description")}</CardDescription>
+        </CardHeader>
+        <CardFooter className="justify-end">
+          {maybeWrapTooltip(
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRotateToken}
+              disabled={rotateToken.isPending || readOnly}
+            >
+              {rotateToken.isPending
+                ? t("detail.rotate.submitting")
+                : t("detail.rotate.submit")}
+            </Button>,
+          )}
+        </CardFooter>
+      </Card>
 
       {/* Delete */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium text-destructive">
-          Delete profile
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          This is permanent. The endpoint will stop working immediately.
-        </p>
-        {readOnly ? (
-          maybeWrapTooltip(
-            <Button variant="destructive" disabled>
-              Delete profile
-            </Button>,
-          )
-        ) : (
-          <ConfirmDialog
-            trigger={
-              <Button variant="destructive" disabled={deleteProfile.isPending}>
-                Delete profile
-              </Button>
-            }
-            title={`Delete "${p.name}"?`}
-            description="This will permanently delete the profile and its endpoint. This action cannot be undone."
-            confirmLabel="Delete"
-            isPending={deleteProfile.isPending}
-            onConfirm={handleDelete}
-          />
-        )}
-      </section>
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="text-destructive">
+            {t("detail.delete.title")}
+          </CardTitle>
+          <CardDescription>{t("detail.delete.description")}</CardDescription>
+        </CardHeader>
+        <CardFooter className="justify-end">
+          {readOnly ? (
+            maybeWrapTooltip(
+              <Button variant="destructive" size="sm" disabled>
+                {t("detail.delete.submit")}
+              </Button>,
+            )
+          ) : (
+            <ConfirmDialog
+              trigger={
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteProfile.isPending}
+                >
+                  {t("detail.delete.submit")}
+                </Button>
+              }
+              title={t("detail.delete.confirmTitle", { name: p.name })}
+              description={t("detail.delete.confirmDescription")}
+              confirmLabel={t("detail.delete.confirmLabel")}
+              isPending={deleteProfile.isPending}
+              onConfirm={handleDelete}
+            />
+          )}
+        </CardFooter>
+      </Card>
 
       <TokenRevealDialog
         open={!!revealToken}
@@ -320,6 +358,7 @@ function ProfileDetail({
 }
 
 export default function ProfileDetailPage() {
+  const t = useTranslations("profiles");
   const params = useParams();
   const id = Number(params.id);
   const profile = useProfile(id);
@@ -327,17 +366,14 @@ export default function ProfileDetailPage() {
 
   if (profile.isLoading) {
     return (
-      <div className="max-w-2xl space-y-8">
+      <div className="max-w-2xl space-y-6">
         <div className="space-y-2">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-72" />
         </div>
-        <Skeleton className="h-10 w-full" />
-        <div className="space-y-3">
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-6 w-40" />
-        </div>
+        <Skeleton className="h-36 w-full rounded-lg" />
+        <Skeleton className="h-48 w-full rounded-lg" />
+        <Skeleton className="h-36 w-full rounded-lg" />
       </div>
     );
   }
@@ -345,7 +381,7 @@ export default function ProfileDetailPage() {
   if (!profile.data) {
     return (
       <p className="py-8 text-center text-sm text-destructive">
-        Profile not found.
+        {t("detail.notFound")}
       </p>
     );
   }
