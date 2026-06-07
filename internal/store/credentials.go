@@ -4,8 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 )
+
+// UserTenant returns the canonical tenant key for per-user credentials
+// (decimal user ID). The resolver and API must agree on this encoding so that
+// credentials stored via the API are found by the egress proxy's resolver.
+func UserTenant(id int64) string { return strconv.FormatInt(id, 10) }
 
 // Credential is a stored, encrypted third-party secret plus the metadata the
 // egress proxy needs to inject it and to enforce the per-tenant allowlist.
@@ -73,10 +79,18 @@ func (s *sqliteStore) ListCredentialsByTenant(ctx context.Context, tenant string
 }
 
 // DeleteCredential removes a credential by (server, tenant). Missing rows are
-// not an error (idempotent).
-func (s *sqliteStore) DeleteCredential(ctx context.Context, server, tenant string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM credentials WHERE server=? AND tenant=?`, server, tenant)
-	return err
+// not an error (idempotent). Returns (true, nil) when a row was deleted,
+// (false, nil) when the row did not exist (noop).
+func (s *sqliteStore) DeleteCredential(ctx context.Context, server, tenant string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM credentials WHERE server=? AND tenant=?`, server, tenant)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // GetCredential fetches a credential by (server, tenant).

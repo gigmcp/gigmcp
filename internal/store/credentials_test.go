@@ -113,8 +113,12 @@ func TestListCredentialsByTenantAndDelete(t *testing.T) {
 		}
 	}
 
-	if err := st.DeleteCredential(ctx, "github", "7"); err != nil {
+	deleted, err := st.DeleteCredential(ctx, "github", "7")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("expected deleted=true for first delete")
 	}
 	if _, err := st.GetCredential(ctx, "github", "7"); err == nil {
 		t.Fatal("deleted credential still readable")
@@ -122,8 +126,12 @@ func TestListCredentialsByTenantAndDelete(t *testing.T) {
 	if _, err := st.GetCredential(ctx, "github", "8"); err != nil {
 		t.Fatalf("other tenant's credential must survive: %v", err)
 	}
-	// Deleting a missing row is not an error.
-	if err := st.DeleteCredential(ctx, "github", "7"); err != nil {
+	// Deleting a missing row is not an error; returns false (noop).
+	noop, err := st.DeleteCredential(ctx, "github", "7")
+	if err != nil {
 		t.Fatalf("double delete: %v", err)
+	}
+	if noop {
+		t.Fatal("expected deleted=false for noop delete")
 	}
 }

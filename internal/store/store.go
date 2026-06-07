@@ -28,7 +28,8 @@ type Store interface {
 	// ListCredentialsByTenant lists a tenant's credentials, metadata only (no ciphertext).
 	ListCredentialsByTenant(ctx context.Context, tenant string) ([]Credential, error)
 	// DeleteCredential removes a credential by (server, tenant); idempotent.
-	DeleteCredential(ctx context.Context, server, tenant string) error
+	// Returns (true, nil) when a row was deleted, (false, nil) when noop.
+	DeleteCredential(ctx context.Context, server, tenant string) (bool, error)
 	// PutManifest upserts a manifest record by server (consent preserved).
 	PutManifest(ctx context.Context, m ManifestRecord) error
 	// GetManifest fetches the manifest for a server; ErrManifestNotFound if none.
