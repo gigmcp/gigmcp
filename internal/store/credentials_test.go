@@ -74,3 +74,56 @@ func TestGetCredentialMissing(t *testing.T) {
 		t.Fatal("expected error for missing credential")
 	}
 }
+
+func TestListCredentialsByTenantAndDelete(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "c.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	put := func(server, tenant string) {
+		t.Helper()
+		if err := st.PutCredential(ctx, store.Credential{
+			Server: server, Tenant: tenant, EncryptedKey: []byte{9, 9},
+			InjectHeader: "Authorization", InjectFormat: "Bearer {token}",
+			Placeholder: "P", AllowedHosts: []string{"api.example.com"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("github", "7")
+	put("slack", "7")
+	put("github", "8")
+
+	got, err := st.ListCredentialsByTenant(ctx, "7")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("list: %v %d", err, len(got))
+	}
+	for _, c := range got {
+		if c.Tenant != "7" {
+			t.Fatalf("foreign tenant leaked: %+v", c)
+		}
+		if c.EncryptedKey != nil {
+			t.Fatalf("metadata listing must NOT carry ciphertext: %+v", c)
+		}
+		if c.InjectHeader != "Authorization" || len(c.AllowedHosts) != 1 {
+			t.Fatalf("metadata missing: %+v", c)
+		}
+	}
+
+	if err := st.DeleteCredential(ctx, "github", "7"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetCredential(ctx, "github", "7"); err == nil {
+		t.Fatal("deleted credential still readable")
+	}
+	if _, err := st.GetCredential(ctx, "github", "8"); err != nil {
+		t.Fatalf("other tenant's credential must survive: %v", err)
+	}
+	// Deleting a missing row is not an error.
+	if err := st.DeleteCredential(ctx, "github", "7"); err != nil {
+		t.Fatalf("double delete: %v", err)
+	}
+}

@@ -47,6 +47,9 @@ func (s *Server) Routes() *http.ServeMux {
 	authed.HandleFunc("DELETE /api/profiles/{id}", s.handleDeleteProfile)
 	authed.HandleFunc("PUT /api/profiles/{id}/servers", s.handlePutProfileServers)
 	authed.HandleFunc("POST /api/profiles/{id}/token", s.handleRotateProfileToken)
+	authed.HandleFunc("GET /api/credentials", s.handleListCredentials)
+	authed.HandleFunc("PUT /api/credentials/{server}", s.handlePutCredential)
+	authed.HandleFunc("DELETE /api/credentials/{server}", s.handleDeleteCredential)
 
 	mux := http.NewServeMux()
 	if s.Auth != nil {

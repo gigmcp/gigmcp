@@ -46,6 +46,39 @@ func (s *sqliteStore) PutCredential(ctx context.Context, c Credential) error {
 	return err
 }
 
+// ListCredentialsByTenant returns a tenant's credentials as METADATA ONLY:
+// EncryptedKey is deliberately left nil so bulk reads can never ship
+// ciphertext to API responses by accident.
+func (s *sqliteStore) ListCredentialsByTenant(ctx context.Context, tenant string) ([]Credential, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT server,tenant,inject_header,inject_format,placeholder,allowed_hosts
+		 FROM credentials WHERE tenant=? ORDER BY server`, tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Credential
+	for rows.Next() {
+		var c Credential
+		var hosts string
+		if err := rows.Scan(&c.Server, &c.Tenant, &c.InjectHeader, &c.InjectFormat, &c.Placeholder, &hosts); err != nil {
+			return nil, err
+		}
+		if hosts != "" {
+			c.AllowedHosts = strings.Split(hosts, "\n")
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// DeleteCredential removes a credential by (server, tenant). Missing rows are
+// not an error (idempotent).
+func (s *sqliteStore) DeleteCredential(ctx context.Context, server, tenant string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM credentials WHERE server=? AND tenant=?`, server, tenant)
+	return err
+}
+
 // GetCredential fetches a credential by (server, tenant).
 func (s *sqliteStore) GetCredential(ctx context.Context, server, tenant string) (Credential, error) {
 	var c Credential
