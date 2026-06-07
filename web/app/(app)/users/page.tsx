@@ -91,13 +91,19 @@ function ImpersonateDialog({
 
 export default function UsersPage() {
   const me = useMe();
-  const users = useUsers();
+  const role = me.data?.user.role;
+  // enabled=isAdmin: skip the query until role is known, preventing a 403 toast
+  // for non-admins who land here via direct URL.
+  const users = useUsers(role === "admin");
   const stopImpersonation = useStopImpersonation();
   const [impersonateTarget, setImpersonateTarget] = useState<User | null>(null);
 
+  // While me is still loading, render nothing (role unknown — don't flash content).
+  if (!me.data) return null;
+
   // Non-admins get an empty state — nav already hides the link,
   // but a direct URL must not crash.
-  if (me.data && me.data.user.role !== "admin") {
+  if (me.data.user.role !== "admin") {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <p className="text-lg font-semibold">Admins only</p>

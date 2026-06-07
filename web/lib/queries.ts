@@ -29,8 +29,8 @@ export const useServers = () =>
   useQuery({ queryKey: keys.servers, queryFn: api.listServers });
 export const useCredentials = () =>
   useQuery({ queryKey: keys.credentials, queryFn: api.listCredentials });
-export const useUsers = () =>
-  useQuery({ queryKey: keys.users, queryFn: api.listUsers });
+export const useUsers = (enabled = true) =>
+  useQuery({ queryKey: keys.users, queryFn: api.listUsers, enabled });
 
 export function useInvalidate() {
   const qc = useQueryClient();

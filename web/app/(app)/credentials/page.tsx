@@ -207,7 +207,7 @@ function CredentialDialog({
                   />
                   <p className="text-xs text-muted-foreground">
                     One host per line (or comma-separated). Each up to 253 chars,
-                    pattern <span className="font-mono">^(\*.)?[a-z0-9.-]+$</span>.
+                    pattern <span className="font-mono">^(\*\.)?[a-z0-9.-]+$</span>.
                   </p>
                 </div>
               </div>

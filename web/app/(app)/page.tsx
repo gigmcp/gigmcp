@@ -73,8 +73,8 @@ export default function OverviewPage() {
   const servers = useServers();
   const credentials = useCredentials();
   const isAdmin = me.data?.user.role === "admin";
-  // useUsers is admin-only; skip the query if not admin to avoid a 403 toast
-  const users = useUsers();
+  // enabled=isAdmin: skip the query for non-admins to avoid a 403 toast
+  const users = useUsers(isAdmin);
   const audit = useQuery({
     queryKey: [...keys.audit, { limit: 10 }],
     queryFn: () => api.listAudit({ limit: 10 }),

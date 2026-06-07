@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useMe } from "@/lib/queries";
+import { useMe, keys } from "@/lib/queries";
 import { api } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +79,7 @@ export default function AuditPage() {
     : undefined;
 
   const query = useInfiniteQuery({
-    queryKey: ["audit", parsedUserId],
+    queryKey: [...keys.audit, parsedUserId],
     queryFn: ({ pageParam }) =>
       api.listAudit({
         before: pageParam as number | undefined,
