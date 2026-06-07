@@ -77,6 +77,16 @@ func TestSeccompBlocksUnshare(t *testing.T) {
 // TestSeccompAllowsNormalWork verifies that the seccomp filter does NOT break
 // the Go runtime (which uses clone for OS threads) or basic networking. The
 // "work" mode spawns 20 goroutines and does loopback TCP dials. Exit 0 = pass.
+//
+// clone3 / glibc compat note: the filter returns ENOSYS for clone3 (rather
+// than KILL_PROCESS) so that glibc ≥2.34 servers can fall back to plain clone
+// for pthread_create. The Go runtime uses clone directly and is unaffected.
+// A direct unix.Syscall(SYS_CLONE3, ...) test is omitted because clone3
+// requires a pointer-sized struct argument that makes a clean raw-syscall test
+// awkward; the ENOSYS semantic is verified by the unit tests in
+// internal/seccomp and by the absence of SIGSYS in production glibc images.
+// The nested-userns escape stays closed: clone3→ENOSYS→glibc falls back to
+// clone(CLONE_NEWUSER)→which is arg-filtered to KILL_PROCESS (see filter_linux.go).
 func TestSeccompAllowsNormalWork(t *testing.T) {
 	if !sandbox.Available() {
 		t.Skip("bwrap not available; skipping seccomp work test")

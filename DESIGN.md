@@ -92,18 +92,40 @@ manifest allowlist → swaps placeholder for the user's real key from the vault 
 untrusted; the kernel (namespaces/seccomp/Landlock) is the boundary between them; keys
 live only on the trusted side.
 
-> **SECURITY NOTE — KNOWN HARDENING GAP:** the sandbox currently runs with
-> `seccomp=unconfined`, which lets untrusted code call `unshare(CLONE_NEWUSER)`
-> and gain full capabilities inside a **nested user namespace**. The outer uid
-> 65534 + cap-drop do **NOT** prevent this: a nested userns grants the process
-> all capabilities scoped to that new namespace, which can be used to access
-> `/proc` and other resources visible through the shared kernel. A scoped seccomp
-> profile denying namespace-creation syscalls (`unshare`/`setns`/`clone` with
-> `CLONE_NEWUSER`) and `ptrace`/`keyctl` is **required before running genuinely
-> hostile code** and is the **single most important remaining confinement item**.
-> This is tracked in DESIGN.md §5 item 7 ("hardening pass"). Route isolation and
-> the vault are unaffected — the gap is about sandbox-internal privilege
-> escalation, not credential leakage through the proxy.
+> **SECURITY NOTE — SECCOMP STATUS:**
+>
+> **Docker-level `--security-opt seccomp=unconfined`** is still required and
+> set. bwrap needs it to create an unprivileged user namespace (`--unshare-user`).
+> A custom Docker seccomp profile that permits only the specific syscalls bwrap
+> needs is a follow-up hardening item; it has not shipped yet.
+>
+> **Application-level seccomp-BPF filter** (`internal/seccomp`, installed by
+> `cmd/bootstrap` after the capability/uid drop and before execve, inherited
+> across execve): **this filter CLOSES the nested-user-namespace escape.**
+> Specifically it denies:
+> - `unshare`, `setns` → KILL_PROCESS (blanket; no legitimate use)
+> - `clone(CLONE_NEWUSER)` → KILL_PROCESS (arg-filtered via BitsSet on arg0)
+> - `clone3` → **ENOSYS** (not KILL — glibc ≥2.34 uses clone3 for
+>   `pthread_create` and falls back to `clone` only on ENOSYS; a KILL would
+>   SIGSYS-kill Rust/C servers on thread creation; the escape stays closed
+>   because the fallback `clone(CLONE_NEWUSER)` is still arg-filtered above)
+> - mount family (`mount`/`umount2`/`pivot_root`/`chroot`/`open_tree`/
+>   `move_mount`/`fsopen`/`mount_setattr`) → KILL_PROCESS
+> - `ptrace`, `process_vm_readv`, `process_vm_writev` → KILL_PROCESS
+> - `keyctl`, `add_key`, `request_key` → KILL_PROCESS
+> - `bpf`, `perf_event_open` → KILL_PROCESS
+> - `kexec_load`, `init_module`, `finit_module`, `delete_module` → KILL_PROCESS
+>
+> **Default action is ALLOW** (not a full allowlist): only the escape/escalation
+> vectors are denied, not every syscall. A fuller allowlist-style profile
+> (as Docker's default seccomp profile provides) is deferred; the current filter
+> closes the specific userns-escape and privilege-escalation paths that uid 65534
+> + cap-drop alone do not prevent.
+>
+> Verified by `TestSeccompBlocksUnshare` (SIGSYS on unshare → kill) and
+> `TestSeccompAllowsNormalWork` (Go goroutines + TCP, exit 0). Remaining
+> hardening: Landlock (filesystem), cgroups (resource limits), and optionally a
+> full allowlist seccomp profile for maximally hostile workloads.
 
 **Egress networking:** the gateway holds only `CAP_NET_ADMIN` (no `SYS_ADMIN`,
 no privileged). Route isolation — not environment variables — is the actual
@@ -117,7 +139,7 @@ iptables in the image; best-effort — route isolation remains if this step fail
 **Known residual risks (accepted, documented):**
 - Tier 2 servers can exfiltrate their own secret *through* an allowed domain (e.g. write it into a gist). Tier label surfaces this.
 - Shared-kernel isolation: a kernel 0-day breaks tenant separation. Acceptable for self-host / curated catalog; revisit (gVisor/microVMs) if hosting truly hostile workloads.
-- `seccomp=unconfined`: see KNOWN HARDENING GAP note above.
+- `seccomp=unconfined` (Docker-level): required for bwrap userns; application-level BPF filter closes the userns-escape vectors — see SECCOMP STATUS note above. A custom Docker seccomp profile is a follow-up item.
 - Compose env vars are visible via `docker inspect`; `*_FILE` secrets supported for everything sensitive.
 
 ---
