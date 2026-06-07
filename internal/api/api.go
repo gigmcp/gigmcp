@@ -40,6 +40,13 @@ func (s *Server) invalidate(profileID int64) {
 func (s *Server) Routes() *http.ServeMux {
 	authed := http.NewServeMux()
 	authed.HandleFunc("GET /api/me", s.handleMe)
+	authed.HandleFunc("GET /api/profiles", s.handleListProfiles)
+	authed.HandleFunc("POST /api/profiles", s.handleCreateProfile)
+	authed.HandleFunc("GET /api/profiles/{id}", s.handleGetProfile)
+	authed.HandleFunc("PATCH /api/profiles/{id}", s.handlePatchProfile)
+	authed.HandleFunc("DELETE /api/profiles/{id}", s.handleDeleteProfile)
+	authed.HandleFunc("PUT /api/profiles/{id}/servers", s.handlePutProfileServers)
+	authed.HandleFunc("POST /api/profiles/{id}/token", s.handleRotateProfileToken)
 
 	mux := http.NewServeMux()
 	if s.Auth != nil {

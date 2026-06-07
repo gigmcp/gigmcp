@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -247,3 +248,5 @@ func TestMeShowsImpersonation(t *testing.T) {
 		t.Fatalf("impersonated me: %+v", got)
 	}
 }
+
+func itoa(n int64) string { return strconv.FormatInt(n, 10) }
