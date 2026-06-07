@@ -186,12 +186,7 @@ func run(ctx context.Context) error {
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gwServer }, nil)
 	log.Printf("gigmcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
 	legacy := gw.RequireBearer(cfg.BearerToken, handler)
-	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, &registry.IndexInstaller{
-		Store:   st,
-		Client:  &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
-		Puller:  &oci.Puller{},
-		DataDir: cfg.DataDir,
-	}, profiles, legacy))
+	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, newInstaller(cfg, st, false), profiles, legacy))
 }
 
 // seedDemoCredential encrypts GIG_DEMO_TOKEN and stores it for the echo server
@@ -263,6 +258,19 @@ func writeTempCA(pem []byte) (string, error) {
 	return f.Name(), nil
 }
 
+// newInstaller constructs an *registry.IndexInstaller from cfg and st.
+// autoConsent should be true for operator-initiated boot installs (GIG_INSTALL)
+// and false for API-driven installs so the frontend consent flow gates the spawn.
+func newInstaller(cfg config.Config, st store.Store, autoConsent bool) *registry.IndexInstaller {
+	return &registry.IndexInstaller{
+		Store:       st,
+		Client:      &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
+		Puller:      &oci.Puller{},
+		DataDir:     cfg.DataDir,
+		AutoConsent: autoConsent,
+	}
+}
+
 // installFromIndex installs each GIG_INSTALL ref from the signed registry
 // index (record-only; spawning happens in spawnInstalled). Boot installs are
 // operator-initiated, so consent is recorded at install time.
@@ -270,13 +278,7 @@ func installFromIndex(ctx context.Context, st store.Store, cfg config.Config) er
 	if cfg.Install == "" {
 		return nil
 	}
-	inst := &registry.IndexInstaller{
-		Store:       st,
-		Client:      &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
-		Puller:      &oci.Puller{},
-		DataDir:     cfg.DataDir,
-		AutoConsent: true,
-	}
+	inst := newInstaller(cfg, st, true)
 	for _, ref := range strings.Split(cfg.Install, ",") {
 		ref = strings.TrimSpace(ref)
 		if ref == "" {

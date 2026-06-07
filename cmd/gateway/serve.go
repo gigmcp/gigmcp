@@ -23,6 +23,14 @@ import (
 // specific than "/mcp" (exact) which in turn takes precedence over "/" (the
 // catch-all). Verify with the serve_test.go routing assertions.
 //
+// NOTE: ServeMux paths are case-sensitive — /API/* is NOT matched by "/api/"
+// and falls to the "/" catch-all (legacy handler). The web-container proxy
+// must pass lowercase paths; uppercase paths will silently hit legacy.
+//
+// T18 cutover note: /mcp is an exact-match pattern; /mcp/ and all sub-paths
+// ride the "/" catch-all today. At Task 18 both "/mcp" and "/" are removed;
+// the canonical client endpoint becomes /mcp/p/<slug>.
+//
 // At Task 18 cutover: "/mcp" and "/" mounts are BOTH removed, the canonical
 // client endpoint becomes /mcp/p/<slug>, and README.md must be updated
 // (see Task 18 Step 3a).
@@ -51,9 +59,19 @@ func buildMux(
 		mux.Handle("/api/", apiSrv.Routes())
 	} else {
 		// When OIDC is not configured the control-plane API is disabled.
-		// Mount a 404 handler so /api/* requests get a clean 404 rather than
-		// falling through to the "/" catch-all legacy handler.
-		mux.Handle("/api/", http.NotFoundHandler())
+		// Return a descriptive 404 so operators know which env vars to set,
+		// rather than falling through to the "/" catch-all legacy handler.
+		mux.Handle("/api/", disabledAPIHandler())
 	}
 	return mux
+}
+
+// disabledAPIHandler returns a handler that responds 404 with a JSON body
+// explaining which environment variables enable the control plane.
+func disabledAPIHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":{"code":"control_plane_disabled","message":"control plane disabled: set GIG_OIDC_ISSUER, GIG_OIDC_CLIENT_ID, GIG_OIDC_REDIRECT_URL"}}` + "\n"))
+	})
 }
