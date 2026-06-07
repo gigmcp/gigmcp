@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -40,10 +39,17 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 
 // handleInstallServer — POST /api/servers/install {ref} (admin).
 func (s *Server) handleInstallServer(w http.ResponseWriter, r *http.Request) {
+	if s.Installer == nil {
+		writeErr(w, http.StatusNotImplemented, codeInternal, "installer unavailable")
+		return
+	}
 	var body struct {
 		Ref string `json:"ref"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Ref == "" {
+	if !decodeJSON(w, r, &body, 64<<10) {
+		return
+	}
+	if body.Ref == "" {
 		writeErr(w, http.StatusBadRequest, codeInvalid, "body must be {ref}")
 		return
 	}
@@ -60,6 +66,10 @@ func (s *Server) handleInstallServer(w http.ResponseWriter, r *http.Request) {
 // After Installer.Uninstall succeeds: removes profile_servers rows and
 // invalidates affected profile runtimes (CONTROLLER ADDITION from T10 review).
 func (s *Server) handleUninstallServer(w http.ResponseWriter, r *http.Request) {
+	if s.Installer == nil {
+		writeErr(w, http.StatusNotImplemented, codeInternal, "installer unavailable")
+		return
+	}
 	name := r.PathValue("name")
 	if err := s.Installer.Uninstall(r.Context(), name); err != nil {
 		writeErr(w, http.StatusBadGateway, "uninstall_failed", err.Error())
@@ -69,7 +79,10 @@ func (s *Server) handleUninstallServer(w http.ResponseWriter, r *http.Request) {
 	affected, err := s.Store.RemoveServerFromProfiles(r.Context(), name)
 	if err != nil {
 		// Non-fatal: the uninstall succeeded; log and continue.
-		log.Printf("WARN: RemoveServerFromProfiles(%q): %v", name, err)
+		// If cleanup fails, profile_servers may reference an uninstalled server;
+		// T14/T15 (resolver/ProfileHost) MUST fail closed (skip unknown servers).
+		// Operator can re-run DELETE (idempotent) to retry cleanup.
+		log.Printf("WARN: RemoveServerFromProfiles(%q): %v — operator retry: DELETE /api/servers/%s", name, err, name)
 	}
 	for _, id := range affected {
 		s.invalidate(id)

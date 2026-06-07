@@ -25,7 +25,7 @@ type Server struct {
 	Store     store.Store
 	Vault     *vault.Vault
 	Auth      *auth.Authenticator // nil = OIDC unconfigured (auth routes unmounted)
-	Installer registry.Installer  // nil = fall back to Store.ListServers for GET /api/servers; admin mutate routes panic-safe (nil-guarded in handlers)
+	Installer registry.Installer  // nil = fall back to Store.ListServers for GET /api/servers; install/uninstall return 501 (nil-guarded in handlers)
 	Profiles  ProfileInvalidator
 }
 

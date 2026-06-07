@@ -3,11 +3,12 @@ package api_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gigmcp/gigmcp/internal/api"
 	"github.com/gigmcp/gigmcp/internal/auth"
 	"github.com/gigmcp/gigmcp/internal/store"
 )
@@ -70,63 +71,72 @@ func TestInstallEndpointsAdminOnly(t *testing.T) {
 	}
 }
 
-func TestUninstallClearsProfileServersAndInvalidates(t *testing.T) {
+// TestUninstallFailingInstaller502 verifies that a failing Installer.Uninstall → 502.
+func TestUninstallFailingInstaller502(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+
+	code, _ := doJSON(t, ts, adminCookie, "DELETE", "/api/servers/echo", "")
+	if code != http.StatusBadGateway {
+		t.Fatalf("failing installer must 502: %d", code)
+	}
+}
+
+// TestUninstallSuccessHTTP exercises the full HTTP uninstall happy path with a
+// success-mode installer: seeds a profile bundling server "fetch", sends
+// DELETE /api/servers/fetch as admin, expects 204, verifies profile_servers row
+// is gone, the profile ID is in the invalidator, and the audit row is present.
+func TestUninstallSuccessHTTP(t *testing.T) {
 	ctx := context.Background()
-	_, ts, st, inv := newTestAPI(t)
+	_, _, st, _ := newTestAPI(t)
 	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
 	user, _ := seedUserSession(t, st, "alice@x", "user")
 
-	// Seed a server and two profiles that reference it.
-	if _, err := st.EnsureServer(ctx, "echo", "/bin/echo-mcp"); err != nil {
+	if _, err := st.EnsureServer(ctx, "fetch", "/bin/fetch-mcp"); err != nil {
 		t.Fatal(err)
 	}
-	p1, err := st.CreateProfile(ctx, "p1", "P1", user.ID, "tok1")
+	p, err := st.CreateProfile(ctx, "prof", "Prof", user.ID, "tok-fetch")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p2, err := st.CreateProfile(ctx, "p2", "P2", user.ID, "tok2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.SetProfileServers(ctx, p1.ID, []string{"echo"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.SetProfileServers(ctx, p2.ID, []string{"echo"}); err != nil {
+	if err := st.SetProfileServers(ctx, p.ID, []string{"fetch"}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Use a success-mode fake installer for this test.
-	// We'll swap the test API to one with successInstaller.
-	// Instead, seed directly via store and verify uninstall behavior.
-	// Since newTestAPI wires a failing fake, we need a fresh server with success installer.
-	// Re-use the same store but build a direct call through the store for the uninstall path.
-	// The cleanest approach: verify via store that after DELETE /api/servers/echo,
-	// if we had a passing installer, the profile_servers rows are cleared.
-	// Given the test API uses a failing fake, this test verifies the failing case.
-	// For the success path we test RemoveServerFromProfiles directly.
+	// Build a fresh API server with a success-mode installer over the same store.
+	inv2 := &fakeInvalidator{}
+	successInst := &fakeInstaller{st: st, installErr: nil}
+	srv2 := &api.Server{Store: st, Installer: successInst, Profiles: inv2}
+	ts2 := httptest.NewServer(srv2.Routes())
+	t.Cleanup(ts2.Close)
 
-	// Test the store method directly.
-	affected, err := st.RemoveServerFromProfiles(ctx, "echo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(affected) != 2 {
-		t.Fatalf("expected 2 affected profiles, got %d", len(affected))
+	code, _ := doJSON(t, ts2, adminCookie, "DELETE", "/api/servers/fetch", "")
+	if code != http.StatusNoContent {
+		t.Fatalf("success uninstall must 204: %d", code)
 	}
 
-	// Verify profile_servers rows are gone.
-	s1, _ := st.GetProfileServers(ctx, p1.ID)
-	s2, _ := st.GetProfileServers(ctx, p2.ID)
-	if len(s1) != 0 || len(s2) != 0 {
-		t.Fatalf("profile_servers not cleared: p1=%v p2=%v", s1, s2)
+	// profile_servers row must be gone.
+	srvs, _ := st.GetProfileServers(ctx, p.ID)
+	if len(srvs) != 0 {
+		t.Fatalf("profile_servers not cleared: %v", srvs)
 	}
 
-	// Verify the failing uninstall still returns 502.
-	code, _ := doJSON(t, ts, adminCookie, "DELETE", "/api/servers/echo", "")
-	if code != http.StatusBadGateway {
-		t.Fatalf("uninstall should 502 with failing fake: %d", code)
+	// Profile ID must have been invalidated.
+	if len(inv2.ids) != 1 || inv2.ids[0] != p.ID {
+		t.Fatalf("expected invalidation of profile %d, got %v", p.ID, inv2.ids)
 	}
-	_ = inv
+
+	// Audit row must exist.
+	events, _ := st.ListAudit(ctx, 0, 50, 0)
+	found := false
+	for _, e := range events {
+		if e.Decision == "server_uninstall" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("server_uninstall audit row missing")
+	}
 }
 
 func TestUsersListAdminOnly(t *testing.T) {
@@ -330,39 +340,54 @@ func TestAuditImpersonatingSeesTargetEvents(t *testing.T) {
 	doJSON(t, ts, adminCookie, "DELETE", "/api/admin/impersonate", "")
 }
 
-// TestUninstallSuccessInvalidatesProfiles exercises RemoveServerFromProfiles
-// directly since the test API's fakeInstaller always errors.
-func TestUninstallSuccessInvalidatesProfiles(t *testing.T) {
+// TestNilInstallerReturns501 verifies that install/uninstall routes return 501
+// when the Server has no Installer wired (nil-guard in handlers).
+func TestNilInstallerReturns501(t *testing.T) {
+	_, _, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+
+	// Build a server with Installer explicitly nil.
+	srv := &api.Server{Store: st, Installer: nil}
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	if code, _ := doJSON(t, ts, adminCookie, "POST", "/api/servers/install", `{"ref":"x"}`); code != http.StatusNotImplemented {
+		t.Fatalf("nil installer install: want 501, got %d", code)
+	}
+	if code, _ := doJSON(t, ts, adminCookie, "DELETE", "/api/servers/x", ""); code != http.StatusNotImplemented {
+		t.Fatalf("nil installer uninstall: want 501, got %d", code)
+	}
+}
+
+// TestImpersonateNonexistentUser verifies that targeting a user ID that does
+// not exist returns 404.
+func TestImpersonateNonexistentUser(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+
+	code, _ := doJSON(t, ts, adminCookie, "POST", "/api/admin/impersonate",
+		`{"user_id":99999,"ttl_minutes":10}`)
+	if code != http.StatusNotFound {
+		t.Fatalf("nonexistent target: want 404, got %d", code)
+	}
+}
+
+// TestImpersonateAdminIsAllowed verifies that an admin can impersonate another
+// admin user (view-as is permitted for any user including admins — DESIGN #20).
+func TestImpersonateAdminIsAllowed(t *testing.T) {
 	ctx := context.Background()
-	_, _, st, inv := newTestAPI(t)
-	user, _ := seedUserSession(t, st, "alice@x", "user")
+	_, ts, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+	otherAdmin, _ := seedUserSession(t, st, "otheradmin@x", "admin")
 
-	if _, err := st.EnsureServer(ctx, "srv", "/bin/srv"); err != nil {
-		t.Fatal(err)
+	code, _ := doJSON(t, ts, adminCookie, "POST", "/api/admin/impersonate",
+		`{"user_id":`+itoa(otherAdmin.ID)+`,"ttl_minutes":10}`)
+	if code != http.StatusNoContent {
+		t.Fatalf("impersonating another admin: want 204, got %d", code)
 	}
-	p, err := st.CreateProfile(ctx, "myp", "MyP", user.ID, "tok-x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := st.SetProfileServers(ctx, p.ID, []string{"srv"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Simulate what handleUninstallServer does after Installer.Uninstall succeeds.
-	affected, err := st.RemoveServerFromProfiles(ctx, "srv")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range affected {
-		inv.Invalidate(id)
-	}
-
-	if len(inv.ids) != 1 || inv.ids[0] != p.ID {
-		t.Fatalf("expected invalidation of profile %d, got %v", p.ID, inv.ids)
-	}
-	servers, _ := st.GetProfileServers(ctx, p.ID)
-	if len(servers) != 0 {
-		t.Fatalf("profile_servers not cleared: %v", servers)
+	sess, err := st.GetSession(ctx, auth.HashToken(adminCookie.Value))
+	if err != nil || sess.ImpersonatingUserID == nil || *sess.ImpersonatingUserID != otherAdmin.ID {
+		t.Fatalf("session not stamped for admin target: %v %+v", err, sess)
 	}
 }
 
@@ -372,6 +397,3 @@ var _ interface {
 	Uninstall(ctx context.Context, name string) error
 	List(ctx context.Context) ([]store.Server, error)
 } = (*fakeInstaller)(nil)
-
-// Dummy usage to ensure errors import is referenced.
-var _ = errors.New

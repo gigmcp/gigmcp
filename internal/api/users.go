@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -34,7 +33,10 @@ func (s *Server) handleStartImpersonation(w http.ResponseWriter, r *http.Request
 		UserID     int64 `json:"user_id"`
 		TTLMinutes int   `json:"ttl_minutes"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.UserID == 0 {
+	if !decodeJSON(w, r, &body, 64<<10) {
+		return
+	}
+	if body.UserID == 0 {
 		writeErr(w, http.StatusBadRequest, codeInvalid, "body must be {user_id, ttl_minutes}")
 		return
 	}
