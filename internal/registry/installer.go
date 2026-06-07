@@ -82,16 +82,20 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 		tools = append(tools, store.ToolEntry{Name: tl.Name, Default: tl.Default})
 	}
 
-	srv, err := i.Store.EnsureServer(ctx, m.Name, dest)
-	if err != nil {
-		return store.Server{}, err
-	}
+	// Write manifest row FIRST. If the process dies between the two writes we
+	// strand an inert manifest row (no server row → no spawn path). The inverse
+	// ordering (server first) would leave an unguarded server row that the
+	// legacy expose-all path could spawn.
 	if err := i.Store.PutManifest(ctx, store.ManifestRecord{
 		Server: m.Name, Version: m.Version, Digest: m.Image.Digest,
 		Tier: m.Tier, Entrypoint: m.Image.Entrypoint,
 		AllowedHosts: m.Entitlements.Egress,
 		Injections:   injections, Tools: tools, ManifestHash: hash,
 	}); err != nil {
+		return store.Server{}, err
+	}
+	srv, err := i.Store.EnsureServer(ctx, m.Name, dest)
+	if err != nil {
 		return store.Server{}, err
 	}
 	if i.AutoConsent {
@@ -106,10 +110,14 @@ func (i *IndexInstaller) Uninstall(ctx context.Context, name string) error {
 	if !uninstallNameRE.MatchString(name) {
 		return fmt.Errorf("registry: invalid server name %q", name)
 	}
-	if err := i.Store.DeleteManifest(ctx, name); err != nil {
+	// Delete server row FIRST. If the process dies between the two deletes we
+	// strand an inert manifest row (no server row → no spawn path). The inverse
+	// ordering (manifest first) would leave a server row with a binary on disk
+	// that the legacy expose-all path could spawn without any entitlement guard.
+	if err := i.Store.DeleteServer(ctx, name); err != nil {
 		return err
 	}
-	if err := i.Store.DeleteServer(ctx, name); err != nil {
+	if err := i.Store.DeleteManifest(ctx, name); err != nil {
 		return err
 	}
 	// name re-validated above, so the glob is meta-character-free.

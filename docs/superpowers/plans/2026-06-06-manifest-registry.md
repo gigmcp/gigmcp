@@ -3487,3 +3487,16 @@ cd ~/Code/gigmcp && git add docs/superpowers/specs/2026-06-06-rootfs-spike-findi
 - **Spec coverage:** schema module (T2-4) ✓, registryctl + CI + manifests + docs (T5-6) ✓, store (T8) ✓, oci (T9) ✓, client/installer (T10-11) ✓, resolver (T12) ✓, subset+names (T13) ✓, placeholder (T14) ✓, config/main (T15) ✓, container E2E (T16) ✓, static-build guard (T17) ✓, publish/keys (T18) ✓, Spike C (T19) ✓. Re-consent covered in T8/T11/T15/T16.
 - **Known judgment points for the executor:** Task 13's Expose test and Task 16's bootstrap-build helper intentionally defer to existing test-file patterns (`gateway_test.go`, `egress_e2e_test.go`) rather than inventing parallel harnesses — read those files first.
 - **Type consistency:** `store.ManifestRecord/Injection/ToolEntry`, `registry.IndexInstaller/Client`, `oci.Puller`, `gw.Backend.Expose`, `SpawnEgressBackend(..., placeholder string)` used consistently across tasks.
+
+---
+
+## Deviations & follow-ups (from final review)
+
+- **Baked-in registry pubkey deferred** (spec decision #1): `internal/registry.DefaultPublicKeyHex` not added — blocked on T18 keygen (owner-gated). Until then `GIG_REGISTRY_PUBKEY` is required config; fail-closed.
+- **Test fixtures are runtime-generated** (ocitest.WriteLayoutImage, writeSignedIndex) instead of committed testdata — hermetic and self-maintaining; intentional deviation.
+- **Follow-ups:**
+  - Prune previous version's extracted dir on upgrade (installer leaves `<name>@<oldver>` on disk until Uninstall).
+  - Size ceiling for `oci.extractFile` io.Copy (mirror the index client's LimitReader).
+  - Credential-less manifest servers cannot egress (resolver requires a credential row before consulting the manifest allowlist) — add a no-credential path when the registry gains unauthenticated servers.
+  - Dial-time private-IP guard in the proxy as defense-in-depth behind the lint denylist.
+  - gigmcp repo has no CI workflows (pre-existing); spec's "CGO_ENABLED=0 asserted in CI" is covered only by Dockerfile build + E2E.
