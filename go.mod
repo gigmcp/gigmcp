@@ -11,11 +11,19 @@ require (
 	modernc.org/sqlite v1.52.0
 )
 
-require golang.org/x/tools v0.45.0 // indirect
+require (
+	github.com/docker/cli v29.4.3+incompatible // indirect
+	github.com/docker/docker-credential-helpers v0.9.3 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	gotest.tools/v3 v3.5.2 // indirect
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/gigmcp/gigmcp-registry/schema v0.0.0
 	github.com/google/go-containerregistry v0.21.6
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
