@@ -46,27 +46,58 @@ func putCred(t *testing.T, v *vault.Vault, st store.Store, server, tenant, secre
 	}
 }
 
+// TestResolverJoinsProfileTenantToOwner verifies that when a numeric tenant
+// string names an existing profile, the resolver looks up credentials under
+// the profile OWNER's user id — not the literal profile-id string.
+//
+// De-vacuated by seeding TWO users so that user1.ID == profile.ID == 1 but
+// user2.ID == profile.UserID == 2. A DECOY credential is stored under tenant
+// "1" (the profile-ID string), and the real OWNER_SECRET under
+// store.UserTenant(user2.ID) == "2". Resolving via tenant "1" must return
+// OWNER_SECRET. If the join block is deleted the test fails because
+// GetCredential("github","1") returns the DECOY.
 func TestResolverJoinsProfileTenantToOwner(t *testing.T) {
 	ctx := context.Background()
 	v, st := newVaultStore(t)
-	u, err := st.UpsertUserByOIDC(ctx, "https://idp", "alice", "a@x", "Alice", "user")
+
+	// user1 is seeded only to consume ID=1 so that the next user gets ID=2.
+	_, err := st.UpsertUserByOIDC(ctx, "https://idp", "alice-sub", "a@x", "Alice", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := st.CreateProfile(ctx, "main", "Main", u.ID, "hash")
+	user2, err := st.UpsertUserByOIDC(ctx, "https://idp", "bob-sub", "b@x", "Bob", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Credential keyed by the OWNER's user id.
-	putCred(t, v, st, "github", strconv.FormatInt(u.ID, 10), "OWNER_SECRET")
+	// Profile is owned by user2 (ID=2). SQLite auto-increment gives it ID=1,
+	// so profile.ID == 1 == user1.ID, but profile.UserID == 2 == user2.ID.
+	p, err := st.CreateProfile(ctx, "main", "Main", user2.ID, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sanity: the join is only interesting when the profile-ID string differs
+	// from the owner-user-tenant string.
+	if strconv.FormatInt(p.ID, 10) == store.UserTenant(user2.ID) {
+		t.Skip("profile.ID == user2.ID in this DB; decoy separation impossible")
+	}
+
+	// DECOY stored under the literal profile-ID string (what a join-less
+	// resolver would find).
+	putCred(t, v, st, "github", strconv.FormatInt(p.ID, 10), "DECOY")
+	// Real credential stored under the OWNER's user tenant (what the join
+	// must resolve to).
+	putCred(t, v, st, "github", store.UserTenant(user2.ID), "OWNER_SECRET")
 
 	r := &gateway.CredResolver{Store: st, Vault: v}
 	cred, err := r.Resolve(proxy.Identity{Server: "github", Tenant: strconv.FormatInt(p.ID, 10)}, "api.example.com")
 	if err != nil {
 		t.Fatalf("resolve via profile tenant: %v", err)
 	}
+	if cred.RealSecret == "DECOY" {
+		t.Fatal("resolver returned DECOY: join block is missing or broken")
+	}
 	if cred.RealSecret != "OWNER_SECRET" {
-		t.Fatalf("wrong secret: %q", cred.RealSecret)
+		t.Fatalf("wrong secret: got %q, want OWNER_SECRET", cred.RealSecret)
 	}
 }
 
