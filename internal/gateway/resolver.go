@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/gigmcp/gigmcp/internal/proxy"
 	"github.com/gigmcp/gigmcp/internal/store"
@@ -20,9 +21,24 @@ type CredResolver struct {
 // — allowlist + injection schema + placeholder; the VAULT (by server,tenant)
 // supplies only the real secret. Servers without a manifest (legacy
 // GIG_ECHO_BIN seeding) fall back to the credential row's own fields.
+//
+// Tenant join (spec §6, this plan): if id.Tenant parses as an int64 AND
+// names an existing profile, the credential lookup uses the profile OWNER's
+// user id as a decimal string (credentials are per-user; one key serves all
+// of that user's profiles). Otherwise the tenant is used literally — this
+// keeps the legacy "default" tenant working until cutover.
 func (c *CredResolver) Resolve(id proxy.Identity, host string) (proxy.Credential, error) {
 	ctx := context.Background()
-	cred, err := c.Store.GetCredential(ctx, id.Server, id.Tenant)
+
+	// Tenant join: numeric tenant → profile lookup → owner's user id.
+	tenant := id.Tenant
+	if pid, err := strconv.ParseInt(id.Tenant, 10, 64); err == nil {
+		if p, perr := c.Store.GetProfileByID(ctx, pid); perr == nil {
+			tenant = store.UserTenant(p.UserID)
+		}
+	}
+
+	cred, err := c.Store.GetCredential(ctx, id.Server, tenant)
 	if err != nil {
 		return proxy.Credential{}, err
 	}
