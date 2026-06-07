@@ -15,15 +15,15 @@ var ErrSessionNotFound = errors.New("store: session not found")
 // touches the database. The impersonation columns implement DESIGN #20
 // view-as mode.
 type Session struct {
-	TokenHash              string
-	UserID                 int64
-	CreatedAt              time.Time
-	ExpiresAt              time.Time
+	TokenHash string
+	UserID    int64
+	CreatedAt time.Time
+	ExpiresAt time.Time
 	// ImpersonatingUserID is the target user's ID while view-as is active, or
 	// nil when no impersonation is in progress. Consumers reading these fields
 	// directly must check ImpersonationExpiresAt; only the auth middleware
 	// enforces it.
-	ImpersonatingUserID    *int64
+	ImpersonatingUserID *int64
 	// ImpersonationExpiresAt is the wall-clock deadline for view-as mode.
 	// Expiry is enforced by callers (auth middleware), not by GetSession.
 	ImpersonationExpiresAt *time.Time

@@ -142,7 +142,7 @@ func SpawnEgressBackend(
 	proxyPort int,
 	caFile string,
 	bootstrapPath string,
-	tenant string,      // proxy identity bound to the sandbox's source IP — profile ID (decimal) or "default"
+	tenant string, // proxy identity bound to the sandbox's source IP — profile ID (decimal) or "default"
 	placeholder string, // manifest-generated sentinel; "" = legacy "PLACEHOLDER"
 ) (*EgressBackend, error) {
 	if placeholder == "" {

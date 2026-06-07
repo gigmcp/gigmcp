@@ -25,11 +25,11 @@ type auditEventJSON struct {
 // are FORCED to their effective user's events; pure admins may filter freely.
 //
 // Audit filtering semantics (T10 controller addition):
-// - Non-admin: always sees only their own events (real user ID).
-// - Admin while impersonating: sees the target's events (EffectiveUser ID).
-//   This matches the intent of view-as: the impersonating admin sees the
-//   target's perspective, including their audit history.
-// - Admin not impersonating: sees all events; optional user_id query param filters.
+//   - Non-admin: always sees only their own events (real user ID).
+//   - Admin while impersonating: sees the target's events (EffectiveUser ID).
+//     This matches the intent of view-as: the impersonating admin sees the
+//     target's perspective, including their audit history.
+//   - Admin not impersonating: sees all events; optional user_id query param filters.
 func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	before, _ := strconv.ParseInt(q.Get("before"), 10, 64)

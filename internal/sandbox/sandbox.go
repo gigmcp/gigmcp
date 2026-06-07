@@ -36,10 +36,10 @@ type Egress struct {
 
 // Spec describes a process to run inside the sandbox.
 type Spec struct {
-	Exec   string   // path of the executable *inside* the sandbox
+	Exec   string // path of the executable *inside* the sandbox
 	Args   []string
-	Mounts []Mount  // the executable itself must be covered by one of these
-	Egress *Egress  // if non-nil, enable egress mode (bootstrap entrypoint, veth netns)
+	Mounts []Mount // the executable itself must be covered by one of these
+	Egress *Egress // if non-nil, enable egress mode (bootstrap entrypoint, veth netns)
 }
 
 // Available reports whether bwrap sandboxing can run on this host.

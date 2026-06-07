@@ -414,4 +414,3 @@ func (d *deletedTargetStore) GetUser(ctx context.Context, id int64) (store.User,
 
 // Verify deletedTargetStore satisfies store.Store (compile-time check).
 var _ store.Store = (*deletedTargetStore)(nil)
-

@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigmcp/registry/schema"
 	"github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/gigmcp/gigmcp/internal/netmgr"
 	"github.com/gigmcp/gigmcp/internal/oci"
@@ -21,6 +20,7 @@ import (
 	"github.com/gigmcp/gigmcp/internal/registry"
 	"github.com/gigmcp/gigmcp/internal/sandbox"
 	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/registry/schema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -129,9 +129,9 @@ func TestRegistryInstallE2E(t *testing.T) {
 
 	dataDir := t.TempDir()
 	inst := &registry.IndexInstaller{
-		Store:  st,
-		Client: &registry.Client{IndexURL: "file://" + idxPath, PublicKeyHex: hex.EncodeToString(pub)},
-		Puller: &oci.Puller{LayoutDir: layoutDir},
+		Store:       st,
+		Client:      &registry.Client{IndexURL: "file://" + idxPath, PublicKeyHex: hex.EncodeToString(pub)},
+		Puller:      &oci.Puller{LayoutDir: layoutDir},
 		DataDir:     dataDir,
 		AutoConsent: true,
 	}
