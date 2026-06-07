@@ -8,7 +8,7 @@
 
 ## What is built
 
-A full Next.js 15 (App Router, TypeScript, Tailwind, shadcn/base-ui) dashboard in `web/` that drives the gigmcp control plane on `:8080`. All seven spec-§8 screens are implemented:
+A full Next.js 16.2.7 (App Router, TypeScript, Tailwind, shadcn/base-ui) dashboard in `web/` that drives the gigmcp control plane on `:8080`. All seven spec-§8 screens are implemented:
 
 | Screen | Route | Notes |
 |---|---|---|
