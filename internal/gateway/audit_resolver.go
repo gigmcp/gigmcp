@@ -3,10 +3,10 @@ package gateway
 import (
 	"context"
 	"log"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gigmcp/gigmcp/internal/proxy"
 	"github.com/gigmcp/gigmcp/internal/store"
@@ -34,8 +34,10 @@ type auditRecord struct {
 // intentional, documented duplication: the registry workstream's lint CI
 // must mirror the same rule.
 //
-// Lifecycle: Close() flushes pending events and stops the writer; Resolve
-// remains safe (and silently drops) after Close.
+// Lifecycle: Close() MUST be called on shutdown or the writer goroutine
+// leaks. T16 (cmd/gateway wiring) is responsible for wiring this into the
+// server's graceful-shutdown path. Resolve remains safe (and silently drops)
+// after Close.
 type AuditingResolver struct {
 	Inner proxy.CredentialResolver
 	Store store.Store
@@ -65,18 +67,23 @@ func (a *AuditingResolver) writer() {
 			Kind: store.AuditKindEgress, Server: rec.server, Host: rec.host,
 			Decision: rec.decision, Detail: rec.detail,
 		}
-		// Profile→owner join off the hot path: numeric tenants naming a
-		// profile are attributed to (profile, owning user).
-		if pid, err := strconv.ParseInt(rec.tenant, 10, 64); err == nil {
-			if p, perr := a.Store.GetProfileByID(context.Background(), pid); perr == nil {
-				id := pid
-				e.ProfileID = &id
-				uid := p.UserID
-				e.UserID = &uid
+		// Profile→owner join off the hot path via the shared resolveTenant
+		// helper; each store call gets a 5 s deadline so a slow DB can never
+		// wedge the writer goroutine permanently.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, profileID, userID := resolveTenant(ctx, a.Store, rec.tenant)
+		cancel()
+		e.ProfileID = profileID
+		e.UserID = userID
+
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		err := a.Store.AppendAudit(ctx, e)
+		cancel()
+		if err != nil {
+			n := atomic.AddInt64(&a.dropped, 1)
+			if n%1000 == 1 {
+				log.Printf("WARN: egress audit write dropped (%d total): %v", n, err)
 			}
-		}
-		if err := a.Store.AppendAudit(context.Background(), e); err != nil {
-			log.Printf("WARN: egress audit write: %v", err)
 		}
 	}
 }
@@ -101,8 +108,10 @@ func (a *AuditingResolver) Resolve(id proxy.Identity, host string) (proxy.Creden
 		select {
 		case a.ch <- rec:
 		default:
-			atomic.AddInt64(&a.dropped, 1)
-			log.Printf("WARN: egress audit channel full; dropped event(s)")
+			n := atomic.AddInt64(&a.dropped, 1)
+			if n%1000 == 1 {
+				log.Printf("WARN: egress audit channel full; %d event(s) dropped", n)
+			}
 		}
 	} else {
 		atomic.AddInt64(&a.dropped, 1)

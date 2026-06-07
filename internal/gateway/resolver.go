@@ -10,6 +10,29 @@ import (
 	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
+// resolveTenant resolves a raw tenant string to the canonical credential
+// tenant, optionally returning the profile ID and owner user ID when the
+// tenant names an existing profile.
+//
+// If tenant parses as an int64 AND GetProfileByID succeeds, returns
+// (store.UserTenant(owner), &profileID, &ownerID). Otherwise returns
+// (tenant, nil, nil) — covering both the "default" literal and numeric
+// strings that do not correspond to a known profile.
+//
+// This helper is shared by CredResolver.Resolve and the AuditingResolver
+// writer goroutine so the join logic cannot drift between the two callers
+// (T15 will add a third caller when ProfileHost lands).
+func resolveTenant(ctx context.Context, st store.Store, tenant string) (credTenant string, profileID, userID *int64) {
+	if pid, err := strconv.ParseInt(tenant, 10, 64); err == nil {
+		if p, perr := st.GetProfileByID(ctx, pid); perr == nil {
+			id := pid
+			uid := p.UserID
+			return store.UserTenant(p.UserID), &id, &uid
+		}
+	}
+	return tenant, nil, nil
+}
+
 // CredResolver implements proxy.CredentialResolver over the store + vault.
 type CredResolver struct {
 	Store store.Store
@@ -27,16 +50,14 @@ type CredResolver struct {
 // user id as a decimal string (credentials are per-user; one key serves all
 // of that user's profiles). Otherwise the tenant is used literally — this
 // keeps the legacy "default" tenant working until cutover.
+//
+// Called once per MCP CONNECT (not per request), so the GetProfileByID read
+// inside resolveTenant is fine uncached — it is a one-time handshake cost.
 func (c *CredResolver) Resolve(id proxy.Identity, host string) (proxy.Credential, error) {
 	ctx := context.Background()
 
 	// Tenant join: numeric tenant → profile lookup → owner's user id.
-	tenant := id.Tenant
-	if pid, err := strconv.ParseInt(id.Tenant, 10, 64); err == nil {
-		if p, perr := c.Store.GetProfileByID(ctx, pid); perr == nil {
-			tenant = store.UserTenant(p.UserID)
-		}
-	}
+	tenant, _, _ := resolveTenant(ctx, c.Store, id.Tenant)
 
 	cred, err := c.Store.GetCredential(ctx, id.Server, tenant)
 	if err != nil {
