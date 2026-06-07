@@ -53,5 +53,23 @@ type Store interface {
 	SetImpersonation(ctx context.Context, tokenHash string, targetUserID int64, expiresAt time.Time) error
 	// ClearImpersonation removes view-as state from a session.
 	ClearImpersonation(ctx context.Context, tokenHash string) error
+	// CreateProfile inserts a profile (slug UNIQUE).
+	CreateProfile(ctx context.Context, slug, name string, userID int64, tokenHash string) (Profile, error)
+	// GetProfileByID fetches a profile; ErrProfileNotFound if missing.
+	GetProfileByID(ctx context.Context, id int64) (Profile, error)
+	// GetProfileBySlugAndTokenHash is the MCP endpoint auth lookup.
+	GetProfileBySlugAndTokenHash(ctx context.Context, slug, tokenHash string) (Profile, error)
+	// ListProfiles returns profiles owned by userID (0 = all).
+	ListProfiles(ctx context.Context, userID int64) ([]Profile, error)
+	// UpdateProfileName renames a profile.
+	UpdateProfileName(ctx context.Context, id int64, name string) error
+	// SetProfileToken replaces the stored token hash (rotation).
+	SetProfileToken(ctx context.Context, id int64, tokenHash string) error
+	// DeleteProfile removes a profile, cascading profile_servers.
+	DeleteProfile(ctx context.Context, id int64) error
+	// SetProfileServers replaces the profile's server bundle (one tx).
+	SetProfileServers(ctx context.Context, id int64, names []string) error
+	// GetProfileServers returns the profile's bundled server names.
+	GetProfileServers(ctx context.Context, id int64) ([]string, error)
 	Close() error
 }

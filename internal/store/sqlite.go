@@ -49,6 +49,14 @@ func OpenSQLite(path string) (Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.ExecContext(ctx, profilesSchema); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.ExecContext(ctx, profileServersSchema); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &sqliteStore{db: db}, nil
 }
 
