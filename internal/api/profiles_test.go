@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/gigmcp/gigmcp/internal/auth"
 )
 
 type profileResp struct {
@@ -16,6 +18,14 @@ type profileResp struct {
 	Endpoint string   `json:"endpoint"`
 	Servers  []string `json:"servers"`
 	Token    string   `json:"token"`
+}
+
+// errResp extracts {"error":{"code":...,"message":...}} from a response body.
+type errResp struct {
+	Err struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
 }
 
 func TestProfileCreateReturnsTokenOnce(t *testing.T) {
@@ -40,10 +50,17 @@ func TestProfileCreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("detail leaked token: %d %s", code, body)
 	}
 
-	// Duplicate slug → 409.
-	code, _ = doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Dup","slug":"main"}`)
+	// Duplicate slug → 409 with code "conflict".
+	code, body = doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Dup","slug":"main"}`)
 	if code != http.StatusConflict {
 		t.Fatalf("duplicate slug: %d", code)
+	}
+	var er errResp
+	if err := json.Unmarshal(body, &er); err != nil {
+		t.Fatalf("unmarshal conflict error: %v", err)
+	}
+	if er.Err.Code != "conflict" {
+		t.Fatalf("conflict response code: want %q got %q", "conflict", er.Err.Code)
 	}
 }
 
@@ -51,9 +68,16 @@ func TestProfileSlugValidation(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, cookie := seedUserSession(t, st, "alice@x", "user")
 	for _, slug := range []string{"", "A", "-x", "has space", "x", strings.Repeat("a", 64)} {
-		code, _ := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"N","slug":"`+slug+`"}`)
+		code, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"N","slug":"`+slug+`"}`)
 		if code != http.StatusBadRequest {
 			t.Fatalf("slug %q must 400, got %d", slug, code)
+		}
+		var er errResp
+		if err := json.Unmarshal(body, &er); err != nil {
+			t.Fatalf("unmarshal 400 error: %v", err)
+		}
+		if er.Err.Code != "invalid" {
+			t.Fatalf("bad-slug response code: want %q got %q", "invalid", er.Err.Code)
 		}
 	}
 }
@@ -171,5 +195,136 @@ func TestProfileServersAndRotateAndDelete(t *testing.T) {
 		if !decisions[want] {
 			t.Fatalf("missing audit decision %q in %v", want, decisions)
 		}
+	}
+}
+
+// TestProfileErrorCodes verifies the error-code constants on common 400/409
+// responses.
+func TestProfileErrorCodes(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	// Bad slug → 400 with code "invalid".
+	code, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"N","slug":"BAD"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("bad slug: want 400, got %d", code)
+	}
+	var er errResp
+	if err := json.Unmarshal(body, &er); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if er.Err.Code != "invalid" {
+		t.Fatalf("bad slug code: want %q got %q", "invalid", er.Err.Code)
+	}
+
+	// Create success, then duplicate slug → 409 with code "conflict".
+	doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Main","slug":"main"}`)
+	code, body = doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Dup","slug":"main"}`)
+	if code != http.StatusConflict {
+		t.Fatalf("conflict: want 409, got %d", code)
+	}
+	if err := json.Unmarshal(body, &er); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if er.Err.Code != "conflict" {
+		t.Fatalf("conflict code: want %q got %q", "conflict", er.Err.Code)
+	}
+}
+
+// TestProfileInputBounds verifies decodeJSON body-size limit and empty-name
+// rejection.
+func TestProfileInputBounds(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	// Oversized body → 4xx (413 or 400).
+	oversized := `{"name":"` + strings.Repeat("x", 70000) + `","slug":"ok-slug"}`
+	code, _ := doJSON(t, ts, cookie, "POST", "/api/profiles", oversized)
+	if code != http.StatusRequestEntityTooLarge && code != http.StatusBadRequest {
+		t.Fatalf("oversized body: want 413 or 400, got %d", code)
+	}
+
+	// Empty name → 400.
+	code, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"","slug":"ok-slug"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("empty name: want 400, got %d %s", code, body)
+	}
+	var er errResp
+	if err := json.Unmarshal(body, &er); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if er.Err.Code != "invalid" {
+		t.Fatalf("empty name code: want %q got %q", "invalid", er.Err.Code)
+	}
+}
+
+// TestProfileNonOwnerMethods verifies that PATCH, PUT servers, and POST token
+// return 404 for a non-owner (no existence leak).
+func TestProfileNonOwnerMethods(t *testing.T) {
+	ctx := context.Background()
+	_, ts, st, _ := newTestAPI(t)
+	_, alice := seedUserSession(t, st, "alice@x", "user")
+	_, bob := seedUserSession(t, st, "bob@x", "user")
+	if _, err := st.EnsureServer(ctx, "echo", "/bin/echo-mcp"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, body := doJSON(t, ts, alice, "POST", "/api/profiles", `{"name":"Main","slug":"main"}`)
+	var created profileResp
+	json.Unmarshal(body, &created)
+	id := itoa(created.ID)
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{"PATCH", "/api/profiles/" + id, `{"name":"X"}`},
+		{"PUT", "/api/profiles/" + id + "/servers", `{"servers":["echo"]}`},
+		{"POST", "/api/profiles/" + id + "/token", ""},
+	}
+	for _, tc := range cases {
+		code, _ := doJSON(t, ts, bob, tc.method, tc.path, tc.body)
+		if code != http.StatusNotFound {
+			t.Fatalf("bob %s %s: want 404, got %d", tc.method, tc.path, code)
+		}
+	}
+}
+
+// TestProfileRotateE2E verifies token rotation end-to-end: the old hash no
+// longer matches and the new hash does.
+func TestProfileRotateE2E(t *testing.T) {
+	ctx := context.Background()
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	_, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Main","slug":"main"}`)
+	var created profileResp
+	json.Unmarshal(body, &created)
+	id := itoa(created.ID)
+
+	// Old token must work before rotation.
+	oldHash := auth.HashToken(created.Token)
+	if _, err := st.GetProfileBySlugAndTokenHash(ctx, "main", oldHash); err != nil {
+		t.Fatalf("old token lookup before rotate: %v", err)
+	}
+
+	// Rotate.
+	code, body := doJSON(t, ts, cookie, "POST", "/api/profiles/"+id+"/token", "")
+	if code != http.StatusOK {
+		t.Fatalf("rotate: %d %s", code, body)
+	}
+	var rotated profileResp
+	json.Unmarshal(body, &rotated)
+
+	// Old hash must now fail.
+	if _, err := st.GetProfileBySlugAndTokenHash(ctx, "main", oldHash); err == nil {
+		t.Fatal("old token hash still matches after rotation")
+	}
+
+	// New hash must succeed.
+	newHash := auth.HashToken(rotated.Token)
+	if _, err := st.GetProfileBySlugAndTokenHash(ctx, "main", newHash); err != nil {
+		t.Fatalf("new token lookup after rotate: %v", err)
 	}
 }
