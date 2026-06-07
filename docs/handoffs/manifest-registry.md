@@ -14,6 +14,20 @@
 
 ---
 
+> **Parallel workstream notice:** This doc covers the **manifest / registry**
+> workstream. The companion workstream is documented in
+> [docs/handoffs/frontend-control-plane.md](frontend-control-plane.md). The two
+> workstreams run in parallel sharing three coordination seams: `store.Store` interface
+> (additive, separate files), `cmd/gateway/main.go run()` wiring (additive helpers),
+> and the proxy resolver allowlist(from manifest)+secret(from vault) split. ONE
+> cross-boundary item needs joint agreement before either goes deep: the sandbox
+> currently mounts a single binary at `/app/server`, but OCI images (Node/Python) are
+> full rootfses, so real images require a coordinated extension to the otherwise-stable
+> `internal/sandbox` — prove the pipeline with static-binary images first, then agree
+> the rootfs-mount extension.
+
+---
+
 ## 1. Mission + fit in the product
 
 gigemcp is an AGPL, security-first MCP gateway: it runs *untrusted, community* MCP
@@ -340,19 +354,9 @@ them precisely; the orchestrator reconciles this doc against the frontend doc.
 expectation; the orchestrator will confirm.
 
 ```go
-// Package registry (internal/registry). Installer is the control-plane-facing
-// surface: the frontend's REST API calls these; the registry workstream owns the
-// implementation.
 type Installer interface {
-    // Install resolves ref (manifest "name@version", or "name" for latest, or a
-    // digest), pulls + verifies the OCI image by digest, extracts it locally,
-    // records the server + manifest in the store, and returns the stored Server.
-    Install(ctx context.Context, ref string) (store.Server, error)
-
-    // Uninstall removes a server (by manifest name) and its local image/rootfs.
+    Install(ctx context.Context, ref string) (store.Server, error)  // ref = name@version | name(latest) | sha256:<digest>; idempotent by (name,version)
     Uninstall(ctx context.Context, name string) error
-
-    // List returns all installed servers.
     List(ctx context.Context) ([]store.Server, error)
 }
 ```

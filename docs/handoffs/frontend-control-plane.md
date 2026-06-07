@@ -10,6 +10,20 @@
 
 ---
 
+> **Parallel workstream notice:** This doc covers the **frontend / control-plane**
+> workstream. The companion workstream is documented in
+> [docs/handoffs/manifest-registry.md](manifest-registry.md). The two workstreams
+> run in parallel sharing three coordination seams: `store.Store` interface (additive,
+> separate files), `cmd/gateway/main.go run()` wiring (additive helpers), and the
+> proxy resolver allowlist(from manifest)+secret(from vault) split. ONE cross-boundary
+> item needs joint agreement before either goes deep: the sandbox currently mounts a
+> single binary at `/app/server`, but OCI images (Node/Python) are full rootfses, so
+> real images require a coordinated extension to the otherwise-stable `internal/sandbox`
+> — prove the pipeline with static-binary images first, then agree the rootfs-mount
+> extension.
+
+---
+
 ## 1. Mission
 
 gigemcp is an AGPL, security-first MCP gateway: it runs untrusted community MCP
@@ -227,20 +241,13 @@ helpers over rewriting the existing linear flow.
 
 ### 6.3 Server install operation — the `Installer` interface (you CONSUME, registry IMPLEMENTS)
 You need an interface the registry workstream provides and your install/uninstall
-API endpoints call. **Proposed shape (must match the registry doc):**
+API endpoints call. **This is the agreed shared contract with manifest-registry.md:
+the registry workstream IMPLEMENTS it, the frontend CONSUMES it.**
 
 ```go
-// Installer turns a manifest reference into an installed, runnable server record.
-// The registry workstream implements this; the frontend API consumes it.
-// manifestRef identifies a server in the signed registry index (e.g. "slack-mcp@1.4.2"
-// or a name the registry resolves against index.json).
 type Installer interface {
-    // Install resolves the manifest, pulls/verifies the OCI image by digest,
-    // extracts the rootfs, registers the server, and returns the stored record.
-    Install(ctx context.Context, manifestRef string) (store.Server, error)
-    // Uninstall removes an installed server by its stored name.
+    Install(ctx context.Context, ref string) (store.Server, error)  // ref = name@version | name(latest) | sha256:<digest>; idempotent by (name,version)
     Uninstall(ctx context.Context, name string) error
-    // List returns all installed servers.
     List(ctx context.Context) ([]store.Server, error)
 }
 ```
@@ -250,9 +257,9 @@ Notes for the agreement with the registry agent:
   (and attaches to profiles). Whether `Install` itself persists the row or returns
   an unsaved struct for the caller to persist is a coordination point — propose
   **Install persists** (it owns the `Server` manifest fields).
-- `manifestRef` is an opaque string the registry resolves; the frontend treats it
-  as a user-chosen identifier from the catalog list (a separate
-  registry-provided "list available" call feeds the dashboard's install picker).
+- `ref` is an opaque string the registry resolves; the frontend treats it as a
+  user-chosen identifier from the catalog list (a separate registry-provided "list
+  available" call feeds the dashboard's install picker).
 - Define the interface in a shared location both can import without a cycle (e.g.
   `internal/registry` owned by the registry agent, or a small `internal/installer`
   contract package). Agree on the package home before either side imports it.
