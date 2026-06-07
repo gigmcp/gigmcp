@@ -44,5 +44,18 @@ services:
       - apparmor=unconfined
       - systempaths=unconfined
 
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      # Server-side rewrite target; service DNS resolves to the gateway container.
+      # Note: for the OIDC callback to land on the right origin, the gateway's
+      # GIG_OIDC_REDIRECT_URL / GIG_PUBLIC_URL should point at the browser-facing
+      # origin, e.g. http://localhost:3000 when the dashboard is the entry point.
+      GATEWAY_INTERNAL_URL: http://gateway:8080
+    depends_on:
+      - gateway
+
 volumes:
   gigmcp-data:
