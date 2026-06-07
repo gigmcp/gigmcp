@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,11 @@ import (
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// errProfileHostClosed is returned by getOrCreate when Close has already been
+// called. It is also the sentinel returned to coalescing waiters when the
+// builder discovers the host was closed while the spawn was in-flight.
+var errProfileHostClosed = errors.New("profile host closed")
 
 // SpawnFunc launches one backend MCP server for a profile runtime. In
 // production it closes over SpawnEgressBackend (cmd/gateway wiring); tests
@@ -48,6 +54,7 @@ type ProfileHost struct {
 	Version string
 
 	mu       sync.Mutex
+	closed   bool // set by Close; never cleared
 	runtimes map[int64]*profileRuntime
 	// building tracks in-flight spawns. The chan struct{} is closed (broadcast)
 	// when the spawn finishes (successfully or not). All waiters then re-check
@@ -109,6 +116,14 @@ func (h *ProfileHost) serve(w http.ResponseWriter, r *http.Request) {
 func (h *ProfileHost) getOrCreate(p store.Profile) (*profileRuntime, error) {
 	for {
 		h.mu.Lock()
+
+		// Fast-path for Close: if the host has been shut down, return immediately.
+		// This check also catches waiters that loop back after a builder returned
+		// errProfileHostClosed (so they do not re-initialise the map and retry).
+		if h.closed {
+			h.mu.Unlock()
+			return nil, errProfileHostClosed
+		}
 		if h.runtimes == nil {
 			h.runtimes = map[int64]*profileRuntime{}
 		}
@@ -137,18 +152,36 @@ func (h *ProfileHost) getOrCreate(p store.Profile) (*profileRuntime, error) {
 		h.building[p.ID] = ch
 		h.mu.Unlock()
 
-		// Perform the spawn outside the lock.
-		rt, err := h.spawnProfile(p)
+		// buildAndStore performs the spawn and commits the result.  The
+		// deferred close(ch) is the ONLY place the channel is closed, so it
+		// fires on every exit path — normal return, error return, and panic —
+		// keeping coalescing waiters from hanging forever.
+		rt, err := func() (rt *profileRuntime, err error) {
+			defer close(ch) // broadcast to all waiters on every exit path
 
-		h.mu.Lock()
-		delete(h.building, p.ID)
-		if err == nil {
+			rt, err = h.spawnProfile(p)
+
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			delete(h.building, p.ID)
+
+			if err != nil {
+				return nil, err
+			}
+
+			// Nil-map guard: Close() was called while we were spawning.
+			// Abandon the freshly-built runtime — run its cleanups so no
+			// sandbox leaks, and return a closed-host error.
+			if h.runtimes == nil {
+				for _, c := range rt.cleanups {
+					c()
+				}
+				return nil, errProfileHostClosed
+			}
+
 			h.runtimes[p.ID] = rt
-		}
-		h.mu.Unlock()
-
-		// Broadcast: all waiting goroutines wake up and loop.
-		close(ch)
+			return rt, nil
+		}()
 
 		return rt, err
 	}
@@ -235,6 +268,9 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 // is called, the build is allowed to finish; the built runtime will be stored
 // and then torn down on the NEXT Invalidate (or Close). The subsequent request
 // after the first Invalidate re-spawns cleanly.
+//
+// Note: unlike Close, Invalidate does NOT set h.runtimes to nil, so an
+// in-flight builder will successfully store its result after Invalidate returns.
 func (h *ProfileHost) Invalidate(profileID int64) {
 	h.mu.Lock()
 	rt := h.runtimes[profileID]
@@ -248,11 +284,16 @@ func (h *ProfileHost) Invalidate(profileID int64) {
 	}
 }
 
-// Close tears down all runtimes (gateway shutdown).
+// Close tears down all runtimes (gateway shutdown). It sets h.runtimes to nil
+// so that any builder goroutine that completes a spawn after Close returns will
+// detect the nil map, run the freshly-built runtime's cleanups (no sandbox
+// leak), and return errProfileHostClosed to its callers instead of panicking
+// or storing into a nil map.
 func (h *ProfileHost) Close() {
 	h.mu.Lock()
 	rts := h.runtimes
 	h.runtimes = nil
+	h.closed = true
 	h.mu.Unlock()
 	for _, rt := range rts {
 		for _, c := range rt.cleanups {

@@ -492,3 +492,113 @@ func TestProfileHostInvalidateWithInFlight(t *testing.T) {
 		t.Fatalf("expected 2 total spawns after respawn, got %d", sp.spawnCount())
 	}
 }
+
+// TestProfileHostCloseDuringSpawn is the probe test for the Close-during-spawn
+// defect: Close() nils h.runtimes while a builder goroutine is in-flight; the
+// builder then panics writing to a nil map, which skips close(ch) leaving
+// coalesced waiters hung, and the freshly-built runtime's cleanups never run.
+//
+// Assertions:
+//  1. No panic — the request returns an error (or succeeds), it must not crash.
+//  2. Spawned runtime's cleanup ran: echoSpawner cleanupCount == spawnCount.
+//  3. A second waiter goroutine started before Close does not hang (bounded timeout).
+func TestProfileHostCloseDuringSpawn(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "ph-close-spawn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	if _, err := st.EnsureServer(ctx, "echo", "/bin/echo-mcp"); err != nil {
+		t.Fatal(err)
+	}
+	_, tok := seedProfile(t, st, "closespawn", []string{"echo"})
+
+	// gate is held open by the test; the spawner blocks inside SpawnFunc until
+	// we release it (so we can race Close against the in-flight build).
+	gate := make(chan struct{})
+	// spawnStarted is closed once the spawner has entered SpawnFunc, so we know
+	// the build is truly in-flight before we call Close.
+	spawnStarted := make(chan struct{})
+	var startOnce sync.Once
+
+	sp := &echoSpawner{t: t}
+
+	gatedSpawn := func(ctx context.Context, srv store.Server, tenant string) (*gateway.EgressBackend, error) {
+		startOnce.Do(func() { close(spawnStarted) })
+		<-gate // block until test releases
+		return sp.spawn(ctx, srv, tenant)
+	}
+
+	host := &gateway.ProfileHost{Store: st, Spawn: gatedSpawn, Version: "test"}
+	// NOTE: do NOT register host.Close via t.Cleanup — we call it manually below
+	// and need to control ordering.
+	ts := httptest.NewServer(host.Handler())
+	t.Cleanup(ts.Close)
+
+	makeRequest := func() error {
+		c := mcp.NewClient(&mcp.Implementation{Name: "close-spawn-client", Version: "0"}, nil)
+		sess, err := c.Connect(ctx, &mcp.StreamableClientTransport{
+			Endpoint:   ts.URL + "/mcp/p/closespawn",
+			HTTPClient: &http.Client{Transport: &bearerTransport{token: tok}},
+		}, nil)
+		if err != nil {
+			return err
+		}
+		defer sess.Close()
+		_, err = sess.ListTools(ctx, nil)
+		return err
+	}
+
+	// Goroutine 1: the cold-start builder — will be inside SpawnFunc when Close fires.
+	req1Done := make(chan error, 1)
+	go func() { req1Done <- makeRequest() }()
+
+	// Wait until the spawn is actually in-flight.
+	select {
+	case <-spawnStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for spawn to start")
+	}
+
+	// Goroutine 2: a second waiter that arrived after the builder claimed the slot
+	// and is now blocked on <-ch. It must not hang after Close.
+	req2Done := make(chan error, 1)
+	go func() { req2Done <- makeRequest() }()
+
+	// Give goroutine 2 a moment to reach the <-ch wait inside getOrCreate.
+	time.Sleep(50 * time.Millisecond)
+
+	// Fire Close while the spawn is in-flight (the nil-map defect lives here).
+	host.Close()
+
+	// Release the gate — the builder will now try to store its result into the
+	// nilled map and (before the fix) panic.
+	close(gate)
+
+	const budget = 5 * time.Second
+
+	// Goroutine 1 must return (error or success) — must NOT panic or hang.
+	select {
+	case err := <-req1Done:
+		// Any outcome other than a hang is acceptable; log it for diagnosis.
+		t.Logf("req1 result: %v", err)
+	case <-time.After(budget):
+		t.Error("req1 hung after Close+gate-release: possible deadlock in close(ch)")
+	}
+
+	// Goroutine 2 must also return without hanging.
+	select {
+	case err := <-req2Done:
+		t.Logf("req2 result: %v", err)
+	case <-time.After(budget):
+		t.Error("req2 hung: coalescing waiter was never unblocked")
+	}
+
+	// The spawned runtime's cleanups must have run (no sandbox leak).
+	spawned := sp.spawnCount()
+	cleaned := sp.cleanupCount()
+	if spawned > 0 && cleaned != spawned {
+		t.Errorf("sandbox leak: spawned=%d cleanups=%d (want equal)", spawned, cleaned)
+	}
+}
