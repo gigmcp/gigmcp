@@ -23,7 +23,7 @@ func toUserJSON(u store.User) userJSON {
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	effective, ok := auth.EffectiveUser(r.Context())
 	if !ok {
-		writeErr(w, http.StatusUnauthorized, "unauthenticated", "no user in context")
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "no user in context")
 		return
 	}
 	resp := struct {

@@ -47,6 +47,6 @@ func (s *Server) Routes() *http.ServeMux {
 		mux.HandleFunc("GET /api/auth/callback", s.Auth.CallbackHandler)
 		mux.HandleFunc("POST /api/auth/logout", s.Auth.LogoutHandler)
 	}
-	mux.Handle("/api/", auth.SessionMiddleware(s.Store, authed))
+	mux.Handle("/api/", auth.SessionMiddleware(s.Store, envelopeMux(authed)))
 	return mux
 }

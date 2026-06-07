@@ -66,8 +66,9 @@ func seedUserSession(t *testing.T, st store.Store, email, role string) (store.Us
 	return u, &http.Cookie{Name: auth.SessionCookie, Value: tok}
 }
 
-// doJSON sends a request with optional cookie + JSON body, returning status + body.
-func doJSON(t *testing.T, ts *httptest.Server, cookie *http.Cookie, method, path, body string) (int, []byte) {
+// doResp sends a request with optional cookie + JSON body, returning the full response.
+// Callers are responsible for closing resp.Body.
+func doResp(t *testing.T, ts *httptest.Server, cookie *http.Cookie, method, path, body string) *http.Response {
 	t.Helper()
 	var rd io.Reader
 	if body != "" {
@@ -87,6 +88,13 @@ func doJSON(t *testing.T, ts *httptest.Server, cookie *http.Cookie, method, path
 	if err != nil {
 		t.Fatal(err)
 	}
+	return resp
+}
+
+// doJSON sends a request with optional cookie + JSON body, returning status + body.
+func doJSON(t *testing.T, ts *httptest.Server, cookie *http.Cookie, method, path, body string) (int, []byte) {
+	t.Helper()
+	resp := doResp(t, ts, cookie, method, path, body)
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -124,6 +132,90 @@ func TestMeReturnsEffectiveUser(t *testing.T) {
 	}
 	if got.User.ID != u.ID || got.User.Email != "alice@x" || got.User.Role != "user" || got.Impersonating {
 		t.Fatalf("me: %+v", got)
+	}
+}
+
+// TestMeCacheControl verifies Cache-Control: no-store is set on JSON responses (I1).
+func TestMeCacheControl(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	resp := doResp(t, ts, cookie, "GET", "/api/me", "")
+	defer resp.Body.Close()
+	io.ReadAll(resp.Body) //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control: want no-store, got %q", got)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type: want application/json, got %q", ct)
+	}
+}
+
+// TestMeNoLeak verifies sensitive OIDC/session data is not leaked in /api/me (M3).
+func TestMeNoLeak(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	_, body := doJSON(t, ts, cookie, "GET", "/api/me", "")
+	bodyStr := string(body)
+
+	// The OIDC issuer injected in seedUserSession must not appear.
+	if strings.Contains(bodyStr, "issuer") {
+		t.Fatalf("/api/me leaks 'issuer': %s", bodyStr)
+	}
+	// The OIDC subject prefix must not appear.
+	if strings.Contains(bodyStr, "sub-") {
+		t.Fatalf("/api/me leaks OIDC subject: %s", bodyStr)
+	}
+}
+
+// TestAuthedMux404JSON verifies that an unknown authenticated route returns a
+// JSON envelope (not bare text/plain) with status 404 (I2).
+func TestAuthedMux404JSON(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	resp := doResp(t, ts, cookie, "GET", "/api/nonexistent", "")
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, b)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type: want application/json, got %q", ct)
+	}
+	if !strings.Contains(string(b), `"not_found"`) {
+		t.Fatalf("404 body missing not_found code: %s", b)
+	}
+}
+
+// TestAuthedMux405JSON verifies that a wrong-method request against a known
+// authenticated route returns a JSON envelope (not bare text/plain) with status
+// 405 and a non-empty Allow header (I2).
+func TestAuthedMux405JSON(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	resp := doResp(t, ts, cookie, "POST", "/api/me", "")
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d: %s", resp.StatusCode, b)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type: want application/json, got %q", ct)
+	}
+	if allow := resp.Header.Get("Allow"); allow == "" {
+		t.Fatal("Allow header missing on 405")
+	}
+	if !strings.Contains(string(b), `"method_not_allowed"`) {
+		t.Fatalf("405 body missing method_not_allowed code: %s", b)
 	}
 }
 
