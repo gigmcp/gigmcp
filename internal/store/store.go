@@ -3,7 +3,10 @@
 // backends with no driver-specific features in core.
 package store
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Server is a registered MCP server the gateway should run.
 type Server struct {
@@ -40,5 +43,15 @@ type Store interface {
 	GetUser(ctx context.Context, id int64) (User, error)
 	// ListUsers returns all users ordered by id.
 	ListUsers(ctx context.Context) ([]User, error)
+	// CreateSession inserts an opaque session row keyed by token hash.
+	CreateSession(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error
+	// GetSession fetches a live session; expired rows are deleted on read (ErrSessionNotFound).
+	GetSession(ctx context.Context, tokenHash string) (Session, error)
+	// DeleteSession removes a session.
+	DeleteSession(ctx context.Context, tokenHash string) error
+	// SetImpersonation stamps view-as state onto a session.
+	SetImpersonation(ctx context.Context, tokenHash string, targetUserID int64, expiresAt time.Time) error
+	// ClearImpersonation removes view-as state from a session.
+	ClearImpersonation(ctx context.Context, tokenHash string) error
 	Close() error
 }

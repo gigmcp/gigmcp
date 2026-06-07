@@ -1,0 +1,97 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+)
+
+// ErrSessionNotFound is returned for unknown or expired sessions.
+var ErrSessionNotFound = errors.New("store: session not found")
+
+// Session is an opaque DB-backed browser session (spec §1 decision 1).
+// TokenHash is the SHA-256 hex of the cookie value — the plaintext never
+// touches the database. The impersonation columns implement DESIGN #20
+// view-as mode.
+type Session struct {
+	TokenHash              string
+	UserID                 int64
+	CreatedAt              time.Time
+	ExpiresAt              time.Time
+	ImpersonatingUserID    *int64
+	ImpersonationExpiresAt *time.Time
+}
+
+const sessionsSchema = `
+CREATE TABLE IF NOT EXISTS sessions (
+	token_hash               TEXT PRIMARY KEY,
+	user_id                  INTEGER NOT NULL,
+	created_at               INTEGER NOT NULL,
+	expires_at               INTEGER NOT NULL,
+	impersonating_user_id    INTEGER,
+	impersonation_expires_at INTEGER
+);`
+
+// CreateSession inserts a session row.
+func (s *sqliteStore) CreateSession(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO sessions (token_hash,user_id,created_at,expires_at) VALUES (?,?,?,?)`,
+		tokenHash, userID, time.Now().Unix(), expiresAt.Unix())
+	return err
+}
+
+// GetSession fetches a live session. Expired rows are deleted on read and
+// reported as ErrSessionNotFound (cheap lazy reaping; no background sweeper).
+func (s *sqliteStore) GetSession(ctx context.Context, tokenHash string) (Session, error) {
+	var sess Session
+	var created, expires int64
+	var impID, impExp sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT token_hash,user_id,created_at,expires_at,impersonating_user_id,impersonation_expires_at
+		 FROM sessions WHERE token_hash=?`, tokenHash).
+		Scan(&sess.TokenHash, &sess.UserID, &created, &expires, &impID, &impExp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Session{}, err
+	}
+	sess.CreatedAt = time.Unix(created, 0)
+	sess.ExpiresAt = time.Unix(expires, 0)
+	if impID.Valid {
+		v := impID.Int64
+		sess.ImpersonatingUserID = &v
+	}
+	if impExp.Valid {
+		tv := time.Unix(impExp.Int64, 0)
+		sess.ImpersonationExpiresAt = &tv
+	}
+	if time.Now().After(sess.ExpiresAt) {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, tokenHash)
+		return Session{}, ErrSessionNotFound
+	}
+	return sess, nil
+}
+
+// DeleteSession removes a session (logout / revocation). Missing rows are not an error.
+func (s *sqliteStore) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, tokenHash)
+	return err
+}
+
+// SetImpersonation stamps view-as state onto a session row.
+func (s *sqliteStore) SetImpersonation(ctx context.Context, tokenHash string, targetUserID int64, expiresAt time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET impersonating_user_id=?, impersonation_expires_at=? WHERE token_hash=?`,
+		targetUserID, expiresAt.Unix(), tokenHash)
+	return err
+}
+
+// ClearImpersonation removes view-as state from a session row.
+func (s *sqliteStore) ClearImpersonation(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE sessions SET impersonating_user_id=NULL, impersonation_expires_at=NULL WHERE token_hash=?`,
+		tokenHash)
+	return err
+}
