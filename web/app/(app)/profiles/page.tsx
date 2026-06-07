@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import {
   useProfiles,
   useCreateProfile,
+  useReadOnly,
 } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { TokenRevealDialog } from "@/components/token-reveal-dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -18,12 +20,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-function CreateProfileDialog() {
+const READ_ONLY_TITLE = "Read-only while viewing as another user";
+
+function CreateProfileDialog({ disabled }: { disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -72,10 +82,28 @@ function CreateProfileDialog() {
     );
   }
 
+  const trigger = (
+    <Button onClick={() => setOpen(true)} disabled={disabled}>
+      Create profile
+    </Button>
+  );
+
   return (
     <>
+      {disabled ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <span tabIndex={0}>{trigger}</span>
+            </TooltipTrigger>
+            <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        trigger
+      )}
+
       <Dialog open={open} onOpenChange={handleOpen}>
-        <Button onClick={() => setOpen(true)}>Create profile</Button>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create profile</DialogTitle>
@@ -137,6 +165,7 @@ function CreateProfileDialog() {
 
 export default function ProfilesPage() {
   const profiles = useProfiles();
+  const readOnly = useReadOnly();
 
   const columns: Column<Profile>[] = [
     {
@@ -174,11 +203,19 @@ export default function ProfilesPage() {
             MCP endpoint profiles with bundled server sets.
           </p>
         </div>
-        <CreateProfileDialog />
+        <CreateProfileDialog disabled={readOnly} />
       </div>
 
       {profiles.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
+          ))}
+        </div>
+      ) : profiles.data && profiles.data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No profiles yet. Create one to get started.
+        </p>
       ) : (
         <DataTable
           columns={columns}

@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useCredentials, usePutCredential, useDeleteCredential } from "@/lib/queries";
+import { useCredentials, usePutCredential, useDeleteCredential, useReadOnly } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -14,11 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import type { Credential, CredentialPutBody } from "@/lib/types";
 import type { Column } from "@/components/data-table";
+
+const READ_ONLY_TITLE = "Read-only while viewing as another user";
 
 interface CredentialDialogProps {
   open: boolean;
@@ -233,6 +242,7 @@ function CredentialDialog({
 export default function CredentialsPage() {
   const credentials = useCredentials();
   const deleteCredential = useDeleteCredential();
+  const readOnly = useReadOnly();
   const [addOpen, setAddOpen] = useState(false);
   const [editServer, setEditServer] = useState<string | null>(null);
 
@@ -258,43 +268,74 @@ export default function CredentialsPage() {
     },
     {
       header: "Actions",
-      cell: (c) => (
-        <div className="flex items-center gap-2">
+      cell: (c) => {
+        const updateBtn = (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setEditServer(c.server)}
+            disabled={readOnly}
+            onClick={() => !readOnly && setEditServer(c.server)}
           >
             Update
           </Button>
-          <ConfirmDialog
-            trigger={
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={deleteCredential.isPending}
-              >
-                Delete
-              </Button>
-            }
-            title={`Delete credential for "${c.server}"?`}
-            description="The stored secret will be permanently removed."
-            confirmLabel="Delete"
-            isPending={deleteCredential.isPending}
-            onConfirm={() => {
-              deleteCredential.mutate(c.server, {
-                onSuccess: () =>
-                  toast.success(`Credential for "${c.server}" deleted`),
-                onError: (err) => {
-                  const msg =
-                    err instanceof ApiError ? err.message : "Delete failed";
-                  toast.error(msg);
-                },
-              });
-            }}
-          />
-        </div>
-      ),
+        );
+        const deleteBtn = (
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={deleteCredential.isPending || readOnly}
+          >
+            Delete
+          </Button>
+        );
+
+        if (readOnly) {
+          return (
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span tabIndex={0}>{updateBtn}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span tabIndex={0}>{deleteBtn}</span>
+                  </TooltipTrigger>
+                  <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center gap-2">
+            {updateBtn}
+            <ConfirmDialog
+              trigger={deleteBtn}
+              title={`Delete credential for "${c.server}"?`}
+              description="The stored secret will be permanently removed."
+              confirmLabel="Delete"
+              isPending={deleteCredential.isPending}
+              onConfirm={() => {
+                deleteCredential.mutate(c.server, {
+                  onSuccess: () =>
+                    toast.success(`Credential for "${c.server}" deleted`),
+                  onError: (err) => {
+                    const msg =
+                      err instanceof ApiError ? err.message : "Delete failed";
+                    toast.error(msg);
+                  },
+                });
+              }}
+            />
+          </div>
+        );
+      },
     },
   ];
 
@@ -308,11 +349,32 @@ export default function CredentialsPage() {
             never displayed.
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>Add credential</Button>
+        {readOnly ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <span tabIndex={0}>
+                  <Button disabled>Add credential</Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Button onClick={() => setAddOpen(true)}>Add credential</Button>
+        )}
       </div>
 
       {credentials.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
+          ))}
+        </div>
+      ) : credentials.data && credentials.data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No credentials yet. Add one to enable secret injection for a server.
+        </p>
       ) : (
         <DataTable
           columns={columns}

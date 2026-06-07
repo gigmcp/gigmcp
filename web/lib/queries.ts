@@ -20,6 +20,13 @@ export const keys = {
 export const useMe = () =>
   useQuery({ queryKey: keys.me, queryFn: api.me, retry: false });
 
+/** Returns true while the session is an impersonation — mutations are 403'd
+ *  server-side; this hook lets UI components disable controls proactively. */
+export const useReadOnly = () => {
+  const me = useMe();
+  return me.data?.impersonating ?? false;
+};
+
 export const useProfiles = () =>
   useQuery({ queryKey: keys.profiles, queryFn: api.listProfiles });
 export const useProfile = (id: number) =>

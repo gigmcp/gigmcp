@@ -11,6 +11,7 @@ import { ApiError } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -181,7 +182,15 @@ export default function UsersPage() {
       </div>
 
       {users.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
+          ))}
+        </div>
+      ) : users.data && users.data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No users found.
+        </p>
       ) : (
         <DataTable
           columns={columns}

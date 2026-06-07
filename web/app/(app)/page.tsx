@@ -4,6 +4,7 @@ import { useMe, useProfiles, useServers, useCredentials, useUsers, keys } from "
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/data-table";
 import type { AuditEvent } from "@/lib/types";
 import type { Column } from "@/components/data-table";
@@ -117,7 +118,15 @@ export default function OverviewPage() {
       <div>
         <h2 className="mb-4 text-lg font-semibold">Recent activity</h2>
         {audit.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-md" />
+            ))}
+          </div>
+        ) : audit.data?.events.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No activity yet.
+          </p>
         ) : (
           <DataTable
             columns={auditColumns}

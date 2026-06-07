@@ -9,6 +9,7 @@ import {
   useRenameProfile,
   useRotateToken,
   useDeleteProfile,
+  useReadOnly,
 } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { TokenRevealDialog } from "@/components/token-reveal-dialog";
@@ -18,12 +19,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Profile } from "@/lib/types";
+
+const READ_ONLY_TITLE = "Read-only while viewing as another user";
 
 interface ProfileDetailProps {
   profile: Profile;
   initialName: string;
   initialServers: Set<string>;
+  readOnly: boolean;
 }
 
 // Inner component is keyed by profile id so React remounts it (and thus
@@ -32,6 +43,7 @@ function ProfileDetail({
   profile: p,
   initialName,
   initialServers,
+  readOnly,
 }: ProfileDetailProps) {
   const router = useRouter();
 
@@ -123,6 +135,20 @@ function ProfileDetail({
     );
   }
 
+  function maybeWrapTooltip(btn: React.ReactNode) {
+    if (!readOnly) return btn;
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger>
+            <span tabIndex={0}>{btn}</span>
+          </TooltipTrigger>
+          <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
@@ -151,31 +177,41 @@ function ProfileDetail({
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Server bundle</h2>
         {servers.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading servers…</p>
+          <div className="space-y-2">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-6 w-48 rounded" />
+            ))}
+          </div>
         ) : servers.data && servers.data.length > 0 ? (
           <div className="space-y-2">
             {servers.data.map((s) => (
               <label
                 key={s.name}
-                className="flex cursor-pointer items-center gap-3"
+                className={[
+                  "flex cursor-pointer items-center gap-3",
+                  readOnly ? "opacity-60 cursor-not-allowed" : "",
+                ].join(" ")}
               >
                 <Checkbox
                   checked={selectedServers.has(s.name)}
+                  disabled={readOnly}
                   onCheckedChange={(checked) =>
-                    toggleServer(s.name, checked as boolean)
+                    !readOnly && toggleServer(s.name, checked as boolean)
                   }
                 />
                 <span className="text-sm">{s.name}</span>
               </label>
             ))}
             <div className="pt-2">
-              <Button
-                onClick={handleSaveBundle}
-                disabled={setServersMut.isPending}
-                size="sm"
-              >
-                {setServersMut.isPending ? "Saving…" : "Save bundle"}
-              </Button>
+              {maybeWrapTooltip(
+                <Button
+                  onClick={handleSaveBundle}
+                  disabled={setServersMut.isPending || readOnly}
+                  size="sm"
+                >
+                  {setServersMut.isPending ? "Saving…" : "Save bundle"}
+                </Button>,
+              )}
             </div>
           </div>
         ) : (
@@ -198,24 +234,28 @@ function ProfileDetail({
             <Input
               id="rename-input"
               value={profileName}
+              disabled={readOnly}
               onChange={(e) => setProfileName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleRename();
+                if (e.key === "Enter" && !readOnly) handleRename();
               }}
             />
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRename}
-            disabled={
-              rename.isPending ||
-              !profileName.trim() ||
-              profileName.trim() === p.name
-            }
-          >
-            {rename.isPending ? "Saving…" : "Rename"}
-          </Button>
+          {maybeWrapTooltip(
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRename}
+              disabled={
+                rename.isPending ||
+                readOnly ||
+                !profileName.trim() ||
+                profileName.trim() === p.name
+              }
+            >
+              {rename.isPending ? "Saving…" : "Rename"}
+            </Button>,
+          )}
         </div>
       </section>
 
@@ -227,13 +267,15 @@ function ProfileDetail({
         <p className="text-sm text-muted-foreground">
           Generates a new token and immediately invalidates the previous one.
         </p>
-        <Button
-          variant="outline"
-          onClick={handleRotateToken}
-          disabled={rotateToken.isPending}
-        >
-          {rotateToken.isPending ? "Rotating…" : "Rotate token"}
-        </Button>
+        {maybeWrapTooltip(
+          <Button
+            variant="outline"
+            onClick={handleRotateToken}
+            disabled={rotateToken.isPending || readOnly}
+          >
+            {rotateToken.isPending ? "Rotating…" : "Rotate token"}
+          </Button>,
+        )}
       </section>
 
       <Separator />
@@ -246,18 +288,26 @@ function ProfileDetail({
         <p className="text-sm text-muted-foreground">
           This is permanent. The endpoint will stop working immediately.
         </p>
-        <ConfirmDialog
-          trigger={
-            <Button variant="destructive" disabled={deleteProfile.isPending}>
+        {readOnly ? (
+          maybeWrapTooltip(
+            <Button variant="destructive" disabled>
               Delete profile
-            </Button>
-          }
-          title={`Delete "${p.name}"?`}
-          description="This will permanently delete the profile and its endpoint. This action cannot be undone."
-          confirmLabel="Delete"
-          isPending={deleteProfile.isPending}
-          onConfirm={handleDelete}
-        />
+            </Button>,
+          )
+        ) : (
+          <ConfirmDialog
+            trigger={
+              <Button variant="destructive" disabled={deleteProfile.isPending}>
+                Delete profile
+              </Button>
+            }
+            title={`Delete "${p.name}"?`}
+            description="This will permanently delete the profile and its endpoint. This action cannot be undone."
+            confirmLabel="Delete"
+            isPending={deleteProfile.isPending}
+            onConfirm={handleDelete}
+          />
+        )}
       </section>
 
       <TokenRevealDialog
@@ -273,13 +323,31 @@ export default function ProfileDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const profile = useProfile(id);
+  const readOnly = useReadOnly();
 
   if (profile.isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return (
+      <div className="max-w-2xl space-y-8">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-6 w-40" />
+        </div>
+      </div>
+    );
   }
 
   if (!profile.data) {
-    return <p className="text-sm text-destructive">Profile not found.</p>;
+    return (
+      <p className="py-8 text-center text-sm text-destructive">
+        Profile not found.
+      </p>
+    );
   }
 
   const p = profile.data;
@@ -290,6 +358,7 @@ export default function ProfileDetailPage() {
       profile={p}
       initialName={p.name}
       initialServers={new Set(p.servers)}
+      readOnly={readOnly}
     />
   );
 }

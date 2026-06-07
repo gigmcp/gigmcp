@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useMe, useServers, useInstallServer, useUninstallServer } from "@/lib/queries";
+import { useMe, useServers, useInstallServer, useUninstallServer, useReadOnly } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { DataTable } from "@/components/data-table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +15,20 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Server } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-function InstallDialog({ onSuccess }: { onSuccess: () => void }) {
+const READ_ONLY_TITLE = "Read-only while viewing as another user";
+
+function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
   const install = useInstallServer();
@@ -41,38 +50,57 @@ function InstallDialog({ onSuccess }: { onSuccess: () => void }) {
     });
   }
 
+  const trigger = (
+    <Button onClick={() => setOpen(true)} disabled={disabled}>
+      Install server
+    </Button>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button onClick={() => setOpen(true)}>Install server</Button>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Install server</DialogTitle>
-          <DialogDescription>
-            Provide a server ref (e.g. a registry name or URL).
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="ref">Server ref</Label>
-          <Input
-            id="ref"
-            placeholder="e.g. acme/my-server"
-            value={ref}
-            onChange={(e) => setRef(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleInstall();
-            }}
-          />
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={handleInstall}
-            disabled={install.isPending || !ref.trim()}
-          >
-            {install.isPending ? "Installing…" : "Install"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      {disabled ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <span tabIndex={0}>{trigger}</span>
+            </TooltipTrigger>
+            <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        trigger
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Install server</DialogTitle>
+            <DialogDescription>
+              Provide a server ref (e.g. a registry name or URL).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="ref">Server ref</Label>
+            <Input
+              id="ref"
+              placeholder="e.g. acme/my-server"
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleInstall();
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleInstall}
+              disabled={install.isPending || !ref.trim()}
+            >
+              {install.isPending ? "Installing…" : "Install"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -80,6 +108,7 @@ export default function ServersPage() {
   const me = useMe();
   const servers = useServers();
   const uninstall = useUninstallServer();
+  const readOnly = useReadOnly();
   const isAdmin = me.data?.user.role === "admin";
 
   const columns: Column<Server>[] = [
@@ -89,36 +118,51 @@ export default function ServersPage() {
       ? [
           {
             header: "Actions",
-            cell: (s: Server) => (
-              <ConfirmDialog
-                trigger={
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={uninstall.isPending}
-                  >
-                    Uninstall
-                  </Button>
-                }
-                title={`Uninstall "${s.name}"?`}
-                description="This will remove the server from all profiles that reference it."
-                confirmLabel="Uninstall"
-                isPending={uninstall.isPending}
-                onConfirm={() => {
-                  uninstall.mutate(s.name, {
-                    onSuccess: () =>
-                      toast.success(`Uninstalled server "${s.name}"`),
-                    onError: (err) => {
-                      const msg =
-                        err instanceof ApiError
-                          ? err.message
-                          : "Uninstall failed";
-                      toast.error(msg);
-                    },
-                  });
-                }}
-              />
-            ),
+            cell: (s: Server) => {
+              const btn = (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={uninstall.isPending || readOnly}
+                >
+                  Uninstall
+                </Button>
+              );
+              if (readOnly) {
+                return (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <span tabIndex={0}>{btn}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{READ_ONLY_TITLE}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              }
+              return (
+                <ConfirmDialog
+                  trigger={btn}
+                  title={`Uninstall "${s.name}"?`}
+                  description="This will remove the server from all profiles that reference it."
+                  confirmLabel="Uninstall"
+                  isPending={uninstall.isPending}
+                  onConfirm={() => {
+                    uninstall.mutate(s.name, {
+                      onSuccess: () =>
+                        toast.success(`Uninstalled server "${s.name}"`),
+                      onError: (err) => {
+                        const msg =
+                          err instanceof ApiError
+                            ? err.message
+                            : "Uninstall failed";
+                        toast.error(msg);
+                      },
+                    });
+                  }}
+                />
+              );
+            },
           },
         ]
       : []),
@@ -133,11 +177,21 @@ export default function ServersPage() {
             Installed MCP servers available for profiles.
           </p>
         </div>
-        {isAdmin && <InstallDialog onSuccess={() => {}} />}
+        {isAdmin && <InstallDialog onSuccess={() => {}} disabled={readOnly} />}
       </div>
 
       {servers.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full rounded-md" />
+          ))}
+        </div>
+      ) : servers.data && servers.data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          {isAdmin
+            ? "No servers installed yet. Use the Install server button to add one."
+            : "No servers installed yet."}
+        </p>
       ) : (
         <DataTable
           columns={columns}
