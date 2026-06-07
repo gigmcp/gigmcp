@@ -1,0 +1,37 @@
+{
+  "title": "Usuarios",
+  "description": "Todos los usuarios registrados. Pantalla exclusiva para administradores.",
+  "adminOnly": {
+    "title": "Solo administradores",
+    "description": "Necesitas una cuenta de administrador para ver esta página."
+  },
+  "table": {
+    "id": "ID",
+    "email": "Email",
+    "displayName": "Nombre visible",
+    "role": "Rol",
+    "actions": "Acciones",
+    "noValue": "—"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "Usuario"
+  },
+  "empty": "No se encontraron usuarios.",
+  "actions": {
+    "impersonate": "Suplantar",
+    "stopViewing": "Dejar de ver",
+    "stopping": "Deteniendo…"
+  },
+  "dialog": {
+    "title": "Ver como {name}",
+    "description": "Verás el dashboard como este usuario. Todas las modificaciones están bloqueadas mientras se visualiza como otro usuario.",
+    "ttlLabel": "Duración (minutos, máx. 60)",
+    "submit": "Ver como usuario",
+    "starting": "Iniciando…"
+  },
+  "toast": {
+    "viewingAs": "Viendo como {email}",
+    "impersonationFailed": "Error en la suplantación"
+  }
+}

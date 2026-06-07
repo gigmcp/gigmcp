@@ -1,0 +1,32 @@
+{
+  "title": "Servers",
+  "description": "Installed MCP servers available for profiles.",
+  "readOnlyTooltip": "Read-only while viewing as another user",
+  "table": {
+    "id": "ID",
+    "name": "Name",
+    "actions": "Actions"
+  },
+  "install": {
+    "button": "Install server",
+    "dialogTitle": "Install server",
+    "dialogDescription": "Provide a server ref: a name, name@version, or sha256:digest — e.g. \"bitwarden\".",
+    "refLabel": "Server ref",
+    "refPlaceholder": "bitwarden",
+    "submit": "Install",
+    "submitting": "Installing…",
+    "success": "Installed server \"{name}\"",
+    "error": "Install failed"
+  },
+  "uninstall": {
+    "button": "Uninstall",
+    "confirmTitle": "Uninstall \"{name}\"?",
+    "confirmDescription": "This will remove the server from all profiles that reference it.",
+    "confirmLabel": "Uninstall",
+    "success": "Uninstalled server \"{name}\"",
+    "error": "Uninstall failed"
+  },
+  "empty": {
+    "title": "No servers installed yet"
+  }
+}

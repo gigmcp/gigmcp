@@ -1,0 +1,80 @@
+{
+  "readOnlyTooltip": "Lecture seule lors de la consultation en tant qu'un autre utilisateur",
+  "list": {
+    "title": "Profils",
+    "description": "Profils d'endpoints MCP avec leurs ensembles de serveurs.",
+    "columns": {
+      "name": "Nom",
+      "slug": "Slug",
+      "endpoint": "Endpoint",
+      "servers": "Serveurs"
+    },
+    "empty": {
+      "title": "Aucun profil pour l'instant",
+      "description": "Créez un profil pour obtenir un endpoint MCP avec un ensemble de serveurs sélectionnés."
+    }
+  },
+  "create": {
+    "trigger": "Créer un profil",
+    "title": "Créer un profil",
+    "description": "Un profil fournit un endpoint MCP avec un ensemble de serveurs sélectionnés.",
+    "nameLabel": "Nom",
+    "namePlaceholder": "Mon profil",
+    "slugLabel": "Slug",
+    "slugPlaceholder": "mon-profil",
+    "slugHint": "Lettres minuscules, chiffres et tirets (2–63 caractères, doit commencer par une lettre ou un chiffre).",
+    "submit": "Créer",
+    "submitting": "Création…",
+    "successToast": "Profil « {name} » créé",
+    "errors": {
+      "slugTaken": "Ce slug est déjà utilisé. Veuillez en choisir un autre.",
+      "generic": "Impossible de créer le profil"
+    }
+  },
+  "detail": {
+    "description": "Détail du profil — slug : <mono>{slug}</mono>",
+    "notFound": "Profil introuvable.",
+    "endpoint": {
+      "title": "URL de l'endpoint",
+      "description": "Pointez votre client MCP sur cette URL.",
+      "copy": "Copier",
+      "copiedToast": "URL de l'endpoint copiée"
+    },
+    "bundle": {
+      "title": "Bundle de serveurs",
+      "description": "Choisissez quels serveurs installés ce profil expose.",
+      "save": "Enregistrer le bundle",
+      "saving": "Enregistrement…",
+      "savedToast": "Bundle enregistré",
+      "saveFailed": "Échec de l'enregistrement",
+      "noServers": "Aucun serveur installé pour l'instant."
+    },
+    "rename": {
+      "title": "Renommer le profil",
+      "description": "Le nom d'affichage de ce profil.",
+      "inputLabel": "Nom du profil",
+      "submit": "Renommer",
+      "submitting": "Enregistrement…",
+      "successToast": "Profil renommé",
+      "failed": "Échec du renommage"
+    },
+    "rotate": {
+      "title": "Renouveler le token",
+      "description": "Génère un nouveau token et invalide immédiatement le précédent.",
+      "submit": "Renouveler le token",
+      "submitting": "Renouvellement…",
+      "successToast": "Token renouvelé",
+      "failed": "Échec du renouvellement"
+    },
+    "delete": {
+      "title": "Supprimer le profil",
+      "description": "Cette action est permanente. L'endpoint cessera de fonctionner immédiatement.",
+      "submit": "Supprimer le profil",
+      "confirmTitle": "Supprimer « {name} » ?",
+      "confirmDescription": "Le profil et son endpoint seront définitivement supprimés. Cette action est irréversible.",
+      "confirmLabel": "Supprimer",
+      "successToast": "Profil supprimé",
+      "failed": "Échec de la suppression"
+    }
+  }
+}

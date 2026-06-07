@@ -1,0 +1,80 @@
+{
+  "readOnlyTooltip": "Sola lettura mentre si visualizza come un altro utente",
+  "list": {
+    "title": "Profili",
+    "description": "Profili endpoint MCP con set di server inclusi.",
+    "columns": {
+      "name": "Nome",
+      "slug": "Slug",
+      "endpoint": "Endpoint",
+      "servers": "Server"
+    },
+    "empty": {
+      "title": "Nessun profilo",
+      "description": "Crea un profilo per ottenere un endpoint MCP con un set curato di server."
+    }
+  },
+  "create": {
+    "trigger": "Crea profilo",
+    "title": "Crea profilo",
+    "description": "Un profilo fornisce un endpoint MCP con un set curato di server.",
+    "nameLabel": "Nome",
+    "namePlaceholder": "Il mio profilo",
+    "slugLabel": "Slug",
+    "slugPlaceholder": "il-mio-profilo",
+    "slugHint": "Lettere minuscole, cifre e trattini (2–63 caratteri, deve iniziare con una lettera o cifra).",
+    "submit": "Crea",
+    "submitting": "Creazione…",
+    "successToast": "Profilo \"{name}\" creato",
+    "errors": {
+      "slugTaken": "Lo slug è già in uso. Scegli uno slug diverso.",
+      "generic": "Creazione del profilo non riuscita"
+    }
+  },
+  "detail": {
+    "description": "Dettaglio profilo — slug: <mono>{slug}</mono>",
+    "notFound": "Profilo non trovato.",
+    "endpoint": {
+      "title": "URL endpoint",
+      "description": "Punta il tuo client MCP a questo URL.",
+      "copy": "Copia",
+      "copiedToast": "URL endpoint copiato"
+    },
+    "bundle": {
+      "title": "Bundle server",
+      "description": "Scegli quali server installati esporre in questo profilo.",
+      "save": "Salva bundle",
+      "saving": "Salvataggio…",
+      "savedToast": "Bundle salvato",
+      "saveFailed": "Salvataggio non riuscito",
+      "noServers": "Nessun server installato."
+    },
+    "rename": {
+      "title": "Rinomina profilo",
+      "description": "Il nome visualizzato per questo profilo.",
+      "inputLabel": "Nome profilo",
+      "submit": "Rinomina",
+      "submitting": "Salvataggio…",
+      "successToast": "Profilo rinominato",
+      "failed": "Rinomina non riuscita"
+    },
+    "rotate": {
+      "title": "Ruota token",
+      "description": "Genera un nuovo token e invalida immediatamente quello precedente.",
+      "submit": "Ruota token",
+      "submitting": "Rotazione…",
+      "successToast": "Token ruotato",
+      "failed": "Rotazione non riuscita"
+    },
+    "delete": {
+      "title": "Elimina profilo",
+      "description": "L'operazione è permanente. L'endpoint smette di funzionare immediatamente.",
+      "submit": "Elimina profilo",
+      "confirmTitle": "Eliminare \"{name}\"?",
+      "confirmDescription": "Il profilo e il suo endpoint verranno eliminati definitivamente. Questa azione non può essere annullata.",
+      "confirmLabel": "Elimina",
+      "successToast": "Profilo eliminato",
+      "failed": "Eliminazione non riuscita"
+    }
+  }
+}

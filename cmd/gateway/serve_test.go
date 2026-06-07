@@ -1,0 +1,165 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+
+	"github.com/gigmcp/gigmcp/internal/auth"
+	"github.com/gigmcp/gigmcp/internal/config"
+	gw "github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/vault"
+)
+
+// minimalFakeIssuer is an httptest OIDC provider serving only the discovery
+// doc and JWKS endpoints — enough to bootstrap auth.NewAuthenticator.
+type minimalFakeIssuer struct {
+	srv *httptest.Server
+}
+
+func newMinimalFakeIssuer(t *testing.T) *minimalFakeIssuer {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &minimalFakeIssuer{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                                f.srv.URL,
+			"authorization_endpoint":                f.srv.URL + "/authorize",
+			"token_endpoint":                        f.srv.URL + "/token",
+			"jwks_uri":                              f.srv.URL + "/keys",
+			"id_token_signing_alg_values_supported": []string{"RS256"},
+		})
+	})
+	mux.HandleFunc("GET /keys", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
+			Key: &key.PublicKey, KeyID: "test", Algorithm: "RS256", Use: "sig",
+		}}})
+	})
+	f.srv = httptest.NewServer(mux)
+	t.Cleanup(f.srv.Close)
+	return f
+}
+
+func TestBuildMuxRouting(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	kek := make([]byte, 32)
+	rand.Read(kek)
+	v, _ := vault.New(kek)
+
+	profiles := &gw.ProfileHost{
+		Store: st, Version: "test",
+		Spawn: func(ctx context.Context, srv store.Server, tenant string) (*gw.EgressBackend, error) {
+			t.Fatal("no spawn expected in routing test")
+			return nil, nil
+		},
+	}
+	legacy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot) // sentinel for "legacy handler reached"
+	})
+
+	t.Run("OIDC disabled", func(t *testing.T) {
+		// OIDC unconfigured: authn == nil → /api is NOT mounted.
+		// Pass nil for Installer (no registry configured in this routing-only test).
+		mux := buildMux(st, v, nil, nil, profiles, legacy)
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusTeapot {
+			t.Fatalf("/mcp must reach legacy handler: %d", resp.StatusCode)
+		}
+		// "/" catch-all must also reach the legacy handler (backward compat for README-documented URL).
+		if resp, _ := http.Get(ts.URL + "/"); resp.StatusCode != http.StatusTeapot {
+			t.Fatalf("/ catch-all must reach legacy handler: %d", resp.StatusCode)
+		}
+		if resp, _ := http.Post(ts.URL+"/mcp/p/some-slug", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("/mcp/p/{slug} without token must 401: %d", resp.StatusCode)
+		}
+		resp, _ := http.Get(ts.URL + "/api/me")
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("/api disabled without OIDC must 404: %d", resp.StatusCode)
+		}
+		// Verify explanatory JSON body.
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("disabled-API body must be valid JSON: %v", err)
+		}
+		resp.Body.Close()
+		if body.Error.Code != "control_plane_disabled" {
+			t.Fatalf("disabled-API body code must be control_plane_disabled, got %q", body.Error.Code)
+		}
+	})
+
+	t.Run("OIDC enabled", func(t *testing.T) {
+		// Stand up a real *auth.Authenticator against a minimal fake OIDC issuer.
+		// This validates that when authn != nil, /api/ is mounted (SessionMiddleware
+		// responds 401 for unauthenticated requests) and legacy paths are unaffected.
+		iss := newMinimalFakeIssuer(t)
+		cfg := config.Config{
+			OIDCIssuer:      iss.srv.URL,
+			OIDCClientID:    "gigmcp-client",
+			OIDCRedirectURL: "http://localhost:8080/api/auth/callback",
+			OIDCAdminRole:   "gigmcp-admin",
+			SessionTTL:      time.Hour,
+			PublicURL:       "http://localhost:8080",
+		}
+		authn, err := auth.NewAuthenticator(context.Background(), cfg, st)
+		if err != nil {
+			t.Fatalf("NewAuthenticator: %v", err)
+		}
+
+		mux := buildMux(st, v, authn, nil, profiles, legacy)
+		ts := httptest.NewServer(mux)
+		defer ts.Close()
+
+		// /api/me with authn non-nil must return 401 JSON from SessionMiddleware
+		// (not 418 from legacy, not 404 from disabled handler).
+		resp, _ := http.Get(ts.URL + "/api/me")
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("/api/me with OIDC enabled but no session must 401: %d", resp.StatusCode)
+		}
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("/api/me must return JSON error body: %v", err)
+		}
+		resp.Body.Close()
+		if body.Error.Code == "" {
+			t.Fatal("/api/me 401 must include error.code field")
+		}
+
+		// /mcp still reaches the legacy handler (teapot sentinel).
+		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusTeapot {
+			t.Fatalf("/mcp must still reach legacy handler when OIDC enabled: %d", resp.StatusCode)
+		}
+
+		// /mcp/p/x without a bearer token must 401 from ProfileHost.
+		if resp, _ := http.Post(ts.URL+"/mcp/p/x", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("/mcp/p/x without token must 401 when OIDC enabled: %d", resp.StatusCode)
+		}
+	})
+}
