@@ -43,6 +43,9 @@ services:
       # GIG_DEMO_TOKEN and GIG_DEMO_ALLOW are pass-through; unset = no demo cred.
       GIG_DEMO_TOKEN: ${GIG_DEMO_TOKEN:-}
       GIG_DEMO_ALLOW: ${GIG_DEMO_ALLOW:-}
+      # Registry index (signature-verified). Set GIG_INSTALL to enable boot installs.
+      GIG_REGISTRY_INDEX_URL: ${GIG_REGISTRY_INDEX_URL:-}
+      GIG_REGISTRY_PUBKEY: ${GIG_REGISTRY_PUBKEY:-}
       # OIDC control plane (optional — unset disables /api; /mcp keeps working).
       GIG_OIDC_ISSUER: ${GIG_OIDC_ISSUER:-}
       GIG_OIDC_CLIENT_ID: ${GIG_OIDC_CLIENT_ID:-}
