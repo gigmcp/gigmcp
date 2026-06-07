@@ -41,6 +41,9 @@ func (p *Puller) Extract(ctx context.Context, imageRef, digest, entrypoint, dest
 	}
 	var img v1.Image
 	if p.LayoutDir != "" {
+		// NOTE: layout layer blobs are not hash-re-verified on read; LayoutDir
+		// must be trusted storage (tests, air-gapped installs). The remote path
+		// verifies blob hashes on stream.
 		lp, err := layout.FromPath(p.LayoutDir)
 		if err != nil {
 			return fmt.Errorf("oci: open layout %s: %w", p.LayoutDir, err)

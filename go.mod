@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/elastic/go-seccomp-bpf v1.6.0
+	github.com/gigmcp/gigmcp-registry/schema v0.0.0-00010101000000-000000000000
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/crypto v0.52.0
@@ -18,8 +19,10 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
+	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
 require (
