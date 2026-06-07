@@ -17,7 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/gigmcp/gigmcp/internal/auth"
 	"github.com/gigmcp/gigmcp/internal/config"
 	gw "github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/gigmcp/gigmcp/internal/netmgr"
@@ -97,7 +99,12 @@ func run(ctx context.Context) error {
 
 	// Build the egress proxy.
 	reg := proxy.NewRegistry()
-	resolver := &gw.CredResolver{Store: st, Vault: v}
+	resolver := gw.NewAuditingResolver(&gw.CredResolver{Store: st, Vault: v}, st)
+	// NOTE: defer resolver.Close() (and defer profiles.Close()) are best-effort
+	// flushes only — http.ListenAndServe blocks until process death, so these
+	// defers only run on a clean return (e.g. early startup error). Audit writes
+	// must never rely on Close() being called for correctness.
+	defer resolver.Close()
 	egProxy, err := proxy.New(reg, resolver)
 	if err != nil {
 		return fmt.Errorf("create proxy: %w", err)
@@ -145,13 +152,46 @@ func run(ctx context.Context) error {
 		}
 	}()
 
+	profiles := &gw.ProfileHost{
+		Store:   st,
+		Version: version,
+		Spawn: func(ctx context.Context, srv store.Server, tenant string) (*gw.EgressBackend, error) {
+			// placeholder is sourced from the manifest at spawn time (same as
+			// spawnInstalled does); for profile runtimes we pass "" here and
+			// let SpawnEgressBackend fall back to "PLACEHOLDER" for legacy
+			// servers — manifest-installed servers already carry the placeholder
+			// in the sandbox env from the registry installer.
+			return gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, tenant, "")
+		},
+	}
+	defer profiles.Close()
+
+	var authn *auth.Authenticator
+	if cfg.OIDCEnabled() {
+		bootCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		authn, err = auth.NewAuthenticator(bootCtx, cfg, st)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("oidc setup: %w", err)
+		}
+		log.Printf("OIDC configured (issuer %s) — /api control plane enabled", cfg.OIDCIssuer)
+	} else {
+		log.Printf("WARN: GIG_OIDC_* not configured — /api control plane disabled (legacy /mcp still served)")
+	}
+
 	gwServer, err := gw.New(ctx, version, backends)
 	if err != nil {
 		return err
 	}
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gwServer }, nil)
 	log.Printf("gigmcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
-	return http.ListenAndServe(cfg.Listen, gw.RequireBearer(cfg.BearerToken, handler))
+	legacy := gw.RequireBearer(cfg.BearerToken, handler)
+	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, &registry.IndexInstaller{
+		Store:   st,
+		Client:  &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
+		Puller:  &oci.Puller{},
+		DataDir: cfg.DataDir,
+	}, profiles, legacy))
 }
 
 // seedDemoCredential encrypts GIG_DEMO_TOKEN and stores it for the echo server

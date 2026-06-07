@@ -13,6 +13,14 @@ services:
       # GIG_DEMO_TOKEN and GIG_DEMO_ALLOW are pass-through; unset = no demo cred.
       GIG_DEMO_TOKEN: ${GIG_DEMO_TOKEN:-}
       GIG_DEMO_ALLOW: ${GIG_DEMO_ALLOW:-}
+      # OIDC control plane (optional — unset disables /api; /mcp keeps working).
+      GIG_OIDC_ISSUER: ${GIG_OIDC_ISSUER:-}
+      GIG_OIDC_CLIENT_ID: ${GIG_OIDC_CLIENT_ID:-}
+      GIG_OIDC_CLIENT_SECRET: ${GIG_OIDC_CLIENT_SECRET:-}
+      GIG_OIDC_REDIRECT_URL: ${GIG_OIDC_REDIRECT_URL:-}
+      GIG_OIDC_ADMIN_ROLE: ${GIG_OIDC_ADMIN_ROLE:-gigmcp-admin}
+      GIG_SESSION_TTL: ${GIG_SESSION_TTL:-168h}
+      GIG_PUBLIC_URL: ${GIG_PUBLIC_URL:-http://localhost:8080}
     volumes:
       - gigmcp-data:/data
     # NET_ADMIN is required: the egress proxy creates a veth pair per sandbox and
