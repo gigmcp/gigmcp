@@ -171,3 +171,38 @@ func TestBadSessionTTLErrors(t *testing.T) {
 		t.Fatal("invalid GIG_SESSION_TTL must error")
 	}
 }
+
+// TestPublicURLFallbackFromOIDCRedirectURL verifies I3: when OIDC is enabled
+// and GIG_PUBLIC_URL is absent, PublicURL is derived from OIDCRedirectURL
+// (scheme + host only).
+func TestPublicURLFallbackFromOIDCRedirectURL(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("GIG_OIDC_ISSUER", "https://idp.example.com")
+	t.Setenv("GIG_OIDC_CLIENT_ID", "cid")
+	t.Setenv("GIG_OIDC_REDIRECT_URL", "https://gig.example.com/api/auth/callback")
+	t.Setenv("GIG_PUBLIC_URL", "") // explicitly absent
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.PublicURL != "https://gig.example.com" {
+		t.Fatalf("PublicURL fallback: want %q, got %q", "https://gig.example.com", cfg.PublicURL)
+	}
+}
+
+// TestPublicURLExplicitNotOverridden verifies that an explicit GIG_PUBLIC_URL
+// is not overridden by the OIDCRedirectURL fallback.
+func TestPublicURLExplicitNotOverridden(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("GIG_OIDC_ISSUER", "https://idp.example.com")
+	t.Setenv("GIG_OIDC_CLIENT_ID", "cid")
+	t.Setenv("GIG_OIDC_REDIRECT_URL", "https://gig.example.com/api/auth/callback")
+	t.Setenv("GIG_PUBLIC_URL", "https://explicit.example.com")
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv: %v", err)
+	}
+	if cfg.PublicURL != "https://explicit.example.com" {
+		t.Fatalf("explicit PublicURL must not be overridden: got %q", cfg.PublicURL)
+	}
+}

@@ -40,7 +40,9 @@ type Authenticator struct {
 	sessionTTL time.Duration
 	secure     bool // Secure cookie flag: true iff GIG_PUBLIC_URL is https
 	// hmacKey signs the transient flow cookie. Random per process: in-flight
-	// logins do NOT survive a gateway restart (acceptable — users just retry).
+	// logins do NOT survive a gateway restart (acceptable — users just retry),
+	// and are replica-local; this assumes a single gateway instance (SQLite
+	// single-listener architecture).
 	hmacKey []byte
 }
 
@@ -73,7 +75,10 @@ func NewAuthenticator(ctx context.Context, cfg config.Config, st store.Store) (*
 }
 
 // flowState is the signed payload of the 10-minute flow cookie — no DB row
-// for pending logins (spec §4).
+// for pending logins (spec §4). The flow cookie is stateless, so a valid
+// signed cookie can be replayed within the 10-minute window; the auth code
+// it carries is single-use at the IdP, bounding actual exploit to a
+// narrow race with no persistent account gain.
 type flowState struct {
 	State    string `json:"state"`
 	Nonce    string `json:"nonce"`
@@ -175,7 +180,14 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	fs, err := a.verifyFlow(c.Value)
 	if err != nil {
-		writeAuthError(w, http.StatusBadRequest, "oidc", "invalid login flow: "+err.Error())
+		log.Printf("WARN: oidc flow-cookie verify: %v", err)
+		writeAuthError(w, http.StatusBadRequest, "oidc", "invalid or expired login flow (try logging in again)")
+		return
+	}
+	// I2: RFC 6749 §4.1.2.1 — provider may return error= instead of code=.
+	if provErr := r.URL.Query().Get("error"); provErr != "" {
+		log.Printf("WARN: oidc provider returned error=%q description=%q", provErr, r.URL.Query().Get("error_description"))
+		writeAuthError(w, http.StatusUnauthorized, "oidc", "login was cancelled or rejected by the identity provider")
 		return
 	}
 	if r.URL.Query().Get("state") != fs.State {
@@ -184,6 +196,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	tok, err := a.oauth.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.VerifierOption(fs.Verifier))
 	if err != nil {
+		log.Printf("WARN: oidc code exchange: %v", err)
 		writeAuthError(w, http.StatusBadGateway, "oidc", "code exchange failed")
 		return
 	}
@@ -194,6 +207,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	idt, err := a.verifier.Verify(r.Context(), rawID)
 	if err != nil {
+		log.Printf("WARN: oidc id_token verify: %v", err)
 		writeAuthError(w, http.StatusUnauthorized, "oidc", "id_token verification failed")
 		return
 	}

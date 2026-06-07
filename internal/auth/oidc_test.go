@@ -22,9 +22,11 @@ import (
 // The test mints the ID token AFTER it learns the nonce from the login
 // redirect, then the token endpoint serves it.
 type fakeIssuer struct {
-	srv     *httptest.Server
-	key     *rsa.PrivateKey
-	idToken string // set by the test before hitting the callback
+	srv          *httptest.Server
+	key          *rsa.PrivateKey
+	idToken      string // set by the test before hitting the callback
+	tokenHits    int    // incremented on every POST /token call
+	tokenErrCode int    // if non-zero, /token responds with this HTTP status + error body
 }
 
 func newFakeIssuer(t *testing.T) *fakeIssuer {
@@ -50,6 +52,13 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 		}}})
 	})
 	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
+		f.tokenHits++
+		if f.tokenErrCode != 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(f.tokenErrCode)
+			json.NewEncoder(w).Encode(map[string]any{"error": "server_error"})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"access_token": "fake-access-token",
@@ -264,3 +273,153 @@ func TestMapRole(t *testing.T) {
 		t.Fatal("nil claim must map to user")
 	}
 }
+
+// I4(a): tampered flow-cookie signature → 400; token endpoint NOT called.
+func TestCallbackTamperedFlowCookieSignature(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, _, flow := startLogin(t, a)
+
+	// Flip the last character of the cookie value to corrupt the HMAC.
+	orig := flow.Value
+	last := orig[len(orig)-1]
+	var replacement byte
+	if last == 'a' {
+		replacement = 'b'
+	} else {
+		replacement = 'a'
+	}
+	flow.Value = orig[:len(orig)-1] + string(replacement)
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("tampered cookie must 400, got %d body=%s", rec.Code, rec.Body)
+	}
+	if iss.tokenHits != 0 {
+		t.Fatalf("token endpoint must NOT be called on tampered flow cookie; got %d hits", iss.tokenHits)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatal("no user must be provisioned on tampered flow cookie")
+	}
+}
+
+// I4(b): missing flow cookie → 400.
+func TestCallbackMissingFlowCookie(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, _, _ := startLogin(t, a)
+
+	// No flow cookie added to request.
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing flow cookie must 400, got %d body=%s", rec.Code, rec.Body)
+	}
+}
+
+// I4(c): token endpoint returns 500 → callback 502, no user provisioned.
+func TestCallbackTokenEndpoint500(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, _, flow := startLogin(t, a)
+
+	iss.tokenErrCode = http.StatusInternalServerError
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("token 500 must yield callback 502, got %d body=%s", rec.Code, rec.Body)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatal("no user must be provisioned when token endpoint errors")
+	}
+}
+
+// I4(d): wrong-audience ID token → callback 401.
+func TestCallbackWrongAudienceIDToken(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, nonce, flow := startLogin(t, a)
+
+	// Mint with a different audience ("other-client" instead of "gigmcp-client").
+	iss.idToken = iss.mintIDToken(t, "other-client", "user-999", "eve@example.com", "Eve", nonce, nil)
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong-audience token must 401, got %d body=%s", rec.Code, rec.Body)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatal("no user must be provisioned on wrong-audience token")
+	}
+}
+
+// I4(e): end-to-end login with NO roles claim → user provisioned with role "user".
+func TestCallbackNoRolesClaimDefaultsToUser(t *testing.T) {
+	ctx := context.Background()
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, nonce, flow := startLogin(t, a)
+
+	// Mint with nil roles map (no roles claim present).
+	iss.idToken = iss.mintIDToken(t, "gigmcp-client", "user-456", "bob@example.com", "Bob", nonce, nil)
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
+		t.Fatalf("no-roles callback: code=%d loc=%q body=%s", rec.Code, rec.Header().Get("Location"), rec.Body)
+	}
+	users, err := st.ListUsers(ctx)
+	if err != nil || len(users) != 1 {
+		t.Fatalf("users: %v %d", err, len(users))
+	}
+	if users[0].Role != "user" {
+		t.Fatalf("no roles claim must yield role 'user', got %q", users[0].Role)
+	}
+}
+
+// I2: RFC 6749 provider error callback → 401, no exchange attempted.
+func TestCallbackProviderError(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, _, flow := startLogin(t, a)
+
+	// IdP redirects back with error= (e.g. user denied consent).
+	req := httptest.NewRequest("GET",
+		"/api/auth/callback?error=access_denied&error_description=User+denied+access&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("provider error must 401, got %d body=%s", rec.Code, rec.Body)
+	}
+	if iss.tokenHits != 0 {
+		t.Fatalf("token endpoint must NOT be called on provider error; got %d hits", iss.tokenHits)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatal("no user must be provisioned on provider error")
+	}
+}
+
+// Note on expired-cookie test: the HMAC key is unexported and process-random
+// (generated in NewAuthenticator). There is no clean seam to mint a cookie
+// with a past Expires timestamp from outside the package without invasive
+// changes. Expired-cookie coverage is therefore skipped per the task spec.
+// The expiry check IS exercised implicitly by the 10-minute TTL enforced in
+// verifyFlow (see oidc.go).

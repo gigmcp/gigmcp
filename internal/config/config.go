@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -32,7 +33,11 @@ type Config struct {
 	OIDCRedirectURL  string        // GIG_OIDC_REDIRECT_URL, e.g. https://gig.example.com/api/auth/callback
 	OIDCAdminRole    string        // GIG_OIDC_ADMIN_ROLE — Zitadel role mapping to "admin"; default "gigmcp-admin"
 	SessionTTL       time.Duration // GIG_SESSION_TTL, default 168h
-	PublicURL        string        // GIG_PUBLIC_URL — https prefix turns on Secure cookies
+	// PublicURL is GIG_PUBLIC_URL — the https prefix turns on Secure cookies.
+	// When OIDC is enabled and GIG_PUBLIC_URL is unset, PublicURL is derived
+	// from OIDCRedirectURL (scheme + host, path stripped) so that Secure-cookie
+	// decisions are always consistent with the redirect origin.
+	PublicURL string
 }
 
 // OIDCEnabled reports whether the OIDC control plane is configured.
@@ -94,6 +99,15 @@ func FromEnv() (Config, error) {
 	}
 	if anySet && !allSet {
 		return Config{}, errors.New("GIG_OIDC_ISSUER, GIG_OIDC_CLIENT_ID and GIG_OIDC_REDIRECT_URL must be set together")
+	}
+	// I3: if OIDC is enabled and GIG_PUBLIC_URL was not set, derive PublicURL
+	// from OIDCRedirectURL (scheme + host only) so that oidc.go's Secure-cookie
+	// derivation (`strings.HasPrefix(cfg.PublicURL, "https://")`) is consistent
+	// with the redirect origin even when the operator omits GIG_PUBLIC_URL.
+	if cfg.OIDCEnabled() && cfg.PublicURL == "" && cfg.OIDCRedirectURL != "" {
+		if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil {
+			cfg.PublicURL = u.Scheme + "://" + u.Host
+		}
 	}
 	return cfg, nil
 }
