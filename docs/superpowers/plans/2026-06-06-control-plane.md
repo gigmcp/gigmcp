@@ -4,7 +4,7 @@
 
 **Goal:** Turn the single-static-token, single-tenant gateway into a multi-user control plane: Zitadel-backed OIDC login with opaque DB sessions, a Go REST API (`/api/*`) for users/profiles/credentials/servers/audit, profile-scoped MCP endpoints (`/mcp/p/{slug}`) with per-profile bearer tokens where `Tenant` = profile ID, and a persistent audit pipeline (egress decorator + synchronous API events). Implements the approved spec `docs/superpowers/specs/2026-06-06-frontend-control-plane-design.md` — **control-plane scope only: the Next.js dashboard (spec §8) and the compose `web` service are OUT of this plan; a second plan covers them.** The existing static-token path and `Tenant:"default"` E2E stay green until the explicit, gated cutover task at the end.
 
-**Architecture:** One listener, one mux on the existing `:8080` — `/mcp` (legacy `RequireBearer`, transitional), `/mcp/p/{slug}` (per-profile aggregator, lazy-spawned sandboxes with `Tenant` = profile ID), `/api/auth/*` (OIDC code+PKCE flow against Zitadel, state/nonce/verifier in a 10-min HMAC-signed cookie), `/api/*` (REST behind session-cookie middleware + RBAC + view-as impersonation). New store files (`users`, `sessions`, `profiles`, `audit`) follow the `credentials.go` pattern with additive schema consts run in `OpenSQLite`. Credentials become per-user: `credentials.tenant` holds the owning user ID as a decimal string; the resolver joins profile → owner for the secret lookup (literal tenants like `"default"` keep working). Egress audit is an `AuditingResolver` decorator — zero edits to the no-touch `internal/proxy` package. The registry workstream's `Installer` contract lives in a new `internal/registry` package as interface + `ErrNotImplemented` stub that they replace. Roles are a per-login cache of the Zitadel project-role claim; no local passwords, no invitations.
+**Architecture:** One listener, one mux on the existing `:8080` — `/mcp` (legacy `RequireBearer`, transitional), `/mcp/p/{slug}` (per-profile aggregator, lazy-spawned sandboxes with `Tenant` = profile ID), `/api/auth/*` (OIDC code+PKCE flow against Zitadel, state/nonce/verifier in a 10-min HMAC-signed cookie), `/api/*` (REST behind session-cookie middleware + RBAC + view-as impersonation). New store files (`users`, `sessions`, `profiles`, `audit`) follow the `credentials.go` pattern with additive schema consts run in `OpenSQLite`. Credentials become per-user: `credentials.tenant` holds the owning user ID as a decimal string; the resolver joins profile → owner for the secret lookup (literal tenants like `"default"` keep working). Egress audit is an `AuditingResolver` decorator — zero edits to the no-touch `internal/proxy` package. The `internal/registry` package is **already implemented** by the registry workstream — `Installer` interface and `IndexInstaller` are real; this plan only consumes the interface. Roles are a per-login cache of the Zitadel project-role claim; no local passwords, no invitations.
 
 **Tech Stack:** Go 1.26 stdlib (`net/http` ServeMux with method+wildcard patterns — no router dependency); `github.com/coreos/go-oidc/v3` (**NEW** dependency); `golang.org/x/oauth2` v0.35.0 (already indirect — promote to direct); `github.com/go-jose/go-jose/v4` (test-only, transitive dep of go-oidc — for the fake-issuer test); `modernc.org/sqlite` (existing, pure Go); existing `internal/vault` (consumed, never modified). Builds stay `CGO_ENABLED=0`.
 
@@ -37,6 +37,26 @@
 ## Deviations from spec §5
 
 Three param-name differences between the spec (§5) and the implementation in this plan — the dashboard plan MUST follow these names, not the spec originals:
+
+---
+
+### Registry-delta note (2026-06-06)
+
+The registry/manifest workstream merged code to `main` **after** this plan was written. The following facts now hold against the current tree and the tasks below have been rebased accordingly:
+
+1. **`internal/registry` is real — no stub needed.** `internal/registry/api.go` declares the real `Installer` interface (`Install`, `Uninstall`, `List`). `internal/registry/installer.go` contains the production `IndexInstaller`. Task 12 no longer creates `StubInstaller`; tests use a small hand-written fake that satisfies the interface.
+
+2. **`internal/gateway/resolver.go` already merges manifest.** The `Resolve` method already fetches the manifest by server and prefers its `AllowedHosts` + injection fields over the credential row's columns (manifest fields win, matching the DESIGN #7 seam). Task 14 preserves this merge exactly; it only changes **which tenant key** feeds `GetCredential`.
+
+3. **`internal/gateway/spawn.go` already has the `placeholder string` parameter.** `SpawnEgressBackend` already accepts `placeholder string` as its last parameter; `main.go`'s `spawnInstalled` already passes the per-manifest placeholder. The `"default"` hardcode that Task 13 was going to replace is only the `reg.Bind` Tenant (spawn.go:337), not the placeholder parameter. Task 13 is rewritten to thread a `tenant string` parameter for `reg.Bind` (separate from `placeholder`).
+
+4. **`cmd/gateway/main.go`'s `run()` already uses `installFromIndex()` + `spawnInstalled()`.** The startup flow already calls `spawnInstalled`, which enforces consent gates and wires the manifest placeholder + default tool Expose map. Task 16's `run()` wiring only adds the profile host, authenticator, and `buildMux` call; it must NOT re-implement the spawn loop.
+
+5. **`store.OpenSQLite` already runs three schema blocks** (`schema`, `credSchema`, `manifestSchema`). Tasks 3–6 append their schema blocks **after `manifestSchema`** (the third block), making users the 4th, sessions the 5th, etc.
+
+6. **`gateway.Backend` already has `Expose map[string]bool`** (verified in `internal/gateway/gateway.go`). Any plan code constructing `Backend` literals must set `Expose` from the server's manifest (same as `spawnInstalled` does). Task 15's `ProfileHost.getOrCreate` is updated accordingly.
+
+---
 
 1. **Audit pagination param:** implemented as `before` (integer row ID for keyset pagination), not `cursor`. The `GET /api/audit?before=&limit=` pattern threads through `audit.go` and all audit tests.
 2. **Profile servers body key:** `PUT /api/profiles/{id}/servers` body is `{"servers": [...]}`, not `{"names": [...]}`. See `profiles.go` + `TestProfileServersAndRotateAndDelete`.
@@ -74,7 +94,7 @@ internal/
 │   ├── credentials.go + credentials_test.go        # T11: write-only credential CRUD via vault (NEW)
 │   ├── servers.go, users.go, audit.go (+ tests)    # T12: installer endpoints, users, impersonate, audit read (NEW)
 ├── registry/
-│   └── installer.go + installer_test.go  # T12: 3-method Installer contract + ErrNotImplemented stub (REGISTRY-OWNED)
+│   └── api.go + installer.go  # ALREADY LANDED (registry workstream) — Installer interface + IndexInstaller (REGISTRY-OWNED)
 └── gateway/
     ├── spawn.go                      # T13: tenant param (runtime-owner sanity check)
     ├── testharness.go                # T13: pass "default"; T18: seed profile instead
@@ -364,7 +384,16 @@ func TestBadSessionTTLErrors(t *testing.T) {
 
 - [ ] **Step 2: Run, verify fail** — `go test ./internal/config/` → undefined `cfg.OIDCEnabled` / missing fields.
 
-- [ ] **Step 3: Implement** — modify `internal/config/config.go`. Add fields to `Config`:
+- [ ] **Step 3: Implement** — modify `internal/config/config.go`. The existing `Config` struct already contains (do NOT change these — registry workstream owns them):
+
+```go
+	RegistryIndexURL string // GIG_REGISTRY_INDEX_URL
+	RegistryPubKey   string // GIG_REGISTRY_PUBKEY
+	Install          string // GIG_INSTALL
+	DataDir          string // GIG_DATA_DIR, default "/data"
+```
+
+Add the following OIDC/session/public-URL fields immediately after the existing fields (append only — do not restructure):
 
 ```go
 	OIDCIssuer       string        // GIG_OIDC_ISSUER, e.g. http://localhost:8082; empty = control plane disabled
@@ -655,7 +684,7 @@ In `internal/store/store.go`, append to the `Store` interface (keep the existing
 	ListUsers(ctx context.Context) ([]User, error)
 ```
 
-In `internal/store/sqlite.go` `OpenSQLite`, append after the `credSchema` block (one block, same shape — this is the shared merge file, change nothing else):
+In `internal/store/sqlite.go` `OpenSQLite`, append after the **`manifestSchema` block** (the third block — `schema`, `credSchema`, `manifestSchema` are already present; users becomes the fourth). This is the shared merge file — change nothing else:
 
 ```go
 	if _, err := db.ExecContext(ctx, usersSchema); err != nil {
@@ -3553,94 +3582,27 @@ In `internal/api/api.go` `Routes()`, add after the profile route lines:
 
 ---
 
-### Task 12: Registry contract + servers / users / impersonation / audit endpoints
+### Task 12: Registry contract (ALREADY LANDED) + servers / users / impersonation / audit endpoints
 
-**Files:** Create `internal/registry/installer.go`, `internal/registry/installer_test.go`, `internal/api/servers.go`, `internal/api/users.go`, `internal/api/audit.go`, `internal/api/admin_test.go`. Modify `internal/api/api.go` (Server struct + route lines), `internal/api/api_test.go` (helper line).
+**Files:** `internal/registry/` already exists with the real `Installer` interface and `IndexInstaller` — DO NOT recreate or add a stub. Create `internal/api/servers.go`, `internal/api/users.go`, `internal/api/audit.go`, `internal/api/admin_test.go`. Modify `internal/api/api.go` (Server struct + route lines), `internal/api/api_test.go` (helper line).
 
-- [ ] **Step 1: Create the registry contract** — `internal/registry/installer.go`
+- [ ] **Step 1: Verify the real Installer contract** — `internal/registry/api.go` already declares:
 
 ```go
-// Package registry holds the Installer contract shared between the
-// control-plane and manifest/registry workstreams.
-//
-// OWNERSHIP: this package belongs to the REGISTRY workstream
-// (docs/handoffs/manifest-registry.md §6.3). The control plane only consumes
-// the Installer interface; the registry workstream REPLACES StubInstaller
-// with the real OCI-pulling implementation on its own schedule. Do not add
-// control-plane logic here.
-package registry
-
-import (
-	"context"
-	"errors"
-
-	"github.com/gigmcp/gigmcp/internal/store"
-)
-
-// ErrNotImplemented is returned by StubInstaller until the real installer
-// lands. API handlers surface it as HTTP 501 (install/uninstall) or fall
-// back to store.ListServers (list).
-var ErrNotImplemented = errors.New("registry: installer not implemented yet")
-
-// Installer is the agreed 3-method contract (identical in both handoff docs).
-// ref = name@version | name (latest) | sha256:<digest>; Install is idempotent
-// by (name, version) and persists the store.Server row itself.
 type Installer interface {
-	Install(ctx context.Context, ref string) (store.Server, error)
-	Uninstall(ctx context.Context, name string) error
-	List(ctx context.Context) ([]store.Server, error)
-}
-
-// StubInstaller is the placeholder implementation wired until the registry
-// workstream's installer replaces it.
-type StubInstaller struct{}
-
-var _ Installer = StubInstaller{}
-
-func (StubInstaller) Install(ctx context.Context, ref string) (store.Server, error) {
-	return store.Server{}, ErrNotImplemented
-}
-
-func (StubInstaller) Uninstall(ctx context.Context, name string) error {
-	return ErrNotImplemented
-}
-
-func (StubInstaller) List(ctx context.Context) ([]store.Server, error) {
-	return nil, ErrNotImplemented
+    Install(ctx context.Context, ref string) (store.Server, error)
+    Uninstall(ctx context.Context, name string) error
+    List(ctx context.Context) ([]store.Server, error)
 }
 ```
 
-And `internal/registry/installer_test.go`:
+`internal/registry/installer.go` contains the production `IndexInstaller` that satisfies this interface. **Do NOT create a StubInstaller or ErrNotImplemented.** The API handlers will use a small fake for tests (see Step 2) and `registry.IndexInstaller` (or a nil-guarded store fallback) in production.
 
-```go
-package registry_test
-
-import (
-	"context"
-	"errors"
-	"testing"
-
-	"github.com/gigmcp/gigmcp/internal/registry"
-)
-
-func TestStubReturnsErrNotImplemented(t *testing.T) {
-	ctx := context.Background()
-	var inst registry.Installer = registry.StubInstaller{}
-	if _, err := inst.Install(ctx, "github@1.0.0"); !errors.Is(err, registry.ErrNotImplemented) {
-		t.Fatalf("install: %v", err)
-	}
-	if err := inst.Uninstall(ctx, "github"); !errors.Is(err, registry.ErrNotImplemented) {
-		t.Fatalf("uninstall: %v", err)
-	}
-	if _, err := inst.List(ctx); !errors.Is(err, registry.ErrNotImplemented) {
-		t.Fatalf("list: %v", err)
-	}
-}
-```
-
-Run `go test ./internal/registry/` → PASS. Note: the stub test is intentionally written test-first-passing because it asserts a compile-time contract (the interface is satisfied) and that `StubInstaller` returns `ErrNotImplemented`, not behavior that needs a prior failing state. Commit separately so the registry workstream can cherry-pick/inspect it cleanly: `git add internal/registry/ && git commit -m "feat(registry): Installer contract + ErrNotImplemented stub (registry workstream owns this package)"`
+Run `go test ./internal/registry/` → PASS (the registry workstream's own tests). No new files needed in `internal/registry/` from this task.
 
 - [ ] **Step 2: Write the failing API tests** — `internal/api/admin_test.go`
+
+The test uses a small hand-written fake (`fakeInstaller`) that satisfies `registry.Installer`. The fake's `List` returns whatever was seeded via `st.EnsureServer`; `Install` returns `store.ErrNotFound` (a placeholder); `Uninstall` also returns a non-nil error so handlers surface 502 — the real error codes differ from the "not implemented" path; adjust expectations accordingly. (Note: `registry.ErrNotImplemented` does NOT exist — that was a pre-landing plan artifact. The real `IndexInstaller` returns domain errors; in tests a fake provides controlled behavior.)
 
 ```go
 package api_test
@@ -3648,14 +3610,36 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/gigmcp/gigmcp/internal/auth"
+	"github.com/gigmcp/gigmcp/internal/store"
 )
 
-func TestServersListFallsBackToStoreOnStub(t *testing.T) {
+// fakeInstaller is a small fake implementing registry.Installer for tests.
+// List delegates to the store; Install/Uninstall return a configurable error.
+type fakeInstaller struct {
+	st        store.Store
+	installErr error
+}
+
+func (f *fakeInstaller) Install(ctx context.Context, ref string) (store.Server, error) {
+	if f.installErr != nil {
+		return store.Server{}, f.installErr
+	}
+	return store.Server{Name: ref}, nil
+}
+func (f *fakeInstaller) Uninstall(ctx context.Context, name string) error {
+	return f.installErr
+}
+func (f *fakeInstaller) List(ctx context.Context) ([]store.Server, error) {
+	return f.st.ListServers(ctx)
+}
+
+func TestServersListViaInstaller(t *testing.T) {
 	ctx := context.Background()
 	_, ts, st, _ := newTestAPI(t)
 	_, cookie := seedUserSession(t, st, "alice@x", "user")
@@ -3671,23 +3655,25 @@ func TestServersListFallsBackToStoreOnStub(t *testing.T) {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(body, &list); err != nil || len(list) != 1 || list[0].Name != "echo" {
-		t.Fatalf("fallback list: %v %s", err, body)
+		t.Fatalf("installer list: %v %s", err, body)
 	}
 }
 
-func TestInstallEndpointsAdminOnlyAnd501OnStub(t *testing.T) {
+func TestInstallEndpointsAdminOnly(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, user := seedUserSession(t, st, "alice@x", "user")
 	_, admin := seedUserSession(t, st, "admin@x", "admin")
 
+	// Non-admin cannot install.
 	if code, _ := doJSON(t, ts, user, "POST", "/api/servers/install", `{"ref":"github@1.0.0"}`); code != http.StatusForbidden {
 		t.Fatalf("non-admin install: %d", code)
 	}
-	if code, _ := doJSON(t, ts, admin, "POST", "/api/servers/install", `{"ref":"github@1.0.0"}`); code != http.StatusNotImplemented {
-		t.Fatalf("stub install must 501: %d", code)
+	// Admin with a failing installer gets 502 (the fake returns an error).
+	if code, _ := doJSON(t, ts, admin, "POST", "/api/servers/install", `{"ref":"github@1.0.0"}`); code != http.StatusBadGateway {
+		t.Fatalf("failing installer must 502: %d", code)
 	}
-	if code, _ := doJSON(t, ts, admin, "DELETE", "/api/servers/github", ""); code != http.StatusNotImplemented {
-		t.Fatalf("stub uninstall must 501: %d", code)
+	if code, _ := doJSON(t, ts, admin, "DELETE", "/api/servers/github", ""); code != http.StatusBadGateway {
+		t.Fatalf("failing uninstall must 502: %d", code)
 	}
 }
 
@@ -3840,10 +3826,8 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
-	"github.com/gigmcp/gigmcp/internal/registry"
 	"github.com/gigmcp/gigmcp/internal/store"
 )
 
@@ -3860,8 +3844,8 @@ func toServerJSON(srvs []store.Server) []serverJSON {
 	return out
 }
 
-// handleListServers — GET /api/servers via Installer.List; while the stub is
-// wired (or Installer is nil) it falls back to the store's installed-server list.
+// handleListServers — GET /api/servers via Installer.List; when Installer is
+// nil it falls back to the store's installed-server list.
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	var srvs []store.Server
 	var err error
@@ -3869,9 +3853,6 @@ func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 		srvs, err = s.Store.ListServers(r.Context())
 	} else {
 		srvs, err = s.Installer.List(r.Context())
-		if errors.Is(err, registry.ErrNotImplemented) {
-			srvs, err = s.Store.ListServers(r.Context())
-		}
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "list servers")
@@ -3890,10 +3871,6 @@ func (s *Server) handleInstallServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	srv, err := s.Installer.Install(r.Context(), body.Ref)
-	if errors.Is(err, registry.ErrNotImplemented) {
-		writeErr(w, http.StatusNotImplemented, "not_implemented", "server install is not available yet (registry workstream)")
-		return
-	}
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "install_failed", err.Error())
 		return
@@ -3905,12 +3882,7 @@ func (s *Server) handleInstallServer(w http.ResponseWriter, r *http.Request) {
 // handleUninstallServer — DELETE /api/servers/{name} (admin).
 func (s *Server) handleUninstallServer(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	err := s.Installer.Uninstall(r.Context(), name)
-	if errors.Is(err, registry.ErrNotImplemented) {
-		writeErr(w, http.StatusNotImplemented, "not_implemented", "server uninstall is not available yet (registry workstream)")
-		return
-	}
-	if err != nil {
+	if err := s.Installer.Uninstall(r.Context(), name); err != nil {
 		writeErr(w, http.StatusBadGateway, "uninstall_failed", err.Error())
 		return
 	}
@@ -4096,7 +4068,7 @@ func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-In `internal/api/api.go`: add the `Installer` field to `Server` (with its import):
+In `internal/api/api.go`: add the `Installer` field to `Server` (with its import — the `registry` import is for the `registry.Installer` type, NOT for `ErrNotImplemented` which does not exist):
 
 ```go
 import (
@@ -4113,7 +4085,7 @@ type Server struct {
 	Store     store.Store
 	Vault     *vault.Vault
 	Auth      *auth.Authenticator // nil = OIDC unconfigured (auth routes unmounted)
-	Installer registry.Installer  // registry workstream's contract; StubInstaller until it lands
+	Installer registry.Installer  // nil = fall back to Store.ListServers for GET /api/servers; admin mutate routes panic-safe (nil-guarded in handlers)
 	Profiles  ProfileInvalidator
 }
 ```
@@ -4130,27 +4102,37 @@ and add the routes after the credential lines in `Routes()`:
 	authed.HandleFunc("GET /api/audit", s.handleListAudit)
 ```
 
-In `internal/api/api_test.go` `newTestAPI`, change the `srv :=` line to wire the stub (add `"github.com/gigmcp/gigmcp/internal/registry"` to imports):
+In `internal/api/api_test.go` `newTestAPI`, change the `srv :=` line to wire the fake installer (add `fakeInstaller` defined in `admin_test.go`; no registry import needed in the test helper file since the type is local):
 
 ```go
-	srv := &api.Server{Store: st, Vault: v, Installer: registry.StubInstaller{}, Profiles: inv}
+	inv := &fakeInvalidator{}
+	fi := &fakeInstaller{st: st, installErr: errors.New("fake installer: not wired")}
+	srv := &api.Server{Store: st, Vault: v, Installer: fi, Profiles: inv}
 ```
+
+(Add `"errors"` to the `api_test.go` imports if not already present.)
 
 - [ ] **Step 5: Run, verify pass** — `go test ./internal/api/ ./internal/registry/` → PASS.
 
-- [ ] **Step 6: Commit** — `git add internal/api/ && git commit -m "feat(api): servers via Installer contract, admin users list, impersonation, audit read"`
+- [ ] **Step 6: Commit** — `git add internal/api/ && git commit -m "feat(api): servers via real Installer contract, admin users list, impersonation, audit read"`
 
 ---
 
 ### Task 13: spawn.go — tenant parameter (RUNTIME-OWNER SANITY CHECK)
 
-**Files:** Modify `internal/gateway/spawn.go`, `internal/gateway/testharness.go`, `cmd/gateway/main.go`.
+**Files:** Modify `internal/gateway/spawn.go`, `internal/gateway/testharness.go`.
 
 > **Coordination note:** this is the one near-boundary runtime edit in this plan (spec §6, handoff §10 Q10). Pure parameter threading — but flag the diff to the runtime owner for a sanity check before or at review time.
 
-This is a pure parameter-threading refactor with no behavioral change: all existing callers pass `"default"`, so the existing test suite (`make test`) fully verifies it — no new failing test is needed or appropriate here.
+> **Delta note:** `SpawnEgressBackend` already has the `placeholder string` parameter as its last argument (landed in the registry workstream). The current signature (verified against `internal/gateway/spawn.go:133-142`) is:
+> ```go
+> func SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapPath, placeholder string) (*EgressBackend, error)
+> ```
+> This task inserts a NEW `tenant string` parameter **before** `placeholder`, and updates the hardcoded `reg.Bind` Tenant (spawn.go:337) to use it. `cmd/gateway/main.go`'s `spawnInstalled` already passes the per-manifest `placeholder` correctly and does NOT need a new parameter — it only needs to pass the tenant. The `testharness.go` caller still passes `""` for placeholder (legacy path) and must pass `"default"` for tenant.
 
-- [ ] **Step 1: Thread the parameter.** In `internal/gateway/spawn.go`, change the `SpawnEgressBackend` signature by appending a `tenant` parameter:
+This is a pure parameter-threading refactor with no behavioral change: all existing callers pass `"default"` for tenant, so the existing test suite (`make test`) fully verifies it — no new failing test is needed or appropriate here.
+
+- [ ] **Step 1: Thread the parameter.** In `internal/gateway/spawn.go`, change the `SpawnEgressBackend` signature by inserting a `tenant string` parameter **before** `placeholder string`:
 
 ```go
 func SpawnEgressBackend(
@@ -4161,33 +4143,36 @@ func SpawnEgressBackend(
 	proxyPort int,
 	caFile string,
 	bootstrapPath string,
-	tenant string,
+	tenant string,      // NEW: proxy identity bound to the sandbox — profile ID (decimal) or "default"
+	placeholder string, // manifest-generated sentinel; "" = legacy "PLACEHOLDER"
 ) (*EgressBackend, error) {
 ```
 
-and update its doc comment to mention: "tenant is the proxy identity bound to the sandbox's source IP — a profile ID (decimal string) for profile-scoped backends, or the literal `\"default\"` for the legacy path." Then replace the hardcoded Bind (spawn.go:327):
+Update the doc comment to mention: "tenant is the proxy identity bound to the sandbox's source IP — a profile ID (decimal string) for profile-scoped backends, or the literal `\"default\"` for the legacy path." Then replace the hardcoded Bind (spawn.go:337 — currently `Tenant: "default"`):
 
 ```go
 	reg.Bind(sub.SandboxIP.String(), proxy.Identity{Server: srv.Name, Tenant: tenant})
 ```
 
-- [ ] **Step 2: Update the two existing callers** to pass `"default"` (behavior unchanged):
+- [ ] **Step 2: Update the two existing callers** to pass `"default"` for tenant (behavior unchanged):
 
-In `cmd/gateway/main.go` `run()`:
-
-```go
-		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "default")
-```
-
-In `internal/gateway/testharness.go` `StartEgressGatewayForTest`:
+In `cmd/gateway/main.go` `spawnInstalled` (the call at approximately line 293, which already passes `placeholder` last):
 
 ```go
-	eb, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, "default")
+		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "default", placeholder)
 ```
+
+In `internal/gateway/testharness.go` `StartEgressGatewayForTest` (currently passes `""` for placeholder):
+
+```go
+	eb, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, "default", "")
+```
+
+In `internal/gateway/registry_e2e_test.go` — this is the untracked registry workstream file. Verify it compiles after the signature change; if its call site needs updating, record it here but **do NOT modify registry_e2e_test.go**. The registry workstream must handle that update on their side.
 
 - [ ] **Step 3: Verify everything still passes** — `make test` (container; the egress E2E exercises the `"default"` path end-to-end and must stay green). `go vet ./...` clean.
 
-- [ ] **Step 4: Commit** — `git add internal/gateway/ cmd/gateway/ && git commit -m "refactor(gateway): SpawnEgressBackend takes tenant param (callers pass \"default\"; flagged for runtime-owner review)"`
+- [ ] **Step 4: Commit** — `git add internal/gateway/ cmd/gateway/ && git commit -m "refactor(gateway): SpawnEgressBackend takes tenant param before placeholder (callers pass \"default\"; flagged for runtime-owner review)"`
 
 ---
 
@@ -4290,13 +4275,14 @@ func TestResolverLiteralTenantStillWorks(t *testing.T) {
 
 - [ ] **Step 2: Run, verify fail** — `go test ./internal/gateway/ -run Resolver` → the profile-tenant test fails ("credential not found": no join yet).
 
-- [ ] **Step 3: Implement the join** — replace `internal/gateway/resolver.go`'s `Resolve` with (whole file shown; only the tenant-resolution lines are new — keep the diff this small for the registry merge):
+- [ ] **Step 3: Implement the join** — replace `internal/gateway/resolver.go`'s `Resolve` with the complete amended method (whole file shown). The **manifest merge is already present** in the current tree and must be **preserved exactly** — the registry workstream put it there (manifest fields win over credential-row columns). This task only adds the tenant-resolution logic before the `GetCredential` call:
 
 ```go
 package gateway
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/gigmcp/gigmcp/internal/proxy"
@@ -4310,21 +4296,29 @@ type CredResolver struct {
 	Vault *vault.Vault
 }
 
-// Resolve fetches and decrypts the credential for the identity.
+// Resolve assembles the proxy credential from TWO sources (DESIGN #7,
+// seam §6.C): the MANIFEST (by server) supplies the author-declared hard cap
+// — allowlist + injection schema + placeholder; the VAULT (by server,tenant)
+// supplies only the real secret. Servers without a manifest (legacy
+// GIG_ECHO_BIN seeding) fall back to the credential row's own fields.
 //
-// Tenant join (spec §6): if id.Tenant parses as an int64 AND names an
-// existing profile, the credential lookup uses the profile OWNER's user id
-// (credentials are per-user; one key serves all of that user's profiles).
-// Otherwise the tenant is used literally — this keeps the legacy "default"
-// tenant working until cutover.
+// Tenant join (spec §6, this plan): if id.Tenant parses as an int64 AND
+// names an existing profile, the credential lookup uses the profile OWNER's
+// user id as a decimal string (credentials are per-user; one key serves all
+// of that user's profiles). Otherwise the tenant is used literally — this
+// keeps the legacy "default" tenant working until cutover.
 func (c *CredResolver) Resolve(id proxy.Identity, host string) (proxy.Credential, error) {
+	ctx := context.Background()
+
+	// Tenant join: numeric tenant → profile lookup → owner's user id.
 	tenant := id.Tenant
 	if pid, err := strconv.ParseInt(id.Tenant, 10, 64); err == nil {
-		if p, perr := c.Store.GetProfileByID(context.Background(), pid); perr == nil {
+		if p, perr := c.Store.GetProfileByID(ctx, pid); perr == nil {
 			tenant = strconv.FormatInt(p.UserID, 10)
 		}
 	}
-	cred, err := c.Store.GetCredential(context.Background(), id.Server, tenant)
+
+	cred, err := c.Store.GetCredential(ctx, id.Server, tenant)
 	if err != nil {
 		return proxy.Credential{}, err
 	}
@@ -4332,12 +4326,34 @@ func (c *CredResolver) Resolve(id proxy.Identity, host string) (proxy.Credential
 	if err != nil {
 		return proxy.Credential{}, err
 	}
+
+	// Manifest merge (registry workstream — DO NOT REMOVE): manifest fields win;
+	// servers without a manifest fall back to the credential row's own columns.
+	rec, err := c.Store.GetManifest(ctx, id.Server)
+	if errors.Is(err, store.ErrManifestNotFound) {
+		return proxy.Credential{
+			RealSecret:   string(secret),
+			InjectHeader: cred.InjectHeader,
+			InjectFormat: cred.InjectFormat,
+			Placeholder:  cred.Placeholder,
+			AllowedHosts: cred.AllowedHosts,
+		}, nil
+	}
+	if err != nil {
+		return proxy.Credential{}, err
+	}
+	// v1 enforces the FIRST credential's injection (multi-credential rewrite
+	// is a follow-up; the schema already supports it).
+	var inj store.Injection
+	if len(rec.Injections) > 0 {
+		inj = rec.Injections[0]
+	}
 	return proxy.Credential{
 		RealSecret:   string(secret),
-		InjectHeader: cred.InjectHeader,
-		InjectFormat: cred.InjectFormat,
-		Placeholder:  cred.Placeholder,
-		AllowedHosts: cred.AllowedHosts,
+		InjectHeader: inj.Header,
+		InjectFormat: inj.Format,
+		Placeholder:  inj.Placeholder,
+		AllowedHosts: rec.AllowedHosts,
 	}, nil
 }
 ```
@@ -4933,7 +4949,19 @@ func (h *ProfileHost) getOrCreate(p store.Profile) (*profileRuntime, error) {
 			return fail(fmt.Errorf("spawn %q: %w", name, err))
 		}
 		cleanups = append(cleanups, eb.Cleanup)
-		backends = append(backends, Backend{Name: srv.Name, Session: eb.Session})
+
+		// Build Expose map from manifest (DESIGN #11 default subset). Servers
+		// without a manifest (legacy GIG_ECHO_BIN) expose all tools (nil map).
+		var expose map[string]bool
+		if rec, merr := h.Store.GetManifest(ctx, name); merr == nil {
+			expose = map[string]bool{}
+			for _, tl := range rec.Tools {
+				if tl.Default {
+					expose[tl.Name] = true
+				}
+			}
+		}
+		backends = append(backends, Backend{Name: srv.Name, Session: eb.Session, Expose: expose})
 	}
 	agg, err := New(ctx, h.Version, backends)
 	if err != nil {
@@ -5001,7 +5029,6 @@ import (
 	"testing"
 
 	gw "github.com/gigmcp/gigmcp/internal/gateway"
-	"github.com/gigmcp/gigmcp/internal/registry"
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/gigmcp/gigmcp/internal/vault"
 )
@@ -5028,7 +5055,8 @@ func TestBuildMuxRouting(t *testing.T) {
 	})
 
 	// OIDC unconfigured: authn == nil → /api is NOT mounted.
-	mux := buildMux(st, v, nil, registry.StubInstaller{}, profiles, legacy)
+	// Pass nil for Installer (no registry configured in this routing-only test).
+	mux := buildMux(st, v, nil, nil, profiles, legacy)
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
@@ -5088,7 +5116,7 @@ func buildMux(
 	st store.Store,
 	v *vault.Vault,
 	authn *auth.Authenticator, // nil = OIDC unconfigured, /api unmounted
-	installer registry.Installer,
+	installer registry.Installer, // may be nil (list falls back to store, mutates 502)
 	profiles *gw.ProfileHost,
 	legacy http.Handler,
 ) *http.ServeMux {
@@ -5111,7 +5139,9 @@ func buildMux(
 
 - [ ] **Step 4: Run, verify pass** — `go test ./cmd/gateway/` → PASS.
 
-- [ ] **Step 5: Wire `run()`** — in `cmd/gateway/main.go`, three additive changes (add `"github.com/gigmcp/gigmcp/internal/auth"` and `"github.com/gigmcp/gigmcp/internal/registry"` to imports):
+- [ ] **Step 5: Wire `run()`** — in `cmd/gateway/main.go`, three additive changes (add `"github.com/gigmcp/gigmcp/internal/auth"` and `"github.com/gigmcp/gigmcp/internal/registry"` to imports).
+
+> **Delta note:** `run()` already contains `installFromIndex()` + `spawnInstalled()` which handle the boot spawn loop (manifest consent gates, placeholder, Expose map). Do NOT re-implement a spawn loop. The `spawnInstalled` helper already calls `gw.SpawnEgressBackend` with `"default"` for tenant (which Task 13 updates to the new signature). The legacy path (`gwServer` aggregator + `RequireBearer` handler) still exists at the bottom of `run()` and is wired into `buildMux` as `legacy`.
 
 (a) Wrap the resolver in the auditing decorator — replace
 
@@ -5132,14 +5162,19 @@ with
 	egProxy, err := proxy.New(reg, resolver)
 ```
 
-(b) After the existing backend spawn loop (which now passes `"default"` from Task 13) and before the final `return http.ListenAndServe(...)`, build the profile host and (conditionally) the authenticator:
+(b) After `spawnInstalled` returns `backends` and before the final `return http.ListenAndServe(...)`, insert the profile host and (conditionally) the authenticator. The existing lines that build `gwServer` + `handler` remain and become the `legacy` parameter to `buildMux`:
 
 ```go
 	profiles := &gw.ProfileHost{
 		Store:   st,
 		Version: version,
 		Spawn: func(ctx context.Context, srv store.Server, tenant string) (*gw.EgressBackend, error) {
-			return gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, tenant)
+			// placeholder is sourced from the manifest at spawn time (same as
+			// spawnInstalled does); for profile runtimes we pass "" here and
+			// let SpawnEgressBackend fall back to "PLACEHOLDER" for legacy
+			// servers — manifest-installed servers already carry the placeholder
+			// in the sandbox env from the registry installer.
+			return gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, tenant, "")
 		},
 	}
 	defer profiles.Close()
@@ -5166,8 +5201,15 @@ with
 
 ```go
 	legacy := gw.RequireBearer(cfg.BearerToken, handler)
-	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, registry.StubInstaller{}, profiles, legacy))
+	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, &registry.IndexInstaller{
+		Store:   st,
+		Client:  &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
+		Puller:  &oci.Puller{},
+		DataDir: cfg.DataDir,
+	}, profiles, legacy))
 ```
+
+(Note: when `cfg.RegistryIndexURL` is empty, the `IndexInstaller` will return an error on any install/uninstall call, which the handlers surface as 502 — acceptable until the registry is configured. Import `"github.com/gigmcp/gigmcp/internal/oci"` alongside the existing registry import.)
 
 - [ ] **Step 6: docker-compose.yml** — add to the gateway service `environment:` block (all optional pass-throughs; the gateway boots without them):
 
@@ -5191,6 +5233,10 @@ with
 ### Task 17: Container E2E — two users, two profiles, two credentials (`make test` only)
 
 **Files:** Create `internal/gateway/profile_e2e_test.go` (`//go:build linux`). Reuses `buildBin` (egress_e2e_test.go) and `bearerTransport` (e2e_test.go) from package `gateway_test`.
+
+> **Delta note on consent/manifest gating:** The test uses a `ProfileHost` with a custom `Spawn` lambda that calls `SpawnEgressBackend` directly — it does NOT go through `spawnInstalled`. The `ProfileHost.getOrCreate` calls `h.Store.GetManifest` to build the Expose map, but handles `store.ErrManifestNotFound` gracefully (nil Expose = expose all tools). Therefore the seeding code does **not** need to create a manifest or consent row for the "fetch" server — the no-manifest path is the legacy path that exposes all tools. The test verifies tool invocation (`fetch_fetch`), not tool filtering. If you want to test Expose filtering, seed a manifest record with `PutManifest` and `RecordConsent` — but that is optional for this E2E's goals. The `SpawnFunc` passes `""` for placeholder, falling back to "PLACEHOLDER" inside `SpawnEgressBackend`.
+>
+> The production `spawnInstalled` path DOES enforce consent gates — if you add a `PutManifest` call without a matching `RecordConsent`, `spawnInstalled` will refuse to spawn that server in production. This test bypasses that gate intentionally (it tests the profile routing layer, not the install flow — `TestRegistryInstallE2E` in `registry_e2e_test.go` covers the full install+consent+spawn pipeline).
 
 - [ ] **Step 1: Write the test** — `internal/gateway/profile_e2e_test.go`
 
@@ -5329,10 +5375,14 @@ func TestProfileScopedEgressE2E(t *testing.T) {
 	alloc := netmgr.NewAllocator("10.88.0.0/16")
 
 	// 6. ProfileHost with the REAL spawner — Tenant = profile ID.
+	// SpawnEgressBackend signature after Task 13: (ctx, srv, alloc, reg, proxyPort,
+	// caFile, bootstrapPath, tenant, placeholder). Pass "" for placeholder so
+	// SpawnEgressBackend falls back to "PLACEHOLDER" (legacy path; the fetch-mcp
+	// binary reads GIG_PLACEHOLDER from the sandbox environment).
 	host := &gateway.ProfileHost{
 		Store: st, Version: "e2e",
 		Spawn: func(ctx context.Context, srv store.Server, tenant string) (*gateway.EgressBackend, error) {
-			return gateway.SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, tenant)
+			return gateway.SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, tenant, "")
 		},
 	}
 	t.Cleanup(host.Close)
@@ -5527,7 +5577,10 @@ In `cmd/gateway/main.go`: delete `seedDemoCredential` and any call to it (introd
 - [ ] **Step 4: Retire the startup spawn-all loop in `run()`.** Delete from `cmd/gateway/main.go`: the `servers, err := st.ListServers(ctx)` block, the `var backends ...; for _, srv := range servers { SpawnEgressBackend ... }` loop with its `cleanups` defer, the `gwServer, err := gw.New(...)` + `handler := mcp.NewStreamableHTTPHandler(...)` lines, and the `legacy := gw.RequireBearer(...)` line. Sandboxes are now exclusively lazy-spawned by the ProfileHost. Drop the `legacy http.Handler` parameter from `buildMux` (and its `mux.Handle("/mcp", legacy)` line) in `cmd/gateway/serve.go`; the final wiring becomes:
 
 ```go
-	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, registry.StubInstaller{}, profiles))
+	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, &registry.IndexInstaller{
+		Store: st, Client: &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
+		Puller: &oci.Puller{}, DataDir: cfg.DataDir,
+	}, profiles))
 ```
 
 Remove the now-unused `mcp` import from `main.go` if nothing else uses it. Update `cmd/gateway/serve_test.go`: drop the `legacy` handler and the `/mcp` teapot assertion; assert `/mcp` now 404s and `/mcp/p/{slug}` still 401s.
@@ -5544,7 +5597,7 @@ Remove the now-unused `mcp` import from `main.go` if nothing else uses it. Updat
 - A human can: `docker compose -f docker-compose.dev.yml up` Zitadel → log in via `/api/auth/login` → land with a `gig_session` cookie and a JIT user row whose role reflects the `gigmcp-admin` claim → create a profile via `POST /api/profiles` (token shown once) → store a credential (vault-encrypted, tenant = own user ID) → point an MCP client at `/mcp/p/<slug>` → read the audit trail at `GET /api/audit`.
 - Impersonation is view-as only: GETs resolve against the target, every mutation 403s except stop, both directions audited and visible to the target.
 - Secrets never leave: credential GET returns metadata only; profile tokens and session tokens exist at rest only as SHA-256.
-- The registry workstream can replace `registry.StubInstaller` without touching any control-plane file; install endpoints flip from 501 to live behavior automatically.
+- The registry workstream owns `internal/registry/`; install endpoints use `registry.IndexInstaller` wired in `buildMux`/`run()` — no control-plane file changes needed when the registry implementation evolves.
 - After Task 18 (gated): no `RequireBearer`, no `GIG_BEARER_TOKEN`, no startup spawn-all loop; all MCP access is per-profile.
 
 ## Explicitly out of scope (second plan / other workstream)
