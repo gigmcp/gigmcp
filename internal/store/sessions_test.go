@@ -43,7 +43,10 @@ func TestSessionRoundTrip(t *testing.T) {
 func TestExpiredSessionDeletedOnRead(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)
-	u, _ := st.UpsertUserByOIDC(ctx, "https://idp", "s1", "a@x", "A", "user")
+	u, err := st.UpsertUserByOIDC(ctx, "https://idp", "s1", "a@x", "A", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if err := st.CreateSession(ctx, "old", u.ID, time.Now().Add(-time.Minute)); err != nil {
 		t.Fatal(err)
@@ -127,5 +130,32 @@ func TestSetImpersonationMissingSession(t *testing.T) {
 	err := st.SetImpersonation(ctx, "nonexistent-hash", 42, time.Now().Add(time.Hour))
 	if !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("expected ErrSessionNotFound, got %v", err)
+	}
+}
+
+// TestDeleteSessionMissingRowNil verifies that deleting a non-existent session
+// is not an error.
+func TestDeleteSessionMissingRowNil(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.DeleteSession(ctx, "does-not-exist"); err != nil {
+		t.Fatalf("DeleteSession on missing row must return nil, got %v", err)
+	}
+}
+
+// TestClearImpersonationWhenNotImpersonatingNil verifies that clearing
+// impersonation on a session that is not impersonating anything is not an error.
+func TestClearImpersonationWhenNotImpersonatingNil(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	u, err := st.UpsertUserByOIDC(ctx, "https://idp", "ci-sub", "ci@x", "CI", "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(ctx, "ci-hash", u.ID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ClearImpersonation(ctx, "ci-hash"); err != nil {
+		t.Fatalf("ClearImpersonation when not impersonating must return nil, got %v", err)
 	}
 }

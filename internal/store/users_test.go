@@ -54,6 +54,24 @@ func TestUpsertUserByOIDCCreatesAndUpdates(t *testing.T) {
 	}
 }
 
+func TestSameSubjectDifferentIssuerCreatesDistinctUser(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+
+	u1, err := st.UpsertUserByOIDC(ctx, "https://idp-a", "sub-1", "a@example.com", "Alice", "user")
+	if err != nil {
+		t.Fatalf("upsert idp-a: %v", err)
+	}
+	// Same subject, different issuer → must create a new row.
+	u2, err := st.UpsertUserByOIDC(ctx, "https://idp-b", "sub-1", "a@example.com", "Alice", "user")
+	if err != nil {
+		t.Fatalf("upsert idp-b: %v", err)
+	}
+	if u2.ID == u1.ID {
+		t.Fatalf("same subject under different issuer must create a distinct user row (got same ID %d)", u1.ID)
+	}
+}
+
 func TestGetUserAndListUsers(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)

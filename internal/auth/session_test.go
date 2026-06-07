@@ -2,7 +2,6 @@ package auth_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -283,10 +282,8 @@ func TestImpersonationTargetDeletedFallsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Delete the target user directly via SQL to simulate a gone user.
-	// Since there's no DeleteUser in the Store interface, use a fake store.
-	// We'll instead use a fakeStore wrapper that returns ErrUserNotFound for
-	// the target but the real user normally.
+	// Simulate the target user being deleted by wrapping the store with a fake
+	// that returns ErrUserNotFound for that specific user ID.
 	fakeStore := &deletedTargetStore{Store: st, deletedID: target.ID}
 
 	var gotReal, gotEff store.User
@@ -372,7 +369,6 @@ func TestRequireAdminNoContext(t *testing.T) {
 
 // (g) DB error on GetSession returns 500 not 401.
 func TestSessionMiddlewareDBError500(t *testing.T) {
-	ctx := context.Background()
 	st := openStore(t)
 	_, cookie := seedSession(t, st, "erralice", "user")
 
@@ -381,8 +377,6 @@ func TestSessionMiddlewareDBError500(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// openStore registers Cleanup(st.Close()); we already closed it, so
-	// re-open a fresh one just for reference; but the handler uses the closed st.
 	h := auth.SessionMiddleware(st, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -394,17 +388,6 @@ func TestSessionMiddlewareDBError500(t *testing.T) {
 
 	// A closed DB returns an error that is not ErrSessionNotFound → must be 500.
 	if rec.Code != http.StatusInternalServerError {
-		// If the driver returns ErrSessionNotFound for a closed DB we can't
-		// distinguish here; skip rather than fail.
-		if rec.Code == http.StatusUnauthorized {
-			// Check that the body does NOT contain "internal" (meaning it
-			// went through the not-found path, not the error path).
-			body := rec.Body.String()
-			_ = body
-			_ = ctx
-			t.Logf("NOTE: closed sqlite returned ErrSessionNotFound equivalent; got 401 (driver limitation)")
-			return
-		}
 		t.Fatalf("DB error must yield 500, got %d body=%s", rec.Code, rec.Body)
 	}
 	if !strings.Contains(rec.Body.String(), "internal") {
@@ -432,5 +415,3 @@ func (d *deletedTargetStore) GetUser(ctx context.Context, id int64) (store.User,
 // Verify deletedTargetStore satisfies store.Store (compile-time check).
 var _ store.Store = (*deletedTargetStore)(nil)
 
-// Verify errors package is used (compile-time).
-var _ = errors.New

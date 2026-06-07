@@ -14,19 +14,19 @@ import (
 
 // Config is the gateway's runtime configuration.
 type Config struct {
-	Listen           string // GIG_LISTEN, default ":8080"
-	BearerToken      string // GIG_BEARER_TOKEN, required
-	DBPath           string // GIG_DB_PATH, default "gigmcp.db"
-	EchoBinary       string // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding — handoff §6.D)
-	MasterKey        string // GIG_MASTER_KEY, required for vault (hex-encoded 32 bytes)
-	ProxyPort        int    // GIG_PROXY_PORT, default 8081 (egress MITM proxy)
-	BootstrapPath    string // GIG_BOOTSTRAP_PATH, default "/usr/local/bin/bootstrap"
-	DemoToken        string // GIG_DEMO_TOKEN, optional: seed a demo credential on startup
-	DemoAllow        string // GIG_DEMO_ALLOW, optional: comma-separated allowed hosts for demo credential
-	RegistryIndexURL string // GIG_REGISTRY_INDEX_URL: https:// or file:// index.json location
-	RegistryPubKey   string // GIG_REGISTRY_PUBKEY: 32-byte ed25519 hex (index trust root)
-	Install          string // GIG_INSTALL: comma-separated refs installed at boot (auto-consented)
-	DataDir          string // GIG_DATA_DIR, default "/data": extracted server binaries
+	Listen           string        // GIG_LISTEN, default ":8080"
+	BearerToken      string        // GIG_BEARER_TOKEN, required
+	DBPath           string        // GIG_DB_PATH, default "gigmcp.db"
+	EchoBinary       string        // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding — handoff §6.D)
+	MasterKey        string        // GIG_MASTER_KEY, required for vault (hex-encoded 32 bytes)
+	ProxyPort        int           // GIG_PROXY_PORT, default 8081 (egress MITM proxy)
+	BootstrapPath    string        // GIG_BOOTSTRAP_PATH, default "/usr/local/bin/bootstrap"
+	DemoToken        string        // GIG_DEMO_TOKEN, optional: seed a demo credential on startup
+	DemoAllow        string        // GIG_DEMO_ALLOW, optional: comma-separated allowed hosts for demo credential
+	RegistryIndexURL string        // GIG_REGISTRY_INDEX_URL: https:// or file:// index.json location
+	RegistryPubKey   string        // GIG_REGISTRY_PUBKEY: 32-byte ed25519 hex (index trust root)
+	Install          string        // GIG_INSTALL: comma-separated refs installed at boot (auto-consented)
+	DataDir          string        // GIG_DATA_DIR, default "/data": extracted server binaries
 	OIDCIssuer       string        // GIG_OIDC_ISSUER, e.g. http://localhost:8082; empty = control plane disabled
 	OIDCClientID     string        // GIG_OIDC_CLIENT_ID
 	OIDCClientSecret string        // GIG_OIDC_CLIENT_SECRET or GIG_OIDC_CLIENT_SECRET_FILE; optional (PKCE public client)

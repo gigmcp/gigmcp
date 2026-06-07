@@ -114,7 +114,7 @@ func (s *sqliteStore) ListAudit(ctx context.Context, beforeID int64, limit int, 
 		if err := rows.Scan(&e.ID, &ts, &e.Kind, &uid, &pid, &e.Server, &e.Host, &e.Decision, &e.Detail); err != nil {
 			return nil, err
 		}
-		e.TS = time.Unix(ts, 0)
+		e.TS = time.Unix(ts, 0).UTC()
 		if uid.Valid {
 			v := uid.Int64
 			e.UserID = &v

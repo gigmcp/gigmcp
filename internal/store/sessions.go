@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS sessions (
 );`
 
 // CreateSession inserts a session row.
+// As a cheap purge of abandoned sessions, any already-expired rows are deleted
+// before the insert. Login is low-frequency so the extra DELETE is negligible.
 func (s *sqliteStore) CreateSession(ctx context.Context, tokenHash string, userID int64, expiresAt time.Time) error {
+	// Cheap purge: delete expired sessions opportunistically on login.
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, time.Now().Unix())
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (token_hash,user_id,created_at,expires_at) VALUES (?,?,?,?)`,
 		tokenHash, userID, time.Now().Unix(), expiresAt.Unix())
@@ -63,14 +67,14 @@ func (s *sqliteStore) GetSession(ctx context.Context, tokenHash string) (Session
 	if err != nil {
 		return Session{}, err
 	}
-	sess.CreatedAt = time.Unix(created, 0)
-	sess.ExpiresAt = time.Unix(expires, 0)
+	sess.CreatedAt = time.Unix(created, 0).UTC()
+	sess.ExpiresAt = time.Unix(expires, 0).UTC()
 	if impID.Valid {
 		v := impID.Int64
 		sess.ImpersonatingUserID = &v
 	}
 	if impExp.Valid {
-		tv := time.Unix(impExp.Int64, 0)
+		tv := time.Unix(impExp.Int64, 0).UTC()
 		sess.ImpersonationExpiresAt = &tv
 	}
 	if time.Now().After(sess.ExpiresAt) {

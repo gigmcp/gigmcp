@@ -62,7 +62,7 @@ func scanProfile(row *sql.Row) (Profile, error) {
 		return Profile{}, err
 	}
 	p.MetaTools = meta != 0
-	p.CreatedAt = time.Unix(created, 0)
+	p.CreatedAt = time.Unix(created, 0).UTC()
 	return p, nil
 }
 
@@ -132,7 +132,7 @@ func (s *sqliteStore) ListProfiles(ctx context.Context, userID int64) ([]Profile
 			return nil, err
 		}
 		p.MetaTools = meta != 0
-		p.CreatedAt = time.Unix(created, 0)
+		p.CreatedAt = time.Unix(created, 0).UTC()
 		out = append(out, p)
 	}
 	return out, rows.Err()

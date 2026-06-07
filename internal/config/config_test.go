@@ -118,10 +118,27 @@ func TestOIDCDisabledByDefault(t *testing.T) {
 }
 
 func TestOIDCPartialConfigErrors(t *testing.T) {
-	setBaseEnv(t)
-	t.Setenv("GIG_OIDC_ISSUER", "https://idp.example.com")
-	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("issuer without client-id/redirect must error (all-or-none)")
+	// Each sub-test sets exactly two of the three core OIDC vars; all must error.
+	cases := []struct {
+		name   string
+		issuer string
+		cid    string
+		redir  string
+	}{
+		{"issuer+client_id", "https://idp.example.com", "cid", ""},
+		{"issuer+redirect", "https://idp.example.com", "", "https://gig.example.com/api/auth/callback"},
+		{"client_id+redirect", "", "cid", "https://gig.example.com/api/auth/callback"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setBaseEnv(t)
+			t.Setenv("GIG_OIDC_ISSUER", tc.issuer)
+			t.Setenv("GIG_OIDC_CLIENT_ID", tc.cid)
+			t.Setenv("GIG_OIDC_REDIRECT_URL", tc.redir)
+			if _, err := config.FromEnv(); err == nil {
+				t.Fatal("two-of-three OIDC vars must error (all-or-none)")
+			}
+		})
 	}
 }
 
@@ -164,11 +181,48 @@ func TestOIDCClientSecretFile(t *testing.T) {
 	}
 }
 
-func TestBadSessionTTLErrors(t *testing.T) {
+// TestEnvOrFileBothSet verifies that when both GIG_OIDC_CLIENT_SECRET and
+// GIG_OIDC_CLIENT_SECRET_FILE are set, the plain env var wins.
+func TestEnvOrFileBothSet(t *testing.T) {
 	setBaseEnv(t)
-	t.Setenv("GIG_SESSION_TTL", "not-a-duration")
+	f := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(f, []byte("fromfile\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIG_OIDC_ISSUER", "https://idp.example.com")
+	t.Setenv("GIG_OIDC_CLIENT_ID", "cid")
+	t.Setenv("GIG_OIDC_CLIENT_SECRET", "fromenv")
+	t.Setenv("GIG_OIDC_CLIENT_SECRET_FILE", f)
+	t.Setenv("GIG_OIDC_REDIRECT_URL", "https://gig.example.com/api/auth/callback")
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OIDCClientSecret != "fromenv" {
+		t.Fatalf("plain env var must win over _FILE, got %q", cfg.OIDCClientSecret)
+	}
+}
+
+// TestEnvOrFileMissingPath verifies that a _FILE path pointing to a missing
+// file produces an error.
+func TestEnvOrFileMissingPath(t *testing.T) {
+	setBaseEnv(t)
+	t.Setenv("GIG_OIDC_CLIENT_SECRET_FILE", "/nonexistent/path/secret")
 	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("invalid GIG_SESSION_TTL must error")
+		t.Fatal("missing _FILE path must error")
+	}
+}
+
+func TestBadSessionTTLErrors(t *testing.T) {
+	cases := []string{"not-a-duration", "-24h", "0s"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			setBaseEnv(t)
+			t.Setenv("GIG_SESSION_TTL", v)
+			if _, err := config.FromEnv(); err == nil {
+				t.Fatalf("GIG_SESSION_TTL=%q must error", v)
+			}
+		})
 	}
 }
 

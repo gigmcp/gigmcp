@@ -42,7 +42,13 @@ CREATE TABLE IF NOT EXISTS users (
 
 const userCols = `id,issuer,subject,email,display_name,role,created_at,last_login_at`
 
-func scanUser(row *sql.Row) (User, error) {
+// rowScanner is satisfied by *sql.Row and *sql.Rows, allowing scanUser to be
+// reused for both single-row queries and loop iterations.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanUser(row rowScanner) (User, error) {
 	var u User
 	var created, lastLogin int64
 	err := row.Scan(&u.ID, &u.Issuer, &u.Subject, &u.Email, &u.DisplayName, &u.Role, &created, &lastLogin)
@@ -52,8 +58,8 @@ func scanUser(row *sql.Row) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	u.CreatedAt = time.Unix(created, 0)
-	u.LastLoginAt = time.Unix(lastLogin, 0)
+	u.CreatedAt = time.Unix(created, 0).UTC()
+	u.LastLoginAt = time.Unix(lastLogin, 0).UTC()
 	return u, nil
 }
 
@@ -89,13 +95,10 @@ func (s *sqliteStore) ListUsers(ctx context.Context) ([]User, error) {
 	defer rows.Close()
 	var users []User
 	for rows.Next() {
-		var u User
-		var created, lastLogin int64
-		if err := rows.Scan(&u.ID, &u.Issuer, &u.Subject, &u.Email, &u.DisplayName, &u.Role, &created, &lastLogin); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
-		u.CreatedAt = time.Unix(created, 0)
-		u.LastLoginAt = time.Unix(lastLogin, 0)
 		users = append(users, u)
 	}
 	return users, rows.Err()
