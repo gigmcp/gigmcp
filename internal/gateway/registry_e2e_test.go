@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigmcp/gigmcp-registry/schema"
+	"github.com/gigmcp/registry/schema"
 	"github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/gigmcp/gigmcp/internal/netmgr"
 	"github.com/gigmcp/gigmcp/internal/oci"

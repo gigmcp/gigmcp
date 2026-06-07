@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigmcp/gigmcp-registry/schema"
+	"github.com/gigmcp/registry/schema"
 )
 
 // fixtureManifest returns a valid manifest for a server packaged at

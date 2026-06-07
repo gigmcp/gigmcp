@@ -1,7 +1,7 @@
 FROM golang:1.26.4-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-# NOTE(manifest-registry): go.mod replaces github.com/gigmcp/gigmcp-registry/schema
+# NOTE(manifest-registry): go.mod replaces github.com/gigmcp/registry/schema
 # with ../gigmcp-registry (outside this build context). Until the registry repo
 # is published and tagged (then: drop the replace, pin a version, set
 # GOPRIVATE=github.com/gigmcp/*), build production images from a context that

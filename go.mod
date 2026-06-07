@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
-	github.com/gigmcp/gigmcp-registry/schema v0.0.0-00010101000000-000000000000
+	github.com/gigmcp/registry/schema v0.0.0-00010101000000-000000000000
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/vishvananda/netlink v1.3.1
@@ -46,4 +46,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/gigmcp/gigmcp-registry/schema => ../gigmcp-registry/schema
+replace github.com/gigmcp/registry/schema => ../gigmcp-registry/schema

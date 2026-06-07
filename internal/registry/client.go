@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gigmcp/gigmcp-registry/schema"
+	"github.com/gigmcp/registry/schema"
 )
 
 // Client fetches index.json + index.json.sig and verifies the ed25519
