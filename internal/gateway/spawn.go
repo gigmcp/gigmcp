@@ -116,6 +116,12 @@ func sandboxPayloadPID(bwrapChildPID int) (int, error) {
 // returns an EgressBackend with the connected MCP client session, the sandbox
 // child PID, and a cleanup function.
 //
+// placeholder is the high-entropy sentinel injected into the sandbox as
+// GIG_PLACEHOLDER; it is used by the proxy to recognise credential slots in
+// outbound requests and substitute the real credential value. Pass "" to use
+// the legacy "PLACEHOLDER" value (gig-echo-bin demo path); manifest-installed
+// servers should pass store.ManifestRecord.Injections[i].Placeholder.
+//
 // Pipe protocol:
 //   - r3/w3: inject-done  — gateway writes 1 byte after veth injection (bootstrap reads fd 3)
 //   - r4/w4: net-ready    — bootstrap writes 1 byte after configuring the network (gateway reads fd 4)
@@ -132,7 +138,11 @@ func SpawnEgressBackend(
 	proxyPort int,
 	caFile string,
 	bootstrapPath string,
+	placeholder string, // manifest-generated sentinel; "" = legacy "PLACEHOLDER"
 ) (*EgressBackend, error) {
+	if placeholder == "" {
+		placeholder = "PLACEHOLDER" // legacy GIG_ECHO_BIN demo path
+	}
 	sub, err := alloc.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("allocate subnet: %w", err)
@@ -197,7 +207,7 @@ func SpawnEgressBackend(
 				"HTTPS_PROXY":         fmt.Sprintf("http://%s:%d", proxyIP, proxyPort),
 				"SSL_CERT_FILE":       "/etc/gigmcp-ca.pem",
 				"NODE_EXTRA_CA_CERTS": "/etc/gigmcp-ca.pem",
-				"GIG_PLACEHOLDER":     "PLACEHOLDER",
+				"GIG_PLACEHOLDER":     placeholder,
 			},
 		},
 	}

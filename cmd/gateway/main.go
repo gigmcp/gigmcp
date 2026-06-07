@@ -126,7 +126,7 @@ func run(ctx context.Context) error {
 	var backends []gw.Backend
 	var cleanups []func()
 	for _, srv := range servers {
-		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath)
+		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "")
 		if err != nil {
 			return fmt.Errorf("spawn egress backend %q: %w", srv.Name, err)
 		}
