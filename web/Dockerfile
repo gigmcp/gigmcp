@@ -10,7 +10,12 @@ WORKDIR /app
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# GATEWAY_INTERNAL_URL is read at runtime by next.config rewrites, not baked.
+# GATEWAY_INTERNAL_URL is evaluated by next.config rewrites AT BUILD TIME and
+# baked into .next/routes-manifest.json (verified: the standalone server
+# ignores the runtime env var). Pass it as a build arg; compose sets it to the
+# gateway's in-network DNS name (see docker-compose.yml build.args).
+ARG GATEWAY_INTERNAL_URL=http://localhost:8080
+ENV GATEWAY_INTERNAL_URL=$GATEWAY_INTERNAL_URL
 RUN pnpm run build
 
 FROM node:22-alpine AS runner

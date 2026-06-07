@@ -34,6 +34,84 @@ A full Next.js 16.2.7 (App Router, TypeScript, Tailwind, shadcn/base-ui) dashboa
 
 ---
 
+## One-command full-stack bring-up (verified 2026-06-07)
+
+Everything containerized; login flows entirely through `http://localhost:3000`.
+
+### The issuer-reachability trick
+
+The gateway's OIDC issuer is `http://localhost:8082` (the exact string go-oidc
+verifies, set by the Zitadel dev fixture's ExternalDomain/Port — do NOT change
+it; that would require re-initializing Zitadel). At boot the gateway fatally
+fails if it can't fetch `http://localhost:8082/.well-known/openid-configuration`
+*from inside its own container*, where `localhost` is the container itself.
+
+Solution in `docker-compose.yml`: an **`issuer-proxy` sidecar** (`alpine/socat`)
+owns the network namespace; the gateway joins it via
+`network_mode: service:issuer-proxy`. Inside that shared netns, socat listens on
+`localhost:8082` and forwards to the `zitadel` service. Both compose files live
+in this directory, so they share one compose project (`gigmcp`) and one default
+network — service DNS resolves across files. The same shim covers the token and
+JWKS endpoints (also issuer-host URLs). Because the sidecar starts before the
+gateway (`depends_on` + netns ownership), there is no race against the
+gateway's fatal 10s discovery timeout. Port `8080:8080` is published on the
+sidecar (only the netns owner can publish), and the web container's rewrite
+target is `http://issuer-proxy:8080` (the gateway has no DNS name of its own).
+
+### .env template (repo root; gitignored — never commit)
+
+```bash
+GIG_BEARER_TOKEN=<openssl rand -hex 32>
+GIG_MASTER_KEY=<openssl rand -hex 32>
+GIG_OIDC_ISSUER=http://localhost:8082
+GIG_OIDC_CLIENT_ID=376420779513937923
+# No GIG_OIDC_CLIENT_SECRET — PKCE public client.
+GIG_OIDC_REDIRECT_URL=http://localhost:3000/api/auth/callback
+GIG_PUBLIC_URL=http://localhost:3000
+```
+
+### Bring-up
+
+```bash
+# 1. Zitadel dev fixture first (skip if already running — do not recreate, it
+#    holds clicked console config):
+docker compose -f docker-compose.dev.yml up -d
+
+# 2. Gateway (+ issuer-proxy sidecar) and web:
+docker compose up -d --build
+```
+
+**Never pass `--remove-orphans`** — both files share the project, so it would
+tear down the Zitadel containers.
+
+The gateway image build needs the sibling checkout `../gigmcp-registry`
+(go.mod `replace`); compose supplies it as a named build context
+(`additional_contexts: registry: ../gigmcp-registry`).
+
+Two gotchas found during verification:
+- `GATEWAY_INTERNAL_URL` is evaluated by `next.config.ts` rewrites **at build
+  time** and baked into `.next/routes-manifest.json` — the standalone server
+  ignores the runtime env var. It is now a web **build arg**
+  (`http://issuer-proxy:8080` in compose); changing it requires a rebuild.
+- A stray host process can squat IPv4 `*:3000` (an `npx open-websearch` MCP
+  server was doing so during verification). Docker Desktop still publishes
+  `[::]:3000`, and `localhost` resolves to `::1` first, so curl/browser hit the
+  dashboard — but if you ever get an Express 404 from `:3000`, check
+  `lsof -nP -iTCP:3000 -sTCP:LISTEN`.
+
+### HUMAN STEP (Zitadel console — required before first login)
+
+In the Zitadel console (`http://localhost:8082/ui/console`, admin@zitadel.localhost) →
+project **gigmcp** → the PKCE web app (client ID `376420779513937923`) →
+**Redirect URIs**: **add** `http://localhost:3000/api/auth/callback`
+(keep the existing `http://localhost:8080/api/auth/callback` too). Development
+Mode is already on, so plain-http URIs are accepted. Save.
+
+Then open `http://localhost:3000` → `/login` → Sign in → Zitadel → back to the
+dashboard.
+
+---
+
 ## How to run (dev)
 
 ### Prerequisites
@@ -76,8 +154,9 @@ The dashboard talks to the gateway via Next.js rewrites. Opening `http://localho
 ### Docker compose (both services)
 
 ```bash
-# Requires all GIG_* env vars set (see above). The web service rewrites to
-# http://gateway:8080 internally. GIG_OIDC_REDIRECT_URL must be
+# Requires all GIG_* env vars set (see above; or in .env). The web service
+# rewrites to http://issuer-proxy:8080 internally (baked at image build — see
+# the bring-up section above). GIG_OIDC_REDIRECT_URL must be
 # http://localhost:3000/api/auth/callback (browser-facing).
 GIG_BEARER_TOKEN=... GIG_MASTER_KEY=... GIG_OIDC_ISSUER=... \
   GIG_OIDC_CLIENT_ID=... GIG_OIDC_CLIENT_SECRET=... \
