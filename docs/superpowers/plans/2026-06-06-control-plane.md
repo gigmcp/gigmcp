@@ -117,7 +117,7 @@ Responsibilities stay layered: `config` only parses env; `store` only persists; 
 
 > **This whole task requires the human once:** clicking through the Zitadel console to create the project, role, and app, and completing one interactive browser login. Do not attempt to automate the console; ask the human to do the bootstrap steps and report back the client ID.
 
-- [ ] **Step 1: Add dependencies**
+- [x] **Step 1: Add dependencies**
 
 ```bash
 go get github.com/coreos/go-oidc/v3@latest
@@ -128,7 +128,7 @@ go mod why github.com/go-jose/go-jose/v4   # expect: transitive via go-oidc (nee
 
 Confirm `go.mod` now lists `github.com/coreos/go-oidc/v3` and `golang.org/x/oauth2` in the main `require` block (oauth2 promoted from indirect). If `go mod why` shows go-jose is NOT a dependency, run `go get github.com/go-jose/go-jose/v4@latest` and note it.
 
-- [ ] **Step 2: Create `docker-compose.dev.yml`** (dev-only — never merged into the production compose):
+- [x] **Step 2: Create `docker-compose.dev.yml`** (dev-only — never merged into the production compose):
 
 ```yaml
 # Dev-only fixture: a local Zitadel IdP for OIDC development and the Task 1
@@ -173,14 +173,14 @@ services:
 
 Run `docker compose -f docker-compose.dev.yml up -d` and wait until `http://localhost:8082/.well-known/openid-configuration` returns JSON (first init takes ~1 min).
 
-- [ ] **Step 3: Manual Zitadel bootstrap (HUMAN).** Ask the human to do this once in the console at `http://localhost:8082/ui/console` (login `admin@zitadel.localhost` or `admin`, password `Password1!`, change password when prompted):
+- [x] **Step 3: Manual Zitadel bootstrap (HUMAN).** Ask the human to do this once in the console at `http://localhost:8082/ui/console` (login `admin@zitadel.localhost` or `admin`, password `Password1!`, change password when prompted):
   1. Create a **Project** named `gigmcp`.
   2. In the project, create a **Role** with key `gigmcp-admin`.
   3. Under the project's **Authorizations**, grant the admin user the `gigmcp-admin` role.
   4. In the project's general settings, enable **"Assert Roles on Authentication"** (so the roles claim `urn:zitadel:iam:org:project:roles` is embedded in the ID token).
   5. In the project, create an **Application**: type **Web**, authentication method **PKCE** (no client secret), redirect URI `http://localhost:8080/api/auth/callback`, and enable **Development Mode** (allows the http:// redirect). Record the **Client ID**.
 
-- [ ] **Step 4: Write the throwaway spike** — `cmd/oidc-spike/main.go`:
+- [x] **Step 4: Write the throwaway spike** — `cmd/oidc-spike/main.go`:
 
 ```go
 // Command oidc-spike is a THROWAWAY proof of the full OIDC code+PKCE flow
@@ -271,11 +271,13 @@ func main() {
 }
 ```
 
-- [ ] **Step 5: Run the spike (HUMAN clicks through login).** `SPIKE_CLIENT_ID=<client-id> go run ./cmd/oidc-spike`, open `http://localhost:8080/`, log in. Success criteria: the page shows `SPIKE OK`, the log shows the issuer/sub, and the roles claim log line shows a map containing the key `gigmcp-admin` (because the admin user was granted that role). If the roles claim is missing, re-check console step 4 ("Assert Roles on Authentication") and the authorization grant.
+- [x] **Step 5: Run the spike (HUMAN clicks through login).** `SPIKE_CLIENT_ID=<client-id> go run ./cmd/oidc-spike`, open `http://localhost:8080/`, log in. Success criteria: the page shows `SPIKE OK`, the log shows the issuer/sub, and the roles claim log line shows a map containing the key `gigmcp-admin` (because the admin user was granted that role). If the roles claim is missing, re-check console step 4 ("Assert Roles on Authentication") and the authorization grant.
 
-- [ ] **Step 6: Record findings.** Compare every name in the cheat-sheet's "go-oidc / oauth2 surface" bullet against what actually compiled and ran. If ANY name drifted (e.g. `S256ChallengeOption` renamed, `idt.Nonce` absent), update this plan's cheat sheet AND the affected code in Tasks 8 and 18 before proceeding. Append a dated note under the cheat sheet: `Verified by spike <date>: <list any corrections, or "no drift">.`
+- [x] **Step 6: Record findings.** Compare every name in the cheat-sheet's "go-oidc / oauth2 surface" bullet against what actually compiled and ran. If ANY name drifted (e.g. `S256ChallengeOption` renamed, `idt.Nonce` absent), update this plan's cheat sheet AND the affected code in Tasks 8 and 18 before proceeding. Append a dated note under the cheat sheet: `Verified by spike <date>: <list any corrections, or "no drift">.`
 
-- [ ] **Step 7: Delete the spike and commit** —
+> Verified by spike 2026-06-07: no API drift; roles claim requires assert-roles (project General Settings) + ID-token-roles (app Token Settings) + role ticked on the authorization row — all three switches must be ON, an authorization with empty ROLES column yields no claim; Zitadel pinned v2.71.0 (v3+ needs separate login-v2 container; latest=v4 broke login).
+
+- [x] **Step 7: Delete the spike and commit** —
 
 ```bash
 rm -rf cmd/oidc-spike

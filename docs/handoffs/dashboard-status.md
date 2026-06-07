@@ -92,12 +92,18 @@ GIG_BEARER_TOKEN=... GIG_MASTER_KEY=... GIG_OIDC_ISSUER=... \
 
 ### Zitadel console setup (human-in-the-loop — T1 spike)
 
+**Verified 2026-06-07 against Zitadel v2.71.0 (issuer http://localhost:8082).** Use `ghcr.io/zitadel/zitadel:v2.x` — v3+ splits the login UI into a separate container; latest (v4) returns `{"code":5,"message":"Not Found"}` on login. The `docker-compose.dev.yml` fixture is already pinned correctly.
+
 Before the dashboard can perform a first login, an admin must:
 
-1. Create a Zitadel project and OIDC web application (redirect URI = `http://localhost:3000/api/auth/callback` for dev).
-2. Set the role `gigmcp-admin` on the first user (or configure `GIG_OIDC_ADMIN_ROLE` to match your Zitadel role name).
-3. Set the env vars listed above on the gateway.
-4. Open `http://localhost:3000` → will redirect to `/login` → click "Sign in" → Zitadel → callback → overview.
+1. Create a Zitadel project named `gigmcp` and an OIDC web application (type **Web**, auth method **PKCE**, redirect URI = `http://localhost:3000/api/auth/callback` for dev, **Development Mode** on).
+2. Three switches that must ALL be on for the roles claim to appear in the ID token:
+   - Project **General Settings** → **"Assert Roles on Authentication"** (embeds `urn:zitadel:iam:org:project:roles` in the ID token).
+   - App **Token Settings** → **"User roles inside ID Token"**.
+   - Project **Authorizations** → grant the user the `gigmcp-admin` role and ensure the ROLES column is non-empty (an authorization row with an empty ROLES column yields no claim).
+3. Set the role `gigmcp-admin` on the first user (or configure `GIG_OIDC_ADMIN_ROLE` to match your Zitadel role name).
+4. Set the env vars listed above on the gateway.
+5. Open `http://localhost:3000` → will redirect to `/login` → click "Sign in" → Zitadel → callback → overview.
 
 The `control_plane_disabled` error (shown on `/login` when OIDC is not configured) is handled gracefully with a setup hint.
 
