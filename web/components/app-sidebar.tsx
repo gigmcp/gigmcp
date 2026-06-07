@@ -12,6 +12,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -41,7 +42,8 @@ export function AppSidebar({
   const items = NAV.filter((n) => !n.admin || role === "admin");
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="px-6 py-5 text-sm font-semibold tracking-tight">
+      <div className="flex items-center gap-2 px-6 py-5 text-sm font-semibold tracking-tight">
+        <Logo className="h-4 w-auto" />
         gigmcp
       </div>
       <nav className="flex-1 space-y-0.5 px-3">

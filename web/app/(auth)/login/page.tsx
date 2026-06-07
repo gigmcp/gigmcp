@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { api, ApiError } from "@/lib/api";
+import { Logo } from "@/components/logo";
 
 export default function LoginPage() {
   const t = useTranslations("login");
@@ -41,8 +42,11 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-6">
-        <div className="text-center text-lg font-semibold tracking-tight">
-          {t("wordmark")}
+        <div className="flex flex-col items-center gap-3">
+          <Logo className="h-8 w-auto" />
+          <div className="text-center text-lg font-semibold tracking-tight">
+            {t("wordmark")}
+          </div>
         </div>
         <Card>
           <CardHeader className="justify-items-center text-center">
