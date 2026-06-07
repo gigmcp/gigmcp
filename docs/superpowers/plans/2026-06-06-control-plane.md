@@ -34,6 +34,16 @@
 
 ---
 
+## Deviations from spec §5
+
+Three param-name differences between the spec (§5) and the implementation in this plan — the dashboard plan MUST follow these names, not the spec originals:
+
+1. **Audit pagination param:** implemented as `before` (integer row ID for keyset pagination), not `cursor`. The `GET /api/audit?before=&limit=` pattern threads through `audit.go` and all audit tests.
+2. **Profile servers body key:** `PUT /api/profiles/{id}/servers` body is `{"servers": [...]}`, not `{"names": [...]}`. See `profiles.go` + `TestProfileServersAndRotateAndDelete`.
+3. **Audit filtering (v1 scope):** `GET /api/audit` filters by `user_id` only (non-admins are forced to their own). Admins see all records; there are no `kind` or `server` filter params in v1. The spec §7 phrase "admins see all with filters" means post-v1 additional filters; see the spec note in §7 for the amended wording.
+
+---
+
 ## File Structure
 
 ```
@@ -556,6 +566,9 @@ type User struct {
 	LastLoginAt time.Time
 }
 
+// NOTE: FOREIGN KEY clauses are intentionally omitted from all new schemas.
+// SQLite requires PRAGMA foreign_keys=ON per-connection for FK enforcement
+// (parity rule, DESIGN #14); ownership is enforced in application code instead.
 const usersSchema = `
 CREATE TABLE IF NOT EXISTS users (
 	id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1770,6 +1783,11 @@ func writeAuthError(w http.ResponseWriter, status int, code, msg string) {
 
 // stopImpersonationPath is the one mutation allowed while impersonating.
 const stopImpersonationPath = "/api/admin/impersonate"
+
+// NOTE: an impersonating admin CANNOT switch targets without stopping first.
+// POST /api/admin/impersonate is itself a mutation, so the guard below blocks
+// it while view-as is active (the admin must DELETE first). This is intentional
+// — do not "fix" it.
 
 // SessionMiddleware authenticates by the gig_session cookie, loads the real
 // and effective users into the context, and enforces the view-as rule:
@@ -3620,7 +3638,7 @@ func TestStubReturnsErrNotImplemented(t *testing.T) {
 }
 ```
 
-Run `go test ./internal/registry/` → PASS. Commit separately so the registry workstream can cherry-pick/inspect it cleanly: `git add internal/registry/ && git commit -m "feat(registry): Installer contract + ErrNotImplemented stub (registry workstream owns this package)"`
+Run `go test ./internal/registry/` → PASS. Note: the stub test is intentionally written test-first-passing because it asserts a compile-time contract (the interface is satisfied) and that `StubInstaller` returns `ErrNotImplemented`, not behavior that needs a prior failing state. Commit separately so the registry workstream can cherry-pick/inspect it cleanly: `git add internal/registry/ && git commit -m "feat(registry): Installer contract + ErrNotImplemented stub (registry workstream owns this package)"`
 
 - [ ] **Step 2: Write the failing API tests** — `internal/api/admin_test.go`
 
@@ -3843,11 +3861,17 @@ func toServerJSON(srvs []store.Server) []serverJSON {
 }
 
 // handleListServers — GET /api/servers via Installer.List; while the stub is
-// wired it falls back to the store's installed-server list.
+// wired (or Installer is nil) it falls back to the store's installed-server list.
 func (s *Server) handleListServers(w http.ResponseWriter, r *http.Request) {
-	srvs, err := s.Installer.List(r.Context())
-	if errors.Is(err, registry.ErrNotImplemented) {
+	var srvs []store.Server
+	var err error
+	if s.Installer == nil {
 		srvs, err = s.Store.ListServers(r.Context())
+	} else {
+		srvs, err = s.Installer.List(r.Context())
+		if errors.Is(err, registry.ErrNotImplemented) {
+			srvs, err = s.Store.ListServers(r.Context())
+		}
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", "list servers")
@@ -4123,6 +4147,8 @@ In `internal/api/api_test.go` `newTestAPI`, change the `srv :=` line to wire the
 **Files:** Modify `internal/gateway/spawn.go`, `internal/gateway/testharness.go`, `cmd/gateway/main.go`.
 
 > **Coordination note:** this is the one near-boundary runtime edit in this plan (spec §6, handoff §10 Q10). Pure parameter threading — but flag the diff to the runtime owner for a sanity check before or at review time.
+
+This is a pure parameter-threading refactor with no behavioral change: all existing callers pass `"default"`, so the existing test suite (`make test`) fully verifies it — no new failing test is needed or appropriate here.
 
 - [ ] **Step 1: Thread the parameter.** In `internal/gateway/spawn.go`, change the `SpawnEgressBackend` signature by appending a `tenant` parameter:
 
@@ -4413,7 +4439,7 @@ func (s *swappableResolver) Resolve(id proxy.Identity, host string) (proxy.Crede
 	return s.cred, s.err
 }
 
-func TestAuditingResolverNeverBlocksAndCountsDrops(t *testing.T) {
+func TestAuditingResolverNeverBlocks(t *testing.T) {
 	_, st := newVaultStore(t)
 	inner := fixedResolver{cred: proxy.Credential{AllowedHosts: []string{"a.example.com"}}}
 	a := gateway.NewAuditingResolver(inner, st)
@@ -4422,6 +4448,10 @@ func TestAuditingResolverNeverBlocksAndCountsDrops(t *testing.T) {
 		if _, err := a.Resolve(proxy.Identity{Server: "s", Tenant: "default"}, "a.example.com"); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// All 10 events went to the closed/nil sink and must be counted as dropped.
+	if got := a.Dropped(); got != 10 {
+		t.Fatalf("expected 10 dropped events, got %d", got)
 	}
 }
 ```
@@ -5005,6 +5035,10 @@ func TestBuildMuxRouting(t *testing.T) {
 	if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusTeapot {
 		t.Fatalf("/mcp must reach legacy handler: %d", resp.StatusCode)
 	}
+	// "/" catch-all must also reach the legacy handler (backward compat for README-documented URL).
+	if resp, _ := http.Get(ts.URL + "/"); resp.StatusCode != http.StatusTeapot {
+		t.Fatalf("/ catch-all must reach legacy handler: %d", resp.StatusCode)
+	}
 	if resp, _ := http.Post(ts.URL+"/mcp/p/some-slug", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("/mcp/p/{slug} without token must 401: %d", resp.StatusCode)
 	}
@@ -5037,6 +5071,16 @@ import (
 //	/mcp        → legacy aggregator + RequireBearer (transitional until cutover)
 //	/mcp/p/     → ProfileHost (per-profile bearer tokens)
 //	/api/       → REST control plane (only when OIDC is configured)
+//	/           → legacy fallback (same handler as /mcp — preserves the README
+//	              documented endpoint "http://localhost:8080" until cutover)
+//
+// Go 1.22+ ServeMux uses path-specificity: "/mcp/p/" and "/api/" are more
+// specific than "/mcp" (exact) which in turn takes precedence over "/" (the
+// catch-all). Verify with the serve_test.go routing assertions.
+//
+// At Task 18 cutover: "/mcp" and "/" mounts are BOTH removed, the canonical
+// client endpoint becomes /mcp/p/<slug>, and README.md must be updated
+// (see Task 18 Step 3a).
 //
 // Kept as the one run() helper so the registry workstream's run() additions
 // merge cleanly (handoff §6.2).
@@ -5050,6 +5094,12 @@ func buildMux(
 ) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", legacy)
+	// "/" is the catch-all fallback: it catches the bare "http://localhost:8080"
+	// that the README documents (claude mcp add … http://localhost:8080).
+	// /mcp/p/ and /api/ take precedence by ServeMux specificity, so this
+	// fallback only fires for paths not otherwise matched, keeping backward
+	// compatibility until Task 18 cutover.
+	mux.Handle("/", legacy)
 	mux.Handle("/mcp/p/", profiles.Handler())
 	if authn != nil {
 		apiSrv := &api.Server{Store: st, Vault: v, Auth: authn, Installer: installer, Profiles: profiles}
@@ -5074,6 +5124,10 @@ with
 
 ```go
 	resolver := gw.NewAuditingResolver(&gw.CredResolver{Store: st, Vault: v}, st)
+	// NOTE: defer resolver.Close() (and defer profiles.Close()) are best-effort
+	// flushes only — http.ListenAndServe blocks until process death, so these
+	// defers only run on a clean return (e.g. early startup error). Audit writes
+	// must never rely on Close() being called for correctness.
 	defer resolver.Close()
 	egProxy, err := proxy.New(reg, resolver)
 ```
@@ -5460,6 +5514,16 @@ git rm internal/gateway/auth.go internal/gateway/auth_test.go
 
 In `internal/config/config.go`: delete the `BearerToken` field, its `FromEnv` assignment, and the `if cfg.BearerToken == "" { ... }` validation. In `internal/config/config_test.go` `setBaseEnv`, drop the `t.Setenv("GIG_BEARER_TOKEN", "tok")` line. In `docker-compose.yml`, delete the `GIG_BEARER_TOKEN:` line.
 
+- [ ] **Step 3a: Delete dead demo credential code.**
+
+In `cmd/gateway/main.go`: delete `seedDemoCredential` and any call to it (introduced pre-cutover to seed the default bearer-token tenant for development). In `docker-compose.yml`: delete the `GIG_DEMO_TOKEN:` and `GIG_DEMO_ALLOW:` environment variable lines. In `internal/config/config.go`: delete the `DemoToken` and `DemoAllow` fields and their `FromEnv` assignments. Run `go build ./cmd/gateway/` to confirm no compile errors before proceeding.
+
+- [ ] **Step 3b: Update README.md.**
+
+  1. Remove `GIG_BEARER_TOKEN` from the environment variable table (approximately lines 19 and 28 of README.md).
+  2. Change the example client command from `claude mcp add … http://localhost:8080` to `claude mcp add … http://localhost:8080/mcp/p/<slug>` (approximately line 51), noting that `<slug>` is the profile slug and the bearer token is the profile token shown at `POST /api/profiles`.
+  3. Run `grep -rn "GIG_BEARER_TOKEN\|localhost:8080\"" README.md` to confirm no stale references remain.
+
 - [ ] **Step 4: Retire the startup spawn-all loop in `run()`.** Delete from `cmd/gateway/main.go`: the `servers, err := st.ListServers(ctx)` block, the `var backends ...; for _, srv := range servers { SpawnEgressBackend ... }` loop with its `cleanups` defer, the `gwServer, err := gw.New(...)` + `handler := mcp.NewStreamableHTTPHandler(...)` lines, and the `legacy := gw.RequireBearer(...)` line. Sandboxes are now exclusively lazy-spawned by the ProfileHost. Drop the `legacy http.Handler` parameter from `buildMux` (and its `mux.Handle("/mcp", legacy)` line) in `cmd/gateway/serve.go`; the final wiring becomes:
 
 ```go
@@ -5468,7 +5532,7 @@ In `internal/config/config.go`: delete the `BearerToken` field, its `FromEnv` as
 
 Remove the now-unused `mcp` import from `main.go` if nothing else uses it. Update `cmd/gateway/serve_test.go`: drop the `legacy` handler and the `/mcp` teapot assertion; assert `/mcp` now 404s and `/mcp/p/{slug}` still 401s.
 
-- [ ] **Step 5: Verify** — `make test` → full suite green: migrated `TestEndToEnd` (profile token), `TestEgressEndToEnd` (profile tenant via harness), `TestProfileScopedEgressE2E`, and zero references to `RequireBearer`/`GIG_BEARER_TOKEN` remain (`grep -rn "RequireBearer\|GIG_BEARER_TOKEN" --include="*.go" --include="*.yml" .` → empty).
+- [ ] **Step 5: Verify** — `make test` → full suite green: migrated `TestEndToEnd` (profile token), `TestEgressEndToEnd` (profile tenant via harness), `TestProfileScopedEgressE2E`, and zero references to `RequireBearer`/`GIG_BEARER_TOKEN`/`seedDemoCredential` remain (`grep -rn "RequireBearer\|GIG_BEARER_TOKEN\|seedDemoCredential\|GIG_DEMO_TOKEN\|GIG_DEMO_ALLOW" --include="*.go" --include="*.yml" --include="*.md" .` → empty).
 
 - [ ] **Step 6: Commit** — `git add -A && git commit -m "feat!: cutover to profile tokens — remove RequireBearer, GIG_BEARER_TOKEN, startup spawn-all loop"` (include the human's go-ahead note in the body).
 

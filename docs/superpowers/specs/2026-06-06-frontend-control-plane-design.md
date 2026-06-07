@@ -150,7 +150,7 @@ GET    /api/profiles                    → own (admin: all)
 POST   /api/profiles {name, slug}       → creates + returns token PLAINTEXT ONCE
 GET    /api/profiles/{id}               → detail incl. endpoint URL, servers, NO token
 PATCH  /api/profiles/{id}  | DELETE /api/profiles/{id}
-PUT    /api/profiles/{id}/servers {names[]}
+PUT    /api/profiles/{id}/servers {servers[]}
 POST   /api/profiles/{id}/token         → rotate, returns plaintext once
 
 GET    /api/credentials                 → metadata only — never the secret
@@ -167,7 +167,7 @@ DELETE /api/servers/{name}              → registry.Installer.Uninstall (admin)
 
 GET    /api/users                       → admin; read-only list
 POST   /api/admin/impersonate | DELETE  → admin
-GET    /api/audit?cursor&limit          → own events; admin: all, filterable
+GET    /api/audit?before&limit          → own events; admin: all, filterable by user_id
 ```
 
 Until the registry agent's `Installer` lands, the install endpoints compile
@@ -222,8 +222,9 @@ untouched until the final cutover task (§9).
 - **Auth/admin events** — written synchronously by API handlers: login, logout,
   impersonate start/stop, profile create/delete, token rotate, credential
   put/delete, install/uninstall.
-- **Read side:** keyset pagination (`cursor` = last id). Users see rows where
-  `user_id` = self; admins see all with filters.
+- **Read side:** keyset pagination (`before` = last row id). Users see rows
+  where `user_id` = self; admins see all records (additional filters such as
+  `kind` and `server` are post-v1 scope; v1 admin filtering is `user_id`-only).
 
 ---
 
