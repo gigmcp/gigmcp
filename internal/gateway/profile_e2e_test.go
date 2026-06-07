@@ -110,6 +110,8 @@ func TestProfileScopedEgressE2E(t *testing.T) {
 	// 5. Proxy with the auditing resolver.
 	reg := proxy.NewRegistry()
 	auditing := gateway.NewAuditingResolver(&gateway.CredResolver{Store: st, Vault: v}, st)
+	// idempotent; guards goroutine leak on mid-test t.Fatal — explicit ordered Close below still runs first on the happy path
+	t.Cleanup(auditing.Close)
 	p, err := proxy.New(reg, auditing)
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +131,8 @@ func TestProfileScopedEgressE2E(t *testing.T) {
 	if err := os.WriteFile(caFile, p.CACertPEM(), 0644); err != nil {
 		t.Fatal(err)
 	}
-	alloc := netmgr.NewAllocator("10.88.0.0/16")
+	// distinct CIDR avoids veth/IP collision with egress_e2e_test.go (10.88) and registry_e2e_test.go (10.97)
+	alloc := netmgr.NewAllocator("10.99.0.0/16")
 
 	// 6. ProfileHost with the REAL spawner — Tenant = profile ID.
 	// SpawnEgressBackend signature after Task 13: (ctx, srv, alloc, reg, proxyPort,
