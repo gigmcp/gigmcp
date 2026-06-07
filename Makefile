@@ -17,6 +17,7 @@ test: dev-image
 		--security-opt systempaths=unconfined \
 		--cap-add NET_ADMIN \
 		-v $(PWD):/src -w /src \
+		-v $(abspath $(PWD)/../gigmcp-registry):/gigmcp-registry \
 		-v gigmcp-gomod:/go/pkg/mod \
 		-v gigmcp-gocache:/root/.cache/go-build \
 		$(DEV_IMAGE) go test ./...
