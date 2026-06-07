@@ -3,6 +3,7 @@ module github.com/gigmcp/gigmcp
 go 1.26.2
 
 require (
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
 	github.com/gigmcp/gigmcp-registry/schema v0.0.0-00010101000000-000000000000
 	github.com/modelcontextprotocol/go-sdk v1.6.1
@@ -15,6 +16,7 @@ require (
 require (
 	github.com/docker/cli v29.4.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -38,7 +40,7 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/oauth2 v0.36.0
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
