@@ -31,9 +31,10 @@ func TestProfileCRUD(t *testing.T) {
 		t.Fatalf("bad profile: %+v", p)
 	}
 
-	// Slug is unique.
-	if _, err := st.CreateProfile(ctx, "main", "Dup", u.ID, "tokhash-2"); err == nil {
-		t.Fatal("duplicate slug must error")
+	// Duplicate slug must return ErrSlugTaken.
+	_, err = st.CreateProfile(ctx, "main", "Dup", u.ID, "tokhash-2")
+	if !errors.Is(err, store.ErrSlugTaken) {
+		t.Fatalf("duplicate slug: want ErrSlugTaken, got %v", err)
 	}
 
 	got, err := st.GetProfileByID(ctx, p.ID)
@@ -79,6 +80,28 @@ func TestGetProfileBySlugAndTokenHash(t *testing.T) {
 	}
 }
 
+func TestProfileTokenRotation(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	u := seedUser(t, st, "alice")
+	p, _ := st.CreateProfile(ctx, "rot", "Rotation", u.ID, "old-hash")
+
+	if err := st.SetProfileToken(ctx, p.ID, "new-hash"); err != nil {
+		t.Fatalf("SetProfileToken: %v", err)
+	}
+
+	// Old hash must no longer authenticate.
+	if _, err := st.GetProfileBySlugAndTokenHash(ctx, "rot", "old-hash"); !errors.Is(err, store.ErrProfileNotFound) {
+		t.Fatalf("old hash must be rejected after rotation, got %v", err)
+	}
+
+	// New hash must authenticate successfully.
+	got, err := st.GetProfileBySlugAndTokenHash(ctx, "rot", "new-hash")
+	if err != nil || got.ID != p.ID {
+		t.Fatalf("new hash must authenticate after rotation: %v %+v", err, got)
+	}
+}
+
 func TestListProfilesOwnVsAll(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)
@@ -121,6 +144,15 @@ func TestProfileServersReplaceAllAndCascade(t *testing.T) {
 		t.Fatalf("replace-all: %v", got)
 	}
 
+	// Empty-list replace clears the bundle.
+	if err := st.SetProfileServers(ctx, p.ID, nil); err != nil {
+		t.Fatalf("SetProfileServers nil: %v", err)
+	}
+	got, err = st.GetProfileServers(ctx, p.ID)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("empty-list replace: want empty, got %v (err: %v)", got, err)
+	}
+
 	// Delete cascades the join rows.
 	if err := st.DeleteProfile(ctx, p.ID); err != nil {
 		t.Fatal(err)
@@ -131,5 +163,35 @@ func TestProfileServersReplaceAllAndCascade(t *testing.T) {
 	got, _ = st.GetProfileServers(ctx, p.ID)
 	if len(got) != 0 {
 		t.Fatalf("join rows not cascaded: %v", got)
+	}
+}
+
+func TestSetProfileServersNotFound(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+
+	// SetProfileServers on a non-existent profile must return ErrProfileNotFound.
+	err := st.SetProfileServers(ctx, 99999, []string{"foo"})
+	if !errors.Is(err, store.ErrProfileNotFound) {
+		t.Fatalf("missing profile: want ErrProfileNotFound, got %v", err)
+	}
+}
+
+func TestSetProfileServersDuplicateInput(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	u := seedUser(t, st, "alice")
+	p, _ := st.CreateProfile(ctx, "dedup", "Dedup", u.ID, "h")
+
+	// Duplicate names in input must succeed and store only one row.
+	if err := st.SetProfileServers(ctx, p.ID, []string{"alpha", "alpha", "beta"}); err != nil {
+		t.Fatalf("duplicate input: %v", err)
+	}
+	got, err := st.GetProfileServers(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("GetProfileServers: %v", err)
+	}
+	if !reflect.DeepEqual(got, []string{"alpha", "beta"}) {
+		t.Fatalf("dedupe: want [alpha beta], got %v", got)
 	}
 }

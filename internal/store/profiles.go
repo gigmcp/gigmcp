@@ -4,11 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
+
+	sqlite "modernc.org/sqlite"
 )
 
 // ErrProfileNotFound is returned for unknown profiles or failed token lookups.
 var ErrProfileNotFound = errors.New("store: profile not found")
+
+// ErrSlugTaken is returned by CreateProfile when the slug is already in use.
+var ErrSlugTaken = errors.New("store: slug already taken")
 
 // Profile is a named bundle of servers exposed at /mcp/p/<slug> behind its
 // own bearer token (DESIGN #11). TokenHash is the SHA-256 hex of the token —
@@ -60,12 +66,31 @@ func scanProfile(row *sql.Row) (Profile, error) {
 	return p, nil
 }
 
-// CreateProfile inserts a profile. Slug uniqueness is enforced by the schema.
+// isSlugTaken reports whether err is a SQLite UNIQUE-constraint violation on
+// profiles.slug. We use errors.As to unwrap to *sqlite.Error and check for
+// SQLITE_CONSTRAINT_UNIQUE (2067), then confirm the message names the right
+// column so we don't swallow unrelated UNIQUE violations.
+func isSlugTaken(err error) bool {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	// 2067 == SQLITE_CONSTRAINT_UNIQUE (extended result code)
+	return sqliteErr.Code() == 2067 &&
+		strings.Contains(sqliteErr.Error(), "profiles.slug")
+}
+
+// CreateProfile inserts a profile. Returns ErrSlugTaken if the slug is already
+// in use (UNIQUE constraint on profiles.slug).
 func (s *sqliteStore) CreateProfile(ctx context.Context, slug, name string, userID int64, tokenHash string) (Profile, error) {
-	return scanProfile(s.db.QueryRowContext(ctx,
+	p, err := scanProfile(s.db.QueryRowContext(ctx,
 		`INSERT INTO profiles (slug,name,user_id,token_hash,created_at)
 		 VALUES (?,?,?,?,?) RETURNING `+profileCols,
 		slug, name, userID, tokenHash, time.Now().Unix()))
+	if err != nil && isSlugTaken(err) {
+		return Profile{}, ErrSlugTaken
+	}
+	return p, err
 }
 
 // GetProfileByID fetches a profile by id.
@@ -83,6 +108,8 @@ func (s *sqliteStore) GetProfileBySlugAndTokenHash(ctx context.Context, slug, to
 
 // ListProfiles returns profiles owned by userID, or ALL profiles when
 // userID == 0 (admin view). Ordered by id.
+// WARNING: callers must pass a validated userID; 0 returns ALL profiles across
+// all users and should only be used by admin paths.
 func (s *sqliteStore) ListProfiles(ctx context.Context, userID int64) ([]Profile, error) {
 	q := `SELECT ` + profileCols + ` FROM profiles`
 	var args []any
@@ -124,6 +151,7 @@ func (s *sqliteStore) SetProfileToken(ctx context.Context, id int64, tokenHash s
 }
 
 // DeleteProfile removes a profile and its profile_servers rows in one tx.
+// Deleting a non-existent profile id is not an error (mirrors DeleteSession precedent).
 func (s *sqliteStore) DeleteProfile(ctx context.Context, id int64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -140,18 +168,32 @@ func (s *sqliteStore) DeleteProfile(ctx context.Context, id int64) error {
 }
 
 // SetProfileServers replaces the profile's server bundle (replace-all, one tx).
+// Duplicate names in the input slice are silently deduped — only one row per
+// (profile_id, server_name) pair is stored. Returns ErrProfileNotFound if the
+// profile does not exist (prevents orphan join rows).
 func (s *sqliteStore) SetProfileServers(ctx context.Context, id int64, names []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	// Guard: profile must exist.
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM profiles WHERE id=?`, id).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrProfileNotFound
+		}
+		return err
+	}
+
 	if _, err := tx.ExecContext(ctx, `DELETE FROM profile_servers WHERE profile_id=?`, id); err != nil {
 		return err
 	}
+	// INSERT OR IGNORE dedupes duplicate names in the input slice.
 	for _, n := range names {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO profile_servers (profile_id, server_name) VALUES (?,?)`, id, n); err != nil {
+			`INSERT OR IGNORE INTO profile_servers (profile_id, server_name) VALUES (?,?)`, id, n); err != nil {
 			return err
 		}
 	}
