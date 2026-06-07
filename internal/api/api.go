@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gigmcp/gigmcp/internal/auth"
+	"github.com/gigmcp/gigmcp/internal/registry"
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/gigmcp/gigmcp/internal/vault"
 )
@@ -21,10 +22,11 @@ type ProfileInvalidator interface {
 
 // Server holds the control-plane dependencies.
 type Server struct {
-	Store    store.Store
-	Vault    *vault.Vault
-	Auth     *auth.Authenticator // nil = OIDC unconfigured (auth routes unmounted)
-	Profiles ProfileInvalidator
+	Store     store.Store
+	Vault     *vault.Vault
+	Auth      *auth.Authenticator // nil = OIDC unconfigured (auth routes unmounted)
+	Installer registry.Installer  // nil = fall back to Store.ListServers for GET /api/servers; admin mutate routes panic-safe (nil-guarded in handlers)
+	Profiles  ProfileInvalidator
 }
 
 // invalidate is a nil-safe ProfileInvalidator call.
@@ -50,6 +52,13 @@ func (s *Server) Routes() *http.ServeMux {
 	authed.HandleFunc("GET /api/credentials", s.handleListCredentials)
 	authed.HandleFunc("PUT /api/credentials/{server}", s.handlePutCredential)
 	authed.HandleFunc("DELETE /api/credentials/{server}", s.handleDeleteCredential)
+	authed.HandleFunc("GET /api/servers", s.handleListServers)
+	authed.Handle("POST /api/servers/install", auth.RequireAdmin(http.HandlerFunc(s.handleInstallServer)))
+	authed.Handle("DELETE /api/servers/{name}", auth.RequireAdmin(http.HandlerFunc(s.handleUninstallServer)))
+	authed.Handle("GET /api/users", auth.RequireAdmin(http.HandlerFunc(s.handleListUsers)))
+	authed.Handle("POST /api/admin/impersonate", auth.RequireAdmin(http.HandlerFunc(s.handleStartImpersonation)))
+	authed.Handle("DELETE /api/admin/impersonate", auth.RequireAdmin(http.HandlerFunc(s.handleStopImpersonation)))
+	authed.HandleFunc("GET /api/audit", s.handleListAudit)
 
 	mux := http.NewServeMux()
 	if s.Auth != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -43,7 +44,8 @@ func newTestAPI(t *testing.T) (*api.Server, *httptest.Server, store.Store, *fake
 		t.Fatal(err)
 	}
 	inv := &fakeInvalidator{}
-	srv := &api.Server{Store: st, Vault: v, Profiles: inv}
+	fi := &fakeInstaller{st: st, installErr: errors.New("fake installer: not wired")}
+	srv := &api.Server{Store: st, Vault: v, Installer: fi, Profiles: inv}
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
 	return srv, ts, st, inv
@@ -250,3 +252,7 @@ func TestMeShowsImpersonation(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func mkEvent(uid *int64, host string) store.AuditEvent {
+	return store.AuditEvent{Kind: "egress", UserID: uid, Server: "github", Host: host, Decision: "resolved"}
+}

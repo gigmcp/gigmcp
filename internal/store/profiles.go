@@ -200,6 +200,38 @@ func (s *sqliteStore) SetProfileServers(ctx context.Context, id int64, names []s
 	return tx.Commit()
 }
 
+// RemoveServerFromProfiles removes server_name from all profile_servers rows
+// and returns the profile IDs that were affected (for runtime invalidation on
+// uninstall — CONTROLLER ADDITION from T10 quality review).
+func (s *sqliteStore) RemoveServerFromProfiles(ctx context.Context, serverName string) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT profile_id FROM profile_servers WHERE server_name=?`, serverName)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM profile_servers WHERE server_name=?`, serverName); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // GetProfileServers returns the profile's bundled server names, ordered.
 func (s *sqliteStore) GetProfileServers(ctx context.Context, id int64) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
