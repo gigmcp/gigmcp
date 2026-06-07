@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
 // Config is the gateway's runtime configuration.
@@ -24,7 +26,17 @@ type Config struct {
 	RegistryPubKey   string // GIG_REGISTRY_PUBKEY: 32-byte ed25519 hex (index trust root)
 	Install          string // GIG_INSTALL: comma-separated refs installed at boot (auto-consented)
 	DataDir          string // GIG_DATA_DIR, default "/data": extracted server binaries
+	OIDCIssuer       string        // GIG_OIDC_ISSUER, e.g. http://localhost:8082; empty = control plane disabled
+	OIDCClientID     string        // GIG_OIDC_CLIENT_ID
+	OIDCClientSecret string        // GIG_OIDC_CLIENT_SECRET or GIG_OIDC_CLIENT_SECRET_FILE; optional (PKCE public client)
+	OIDCRedirectURL  string        // GIG_OIDC_REDIRECT_URL, e.g. https://gig.example.com/api/auth/callback
+	OIDCAdminRole    string        // GIG_OIDC_ADMIN_ROLE — Zitadel role mapping to "admin"; default "gigmcp-admin"
+	SessionTTL       time.Duration // GIG_SESSION_TTL, default 168h
+	PublicURL        string        // GIG_PUBLIC_URL — https prefix turns on Secure cookies
 }
+
+// OIDCEnabled reports whether the OIDC control plane is configured.
+func (c Config) OIDCEnabled() bool { return c.OIDCIssuer != "" }
 
 // FromEnv loads Config from environment variables.
 func FromEnv() (Config, error) {
@@ -51,6 +63,38 @@ func FromEnv() (Config, error) {
 	if cfg.Install != "" && (cfg.RegistryIndexURL == "" || cfg.RegistryPubKey == "") {
 		return Config{}, errors.New("GIG_INSTALL requires GIG_REGISTRY_INDEX_URL and GIG_REGISTRY_PUBKEY")
 	}
+	secret, err := envOrFile("GIG_OIDC_CLIENT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.OIDCIssuer = os.Getenv("GIG_OIDC_ISSUER")
+	cfg.OIDCClientID = os.Getenv("GIG_OIDC_CLIENT_ID")
+	cfg.OIDCClientSecret = secret
+	cfg.OIDCRedirectURL = os.Getenv("GIG_OIDC_REDIRECT_URL")
+	cfg.OIDCAdminRole = envOr("GIG_OIDC_ADMIN_ROLE", "gigmcp-admin")
+	cfg.PublicURL = os.Getenv("GIG_PUBLIC_URL")
+	cfg.SessionTTL = 168 * time.Hour
+	if v := os.Getenv("GIG_SESSION_TTL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return Config{}, fmt.Errorf("GIG_SESSION_TTL must be a positive duration: %q", v)
+		}
+		cfg.SessionTTL = d
+	}
+	// OIDC settings are all-or-none (the client secret is optional: Zitadel
+	// PKCE public clients have none).
+	oidcCore := []string{cfg.OIDCIssuer, cfg.OIDCClientID, cfg.OIDCRedirectURL}
+	anySet, allSet := false, true
+	for _, v := range oidcCore {
+		if v != "" {
+			anySet = true
+		} else {
+			allSet = false
+		}
+	}
+	if anySet && !allSet {
+		return Config{}, errors.New("GIG_OIDC_ISSUER, GIG_OIDC_CLIENT_ID and GIG_OIDC_REDIRECT_URL must be set together")
+	}
 	return cfg, nil
 }
 
@@ -71,4 +115,21 @@ func envInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// envOrFile returns $key, or the trimmed contents of the file named by
+// $key_FILE when the plain variable is unset. The plain variable wins.
+func envOrFile(key string) (string, error) {
+	if v := os.Getenv(key); v != "" {
+		return v, nil
+	}
+	path := os.Getenv(key + "_FILE")
+	if path == "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s_FILE: %w", key, err)
+	}
+	return strings.TrimSpace(string(b)), nil
 }
