@@ -67,5 +67,5 @@ func (c *Client) fetch(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 32<<20)) // 32 MB ceiling — index is small; guards a hostile CDN
 }
