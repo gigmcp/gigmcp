@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -89,6 +90,7 @@ func SessionTokenHash(ctx context.Context) (string, bool) {
 // import api and api can import auth.
 func writeAuthError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(map[string]any{
 		"error": map[string]string{"code": code, "message": msg},
@@ -105,9 +107,15 @@ const stopImpersonationPath = "/api/admin/impersonate"
 // it while view-as is active (the admin must DELETE first). This is intentional
 // — do not "fix" it.
 
+// impersonationSafeMethod reports whether method is read-only (GET or HEAD).
+// OPTIONS is excluded — /api serves no CORS preflight today.
+func impersonationSafeMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
 // SessionMiddleware authenticates by the gig_session cookie, loads the real
 // and effective users into the context, and enforces the view-as rule:
-// while impersonating, every non-GET request is 403 except
+// while impersonating, every non-GET/HEAD request is 403 except
 // DELETE /api/admin/impersonate (DESIGN #20: view-as is read-only).
 func SessionMiddleware(st store.Store, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,24 +127,42 @@ func SessionMiddleware(st store.Store, next http.Handler) http.Handler {
 		hash := HashToken(c.Value)
 		sess, err := st.GetSession(r.Context(), hash)
 		if err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired session")
+			if errors.Is(err, store.ErrSessionNotFound) {
+				writeAuthError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired session")
+			} else {
+				log.Printf("ERROR: get session: %v", err)
+				writeAuthError(w, http.StatusInternalServerError, "internal", "internal error")
+			}
 			return
 		}
 		real, err := st.GetUser(r.Context(), sess.UserID)
 		if err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "unauthenticated", "session user no longer exists")
+			if errors.Is(err, store.ErrUserNotFound) {
+				writeAuthError(w, http.StatusUnauthorized, "unauthenticated", "invalid session")
+			} else {
+				log.Printf("ERROR: get session user %d: %v", sess.UserID, err)
+				writeAuthError(w, http.StatusInternalServerError, "internal", "internal error")
+			}
 			return
 		}
 		effective := real
 		impersonating := false
 		if sess.ImpersonatingUserID != nil && sess.ImpersonationExpiresAt != nil &&
 			time.Now().Before(*sess.ImpersonationExpiresAt) {
-			if target, err := st.GetUser(r.Context(), *sess.ImpersonatingUserID); err == nil {
+			target, err := st.GetUser(r.Context(), *sess.ImpersonatingUserID)
+			if err == nil {
 				effective = target
 				impersonating = true
+			} else if errors.Is(err, store.ErrUserNotFound) {
+				log.Printf("WARN: impersonation target %d gone; proceeding as real user", *sess.ImpersonatingUserID)
+				// proceed un-impersonated (effective = real, impersonating = false)
+			} else {
+				log.Printf("ERROR: get impersonation target %d: %v", *sess.ImpersonatingUserID, err)
+				writeAuthError(w, http.StatusInternalServerError, "internal", "internal error")
+				return
 			}
 		}
-		if impersonating && r.Method != http.MethodGet &&
+		if impersonating && !impersonationSafeMethod(r.Method) &&
 			!(r.Method == http.MethodDelete && r.URL.Path == stopImpersonationPath) {
 			writeAuthError(w, http.StatusForbidden, "impersonating",
 				"mutations are blocked while impersonating (view-as is read-only)")

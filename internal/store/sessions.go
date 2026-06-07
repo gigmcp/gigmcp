@@ -19,6 +19,10 @@ type Session struct {
 	UserID                 int64
 	CreatedAt              time.Time
 	ExpiresAt              time.Time
+	// ImpersonatingUserID is the target user's ID while view-as is active, or
+	// nil when no impersonation is in progress. Consumers reading these fields
+	// directly must check ImpersonationExpiresAt; only the auth middleware
+	// enforces it.
 	ImpersonatingUserID    *int64
 	// ImpersonationExpiresAt is the wall-clock deadline for view-as mode.
 	// Expiry is enforced by callers (auth middleware), not by GetSession.
