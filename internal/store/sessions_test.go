@@ -88,3 +88,44 @@ func TestImpersonationSetAndClear(t *testing.T) {
 		t.Fatalf("impersonation not cleared: %+v", got)
 	}
 }
+
+// TestExpiredImpersonationPassThrough verifies that GetSession returns the
+// impersonation fields even when ImpersonationExpiresAt is in the past.
+// Expiry enforcement is the responsibility of callers (auth middleware).
+func TestExpiredImpersonationPassThrough(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	admin, _ := st.UpsertUserByOIDC(ctx, "https://idp", "adm2", "adm2@x", "Adm2", "admin")
+	target, _ := st.UpsertUserByOIDC(ctx, "https://idp", "tgt2", "tgt2@x", "Tgt2", "user")
+
+	if err := st.CreateSession(ctx, "h-imp-exp", admin.ID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// Set impersonation with an expiry already in the past.
+	pastExp := time.Now().Add(-time.Minute)
+	if err := st.SetImpersonation(ctx, "h-imp-exp", target.ID, pastExp); err != nil {
+		t.Fatalf("set impersonation: %v", err)
+	}
+	got, err := st.GetSession(ctx, "h-imp-exp")
+	if err != nil {
+		t.Fatalf("GetSession must succeed for a live session with expired impersonation: %v", err)
+	}
+	if got.ImpersonatingUserID == nil || *got.ImpersonatingUserID != target.ID {
+		t.Fatalf("ImpersonatingUserID must be populated even when impersonation expired, got %+v", got)
+	}
+	if got.ImpersonationExpiresAt == nil || got.ImpersonationExpiresAt.Unix() != pastExp.Unix() {
+		t.Fatalf("ImpersonationExpiresAt must be populated even when expired, got %+v", got)
+	}
+}
+
+// TestSetImpersonationMissingSession verifies ErrSessionNotFound is returned
+// when SetImpersonation is called for a token hash that doesn't exist.
+func TestSetImpersonationMissingSession(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+
+	err := st.SetImpersonation(ctx, "nonexistent-hash", 42, time.Now().Add(time.Hour))
+	if !errors.Is(err, store.ErrSessionNotFound) {
+		t.Fatalf("expected ErrSessionNotFound, got %v", err)
+	}
+}

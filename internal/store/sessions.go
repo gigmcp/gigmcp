@@ -20,6 +20,8 @@ type Session struct {
 	CreatedAt              time.Time
 	ExpiresAt              time.Time
 	ImpersonatingUserID    *int64
+	// ImpersonationExpiresAt is the wall-clock deadline for view-as mode.
+	// Expiry is enforced by callers (auth middleware), not by GetSession.
 	ImpersonationExpiresAt *time.Time
 }
 
@@ -68,7 +70,7 @@ func (s *sqliteStore) GetSession(ctx context.Context, tokenHash string) (Session
 		sess.ImpersonationExpiresAt = &tv
 	}
 	if time.Now().After(sess.ExpiresAt) {
-		_, _ = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=?`, tokenHash)
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash=? AND expires_at<=?`, tokenHash, sess.ExpiresAt.Unix())
 		return Session{}, ErrSessionNotFound
 	}
 	return sess, nil
@@ -81,11 +83,22 @@ func (s *sqliteStore) DeleteSession(ctx context.Context, tokenHash string) error
 }
 
 // SetImpersonation stamps view-as state onto a session row.
+// Returns ErrSessionNotFound if no session with tokenHash exists.
 func (s *sqliteStore) SetImpersonation(ctx context.Context, tokenHash string, targetUserID int64, expiresAt time.Time) error {
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE sessions SET impersonating_user_id=?, impersonation_expires_at=? WHERE token_hash=?`,
 		targetUserID, expiresAt.Unix(), tokenHash)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
 }
 
 // ClearImpersonation removes view-as state from a session row.
