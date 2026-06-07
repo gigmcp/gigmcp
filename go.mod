@@ -6,6 +6,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
 	github.com/gigmcp/gigmcp-registry/schema v0.0.0-00010101000000-000000000000
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/crypto v0.52.0
@@ -16,7 +17,6 @@ require (
 require (
 	github.com/docker/cli v29.4.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect

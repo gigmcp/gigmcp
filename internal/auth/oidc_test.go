@@ -1,0 +1,266 @@
+package auth_test
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+
+	"github.com/gigmcp/gigmcp/internal/auth"
+	"github.com/gigmcp/gigmcp/internal/config"
+	"github.com/gigmcp/gigmcp/internal/store"
+)
+
+// fakeIssuer is a minimal OIDC provider: discovery + JWKS + token endpoint.
+// The test mints the ID token AFTER it learns the nonce from the login
+// redirect, then the token endpoint serves it.
+type fakeIssuer struct {
+	srv     *httptest.Server
+	key     *rsa.PrivateKey
+	idToken string // set by the test before hitting the callback
+}
+
+func newFakeIssuer(t *testing.T) *fakeIssuer {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeIssuer{key: key}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                                f.srv.URL,
+			"authorization_endpoint":                f.srv.URL + "/authorize",
+			"token_endpoint":                        f.srv.URL + "/token",
+			"jwks_uri":                              f.srv.URL + "/keys",
+			"id_token_signing_alg_values_supported": []string{"RS256"},
+		})
+	})
+	mux.HandleFunc("GET /keys", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
+			Key: &f.key.PublicKey, KeyID: "test", Algorithm: "RS256", Use: "sig",
+		}}})
+	})
+	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "fake-access-token",
+			"token_type":   "Bearer",
+			"expires_in":   3600,
+			"id_token":     f.idToken,
+		})
+	})
+	f.srv = httptest.NewServer(mux)
+	t.Cleanup(f.srv.Close)
+	return f
+}
+
+// mintIDToken RS256-signs an ID token with the given nonce and roles claim.
+func (f *fakeIssuer) mintIDToken(t *testing.T, clientID, sub, email, name, nonce string, roles map[string]any) string {
+	t.Helper()
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.RS256, Key: f.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := map[string]any{
+		"iss":           f.srv.URL,
+		"aud":           clientID,
+		"sub":           sub,
+		"exp":           time.Now().Add(time.Hour).Unix(),
+		"iat":           time.Now().Unix(),
+		"nonce":         nonce,
+		"email":         email,
+		"name":          name,
+		auth.RolesClaim: roles,
+	}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := signer.Sign(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := sig.CompactSerialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func newAuthenticator(t *testing.T, issuerURL string, st store.Store) *auth.Authenticator {
+	t.Helper()
+	cfg := config.Config{
+		OIDCIssuer:      issuerURL,
+		OIDCClientID:    "gigmcp-client",
+		OIDCRedirectURL: "http://localhost:8080/api/auth/callback",
+		OIDCAdminRole:   "gigmcp-admin",
+		SessionTTL:      time.Hour,
+		PublicURL:       "http://localhost:8080",
+	}
+	a, err := auth.NewAuthenticator(context.Background(), cfg, st)
+	if err != nil {
+		t.Fatalf("NewAuthenticator: %v", err)
+	}
+	return a
+}
+
+// startLogin drives LoginHandler and returns the state, nonce and flow cookie.
+func startLogin(t *testing.T, a *auth.Authenticator) (state, nonce string, flow *http.Cookie) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	a.LoginHandler(rec, httptest.NewRequest("GET", "/api/auth/login", nil))
+	if rec.Code != http.StatusFound {
+		t.Fatalf("login status %d: %s", rec.Code, rec.Body)
+	}
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state = loc.Query().Get("state")
+	nonce = loc.Query().Get("nonce")
+	if state == "" || nonce == "" {
+		t.Fatalf("authorize URL missing state/nonce: %s", loc)
+	}
+	if loc.Query().Get("code_challenge_method") != "S256" {
+		t.Fatalf("PKCE challenge missing from authorize URL: %s", loc)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "gig_oidc_flow" {
+			flow = c
+		}
+	}
+	if flow == nil {
+		t.Fatal("no flow cookie set by LoginHandler")
+	}
+	return state, nonce, flow
+}
+
+func TestLoginCallbackProvisionsUserAndSession(t *testing.T) {
+	ctx := context.Background()
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+
+	state, nonce, flow := startLogin(t, a)
+
+	// Roles claim contains the admin role → user must come out "admin".
+	iss.idToken = iss.mintIDToken(t, "gigmcp-client", "user-123", "alice@example.com", "Alice", nonce,
+		map[string]any{"gigmcp-admin": map[string]any{"org1": "org1.example"}})
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/" {
+		t.Fatalf("callback: code=%d loc=%q body=%s", rec.Code, rec.Header().Get("Location"), rec.Body)
+	}
+	var sessionCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookie && c.Value != "" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil || !sessionCookie.HttpOnly {
+		t.Fatalf("session cookie missing or not httpOnly: %+v", sessionCookie)
+	}
+
+	users, err := st.ListUsers(ctx)
+	if err != nil || len(users) != 1 {
+		t.Fatalf("users: %v %d", err, len(users))
+	}
+	if users[0].Subject != "user-123" || users[0].Role != "admin" || users[0].Email != "alice@example.com" {
+		t.Fatalf("JIT user: %+v", users[0])
+	}
+
+	sess, err := st.GetSession(ctx, auth.HashToken(sessionCookie.Value))
+	if err != nil || sess.UserID != users[0].ID {
+		t.Fatalf("session row: %v %+v", err, sess)
+	}
+
+	events, err := st.ListAudit(ctx, 0, 10, 0)
+	if err != nil || len(events) == 0 || events[0].Kind != "auth" || events[0].Decision != "login" {
+		t.Fatalf("login audit event: %v %+v", err, events)
+	}
+}
+
+func TestCallbackRejectsStateMismatch(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	_, nonce, flow := startLogin(t, a)
+	iss.idToken = iss.mintIDToken(t, "gigmcp-client", "user-123", "a@x", "A", nonce, nil)
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state=evil", nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("state mismatch must 400, got %d", rec.Code)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatal("no user may be provisioned on a failed callback")
+	}
+}
+
+func TestCallbackRejectsNonceMismatch(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	state, _, flow := startLogin(t, a)
+	// Mint with the WRONG nonce.
+	iss.idToken = iss.mintIDToken(t, "gigmcp-client", "user-123", "a@x", "A", "wrong-nonce", nil)
+
+	req := httptest.NewRequest("GET", "/api/auth/callback?code=fake-code&state="+url.QueryEscape(state), nil)
+	req.AddCookie(flow)
+	rec := httptest.NewRecorder()
+	a.CallbackHandler(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("nonce mismatch must 401, got %d", rec.Code)
+	}
+}
+
+func TestLogoutDeletesSession(t *testing.T) {
+	ctx := context.Background()
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+	_, cookie := seedSession(t, st, "alice", "user")
+
+	req := httptest.NewRequest("POST", "/api/auth/logout", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	a.LogoutHandler(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("logout: %d", rec.Code)
+	}
+	if _, err := st.GetSession(ctx, auth.HashToken(cookie.Value)); err == nil {
+		t.Fatal("session must be deleted on logout")
+	}
+	events, _ := st.ListAudit(ctx, 0, 10, 0)
+	if len(events) == 0 || events[0].Decision != "logout" {
+		t.Fatalf("logout audit event: %+v", events)
+	}
+}
+
+func TestMapRole(t *testing.T) {
+	if auth.MapRole(map[string]any{"gigmcp-admin": map[string]any{}}, "gigmcp-admin") != "admin" {
+		t.Fatal("admin role present must map to admin")
+	}
+	if auth.MapRole(map[string]any{"other-role": 1}, "gigmcp-admin") != "user" {
+		t.Fatal("other roles must map to user")
+	}
+	if auth.MapRole(nil, "gigmcp-admin") != "user" {
+		t.Fatal("nil claim must map to user")
+	}
+}
