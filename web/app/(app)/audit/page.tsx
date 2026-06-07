@@ -26,6 +26,8 @@ import type { Column } from "@/components/data-table";
 
 type KindFilter = "egress" | "auth" | "admin";
 
+const ALL_KINDS: KindFilter[] = ["egress", "auth", "admin"];
+
 function kindVariant(kind: string): "info" | "secondary" | "outline" {
   if (kind === "egress") return "info";
   if (kind === "auth") return "secondary";
@@ -41,34 +43,38 @@ function decisionVariant(
   return "secondary";
 }
 
-const ALL_KINDS: KindFilter[] = ["egress", "auth", "admin"];
+// Kind/decision values come from server data; translate the known ones and
+// fall back to the raw value for anything unexpected.
+function useAuditLabels() {
+  const t = useTranslations("audit");
 
-export default function AuditPage() {
+  function kindLabel(kind: string): string {
+    return t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind;
+  }
+
+  function decisionLabel(decision: string): string {
+    const key = `decisions.${decision.toLowerCase()}`;
+    return t.has(key) ? t(key) : decision;
+  }
+
+  return { kindLabel, decisionLabel };
+}
+
+function KindBadge({ kind }: { kind: string }) {
+  const { kindLabel } = useAuditLabels();
+  return <Badge variant={kindVariant(kind)}>{kindLabel(kind)}</Badge>;
+}
+
+function DecisionBadge({ decision }: { decision: string }) {
+  const { decisionLabel } = useAuditLabels();
+  return (
+    <Badge variant={decisionVariant(decision)}>{decisionLabel(decision)}</Badge>
+  );
+}
+
+function useAuditColumns(): Column<AuditEvent>[] {
   const t = useTranslations("audit");
   const format = useFormatter();
-  const me = useMe();
-  const isAdmin = me.data?.user.role === "admin";
-  const isImpersonating = me.data?.impersonating ?? false;
-
-  // Admin user_id filter (only shown for non-impersonating admins)
-  const [userIdFilter, setUserIdFilter] = useState("");
-
-  // Client-side kind filter chips
-  const [activeKinds, setActiveKinds] = useState<Set<KindFilter>>(
-    new Set<KindFilter>(),
-  );
-
-  function toggleKind(k: KindFilter) {
-    setActiveKinds((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) {
-        next.delete(k);
-      } else {
-        next.add(k);
-      }
-      return next;
-    });
-  }
 
   function formatTs(ts: string): string {
     try {
@@ -81,49 +87,7 @@ export default function AuditPage() {
     }
   }
 
-  // Kind/decision values come from server data; translate the known ones and
-  // fall back to the raw value for anything unexpected.
-  function kindLabel(kind: string): string {
-    return t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind;
-  }
-
-  function decisionLabel(decision: string): string {
-    const key = `decisions.${decision.toLowerCase()}`;
-    return t.has(key) ? t(key) : decision;
-  }
-
-  const parsedUserId = userIdFilter.trim()
-    ? parseInt(userIdFilter.trim(), 10) || undefined
-    : undefined;
-
-  const query = useInfiniteQuery({
-    queryKey: [...keys.audit, parsedUserId],
-    queryFn: ({ pageParam }) =>
-      api.listAudit({
-        before: pageParam as number | undefined,
-        limit: 50,
-        // user_id only sent by admins who are not impersonating (server ignores
-        // for non-admins, but we guard here to keep the intent explicit)
-        ...(isAdmin && !isImpersonating && parsedUserId
-          ? { user_id: parsedUserId }
-          : {}),
-      }),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.next_before !== 0 ? lastPage.next_before : undefined,
-  });
-
-  // Flatten all pages into a single event list
-  const allEvents: AuditEvent[] =
-    query.data?.pages.flatMap((p) => p.events) ?? [];
-
-  // Client-side kind filter (no server-side support)
-  const filtered =
-    activeKinds.size === 0
-      ? allEvents
-      : allEvents.filter((e) => activeKinds.has(e.kind));
-
-  const columns: Column<AuditEvent>[] = [
+  return [
     {
       header: t("columns.time"),
       cell: (e) => (
@@ -134,17 +98,11 @@ export default function AuditPage() {
     },
     {
       header: t("columns.kind"),
-      cell: (e) => (
-        <Badge variant={kindVariant(e.kind)}>{kindLabel(e.kind)}</Badge>
-      ),
+      cell: (e) => <KindBadge kind={e.kind} />,
     },
     {
       header: t("columns.decision"),
-      cell: (e) => (
-        <Badge variant={decisionVariant(e.decision)}>
-          {decisionLabel(e.decision)}
-        </Badge>
-      ),
+      cell: (e) => <DecisionBadge decision={e.decision} />,
     },
     {
       header: t("columns.server"),
@@ -201,6 +159,158 @@ export default function AuditPage() {
         ),
     },
   ];
+}
+
+// Kind filter chips — client-side only (server has no kind filter)
+function KindFilterChips({
+  activeKinds,
+  onToggle,
+}: {
+  activeKinds: Set<KindFilter>;
+  onToggle: (k: KindFilter) => void;
+}) {
+  const t = useTranslations("audit");
+  const { kindLabel } = useAuditLabels();
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">
+        {t("filters.kind")}
+      </Label>
+      <div className="flex gap-2">
+        {ALL_KINDS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={activeKinds.has(k)}
+            onClick={() => onToggle(k)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
+              activeKinds.has(k)
+                ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {kindLabel(k)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AuditTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="divide-y divide-border">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex h-12 items-center px-3">
+            <Skeleton className="h-4 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AuditEmptyState() {
+  const t = useTranslations("audit");
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border py-16 text-center">
+      <ScrollText
+        className="mb-1 size-6 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <p className="text-sm font-medium">{t("empty.title")}</p>
+      <p className="text-sm text-muted-foreground">{t("empty.description")}</p>
+    </div>
+  );
+}
+
+function LoadMoreFooter({
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+}: {
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  onLoadMore: () => void;
+}) {
+  const t = useTranslations("audit");
+  return hasNextPage ? (
+    <div className="flex justify-center pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={isFetchingNextPage}
+        onClick={() => onLoadMore()}
+      >
+        {isFetchingNextPage ? t("loadingMore") : t("loadMore")}
+      </Button>
+    </div>
+  ) : (
+    <p className="pt-2 text-center text-xs text-muted-foreground">
+      {t("endOfList")}
+    </p>
+  );
+}
+
+export default function AuditPage() {
+  const t = useTranslations("audit");
+  const me = useMe();
+  const isAdmin = me.data?.user.role === "admin";
+  const isImpersonating = me.data?.impersonating ?? false;
+  const columns = useAuditColumns();
+
+  // Admin user_id filter (only shown for non-impersonating admins)
+  const [userIdFilter, setUserIdFilter] = useState("");
+
+  // Client-side kind filter chips
+  const [activeKinds, setActiveKinds] = useState<Set<KindFilter>>(
+    new Set<KindFilter>(),
+  );
+
+  function toggleKind(k: KindFilter) {
+    setActiveKinds((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) {
+        next.delete(k);
+      } else {
+        next.add(k);
+      }
+      return next;
+    });
+  }
+
+  const parsedUserId = userIdFilter.trim()
+    ? parseInt(userIdFilter.trim(), 10) || undefined
+    : undefined;
+
+  const query = useInfiniteQuery({
+    queryKey: [...keys.audit, parsedUserId],
+    queryFn: ({ pageParam }) =>
+      api.listAudit({
+        before: pageParam as number | undefined,
+        limit: 50,
+        // user_id only sent by admins who are not impersonating (server ignores
+        // for non-admins, but we guard here to keep the intent explicit)
+        ...(isAdmin && !isImpersonating && parsedUserId
+          ? { user_id: parsedUserId }
+          : {}),
+      }),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.next_before !== 0 ? lastPage.next_before : undefined,
+  });
+
+  // Flatten all pages into a single event list
+  const allEvents: AuditEvent[] =
+    query.data?.pages.flatMap((p) => p.events) ?? [];
+
+  // Client-side kind filter (no server-side support)
+  const filtered =
+    activeKinds.size === 0
+      ? allEvents
+      : allEvents.filter((e) => activeKinds.has(e.kind));
 
   return (
     <div className="space-y-6">
@@ -214,30 +324,7 @@ export default function AuditPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-4">
-        {/* Kind filter chips — client-side only (server has no kind filter) */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">
-            {t("filters.kind")}
-          </Label>
-          <div className="flex gap-2">
-            {ALL_KINDS.map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={activeKinds.has(k)}
-                onClick={() => toggleKind(k)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ease-out outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30",
-                  activeKinds.has(k)
-                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-                    : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {kindLabel(k)}
-              </button>
-            ))}
-          </div>
-        </div>
+        <KindFilterChips activeKinds={activeKinds} onToggle={toggleKind} />
 
         {/* Admin user_id filter (non-impersonating admins only) */}
         {isAdmin && !isImpersonating && (
@@ -261,48 +348,20 @@ export default function AuditPage() {
       </div>
 
       {query.isLoading ? (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="divide-y divide-border">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex h-12 items-center px-3">
-                <Skeleton className="h-4 w-full" />
-              </div>
-            ))}
-          </div>
-        </div>
+        <AuditTableSkeleton />
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border py-16 text-center">
-          <ScrollText
-            className="mb-1 size-6 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <p className="text-sm font-medium">{t("empty.title")}</p>
-          <p className="text-sm text-muted-foreground">
-            {t("empty.description")}
-          </p>
-        </div>
+        <AuditEmptyState />
       ) : (
         <>
           <div className="overflow-hidden rounded-lg border border-border">
             <DataTable columns={columns} data={filtered} getKey={(e) => e.id} />
           </div>
 
-          {query.hasNextPage ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={query.isFetchingNextPage}
-                onClick={() => query.fetchNextPage()}
-              >
-                {query.isFetchingNextPage ? t("loadingMore") : t("loadMore")}
-              </Button>
-            </div>
-          ) : (
-            <p className="pt-2 text-center text-xs text-muted-foreground">
-              {t("endOfList")}
-            </p>
-          )}
+          <LoadMoreFooter
+            hasNextPage={query.hasNextPage}
+            isFetchingNextPage={query.isFetchingNextPage}
+            onLoadMore={() => query.fetchNextPage()}
+          />
         </>
       )}
     </div>

@@ -39,12 +39,6 @@ export const useCredentials = () =>
 export const useUsers = (enabled = true) =>
   useQuery({ queryKey: keys.users, queryFn: api.listUsers, enabled });
 
-export function useInvalidate() {
-  const qc = useQueryClient();
-  return (key: readonly unknown[]) =>
-    qc.invalidateQueries({ queryKey: key });
-}
-
 export const useCreateProfile = () => {
   const qc = useQueryClient();
   return useMutation({

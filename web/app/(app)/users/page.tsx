@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import type { User } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-function ImpersonateDialog({
+function ImpersonateForm({
   user,
   onClose,
 }: {
@@ -59,6 +59,40 @@ function ImpersonateDialog({
   }
 
   return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="ttl-minutes">{t("dialog.ttlLabel")}</Label>
+        <Input
+          id="ttl-minutes"
+          type="number"
+          min={1}
+          max={60}
+          value={ttl}
+          onChange={(e) => setTtl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleImpersonate();
+          }}
+        />
+      </div>
+      <DialogFooter>
+        <Button onClick={handleImpersonate} disabled={impersonate.isPending}>
+          {impersonate.isPending ? t("dialog.starting") : t("dialog.submit")}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function ImpersonateDialog({
+  user,
+  onClose,
+}: {
+  user: User;
+  onClose: () => void;
+}) {
+  const t = useTranslations("users");
+
+  return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent>
         <DialogHeader>
@@ -67,69 +101,97 @@ function ImpersonateDialog({
           </DialogTitle>
           <DialogDescription>{t("dialog.description")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="ttl-minutes">{t("dialog.ttlLabel")}</Label>
-          <Input
-            id="ttl-minutes"
-            type="number"
-            min={1}
-            max={60}
-            value={ttl}
-            onChange={(e) => setTtl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleImpersonate();
-            }}
-          />
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={handleImpersonate}
-            disabled={impersonate.isPending}
-          >
-            {impersonate.isPending ? t("dialog.starting") : t("dialog.submit")}
-          </Button>
-        </DialogFooter>
+        <ImpersonateForm user={user} onClose={onClose} />
       </DialogContent>
     </Dialog>
   );
 }
 
-export default function UsersPage() {
+function RoleBadge({ role }: { role: User["role"] }) {
   const t = useTranslations("users");
-  const me = useMe();
-  const role = me.data?.user.role;
-  // enabled=isAdmin: skip the query until role is known, preventing a 403 toast
-  // for non-admins who land here via direct URL.
-  const users = useUsers(role === "admin");
-  const stopImpersonation = useStopImpersonation();
-  const [impersonateTarget, setImpersonateTarget] = useState<User | null>(null);
+  return (
+    <Badge variant={role === "admin" ? "info" : "secondary"}>
+      {role === "admin" ? t("role.admin") : t("role.user")}
+    </Badge>
+  );
+}
 
-  // While me is still loading, render nothing (role unknown — don't flash content).
-  if (!me.data) return null;
+function ImpersonationActions({
+  user,
+  realUserId,
+  isImpersonating,
+  stopImpersonation,
+  onImpersonate,
+}: {
+  user: User;
+  realUserId: number | undefined;
+  isImpersonating: boolean;
+  stopImpersonation: ReturnType<typeof useStopImpersonation>;
+  onImpersonate: (user: User) => void;
+}) {
+  // Never show the impersonate button for the current real user
+  if (user.id === realUserId) return null;
 
-  // Non-admins get an empty state — nav already hides the link,
-  // but a direct URL must not crash.
-  if (me.data.user.role !== "admin") {
+  if (isImpersonating) {
+    // While impersonating, show "Stop viewing" — wired to the same stop mutation
+    // that the banner uses
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-border py-24 text-center">
-        <ShieldAlertIcon
-          className="size-8 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <p className="mt-4 text-base font-semibold">{t("adminOnly.title")}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("adminOnly.description")}
-        </p>
-      </div>
+      <StopViewingButton stopImpersonation={stopImpersonation} />
     );
   }
 
-  // Real user id used to hide the "Impersonate" button for self.
-  // While impersonating, real_user holds the actual admin; use that id.
-  const realUserId = me.data?.real_user?.id ?? me.data?.user.id;
-  const isImpersonating = me.data?.impersonating ?? false;
+  return <ImpersonateButton user={user} onImpersonate={onImpersonate} />;
+}
 
-  const columns: Column<User>[] = [
+function StopViewingButton({
+  stopImpersonation,
+}: {
+  stopImpersonation: ReturnType<typeof useStopImpersonation>;
+}) {
+  const t = useTranslations("users");
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={stopImpersonation.isPending}
+      onClick={() => stopImpersonation.mutate()}
+    >
+      {stopImpersonation.isPending
+        ? t("actions.stopping")
+        : t("actions.stopViewing")}
+    </Button>
+  );
+}
+
+function ImpersonateButton({
+  user,
+  onImpersonate,
+}: {
+  user: User;
+  onImpersonate: (user: User) => void;
+}) {
+  const t = useTranslations("users");
+  return (
+    <Button size="sm" variant="outline" onClick={() => onImpersonate(user)}>
+      {t("actions.impersonate")}
+    </Button>
+  );
+}
+
+function useUserColumns({
+  realUserId,
+  isImpersonating,
+  stopImpersonation,
+  onImpersonate,
+}: {
+  realUserId: number | undefined;
+  isImpersonating: boolean;
+  stopImpersonation: ReturnType<typeof useStopImpersonation>;
+  onImpersonate: (user: User) => void;
+}): Column<User>[] {
+  const t = useTranslations("users");
+
+  return [
     {
       header: t("table.id"),
       cell: (u) => (
@@ -151,47 +213,99 @@ export default function UsersPage() {
     },
     {
       header: t("table.role"),
-      cell: (u) => (
-        <Badge variant={u.role === "admin" ? "info" : "secondary"}>
-          {u.role === "admin" ? t("role.admin") : t("role.user")}
-        </Badge>
-      ),
+      cell: (u) => <RoleBadge role={u.role} />,
     },
     {
       header: t("table.actions"),
-      cell: (u) => {
-        // Never show the impersonate button for the current real user
-        if (u.id === realUserId) return null;
-
-        if (isImpersonating) {
-          // While impersonating, show "Stop viewing" — wired to the same stop mutation
-          // that the banner uses
-          return (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={stopImpersonation.isPending}
-              onClick={() => stopImpersonation.mutate()}
-            >
-              {stopImpersonation.isPending
-                ? t("actions.stopping")
-                : t("actions.stopViewing")}
-            </Button>
-          );
-        }
-
-        return (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setImpersonateTarget(u)}
-          >
-            {t("actions.impersonate")}
-          </Button>
-        );
-      },
+      cell: (u) => (
+        <ImpersonationActions
+          user={u}
+          realUserId={realUserId}
+          isImpersonating={isImpersonating}
+          stopImpersonation={stopImpersonation}
+          onImpersonate={onImpersonate}
+        />
+      ),
     },
   ];
+}
+
+function AdminOnlyNotice() {
+  const t = useTranslations("users");
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-border py-24 text-center">
+      <ShieldAlertIcon
+        className="size-8 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <p className="mt-4 text-base font-semibold">{t("adminOnly.title")}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {t("adminOnly.description")}
+      </p>
+    </div>
+  );
+}
+
+function UsersTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="border-b border-border px-3 py-3">
+        <Skeleton className="h-4 w-48" />
+      </div>
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className="flex h-12 items-center border-b border-border px-3 last:border-0"
+        >
+          <Skeleton className="h-4 w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function UsersEmptyState() {
+  const t = useTranslations("users");
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-border py-16 text-center">
+      <UsersIcon className="size-8 text-muted-foreground" aria-hidden="true" />
+      <p className="mt-4 text-sm text-muted-foreground">{t("empty")}</p>
+    </div>
+  );
+}
+
+export default function UsersPage() {
+  const t = useTranslations("users");
+  const me = useMe();
+  const role = me.data?.user.role;
+  // enabled=isAdmin: skip the query until role is known, preventing a 403 toast
+  // for non-admins who land here via direct URL.
+  const users = useUsers(role === "admin");
+  // Single mutation instance shared by all rows so isPending disables every
+  // "Stop viewing" button at once.
+  const stopImpersonation = useStopImpersonation();
+  const [impersonateTarget, setImpersonateTarget] = useState<User | null>(null);
+
+  // Real user id used to hide the "Impersonate" button for self.
+  // While impersonating, real_user holds the actual admin; use that id.
+  const realUserId = me.data?.real_user?.id ?? me.data?.user.id;
+  const isImpersonating = me.data?.impersonating ?? false;
+
+  const columns = useUserColumns({
+    realUserId,
+    isImpersonating,
+    stopImpersonation,
+    onImpersonate: setImpersonateTarget,
+  });
+
+  // While me is still loading, render nothing (role unknown — don't flash content).
+  if (!me.data) return null;
+
+  // Non-admins get an empty state — nav already hides the link,
+  // but a direct URL must not crash.
+  if (me.data.user.role !== "admin") {
+    return <AdminOnlyNotice />;
+  }
 
   return (
     <div className="space-y-6">
@@ -203,27 +317,9 @@ export default function UsersPage() {
       </div>
 
       {users.isLoading ? (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <div className="border-b border-border px-3 py-3">
-            <Skeleton className="h-4 w-48" />
-          </div>
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="flex h-12 items-center border-b border-border px-3 last:border-0"
-            >
-              <Skeleton className="h-4 w-full" />
-            </div>
-          ))}
-        </div>
+        <UsersTableSkeleton />
       ) : users.data && users.data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-border py-16 text-center">
-          <UsersIcon
-            className="size-8 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <p className="mt-4 text-sm text-muted-foreground">{t("empty")}</p>
-        </div>
+        <UsersEmptyState />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
           <DataTable

@@ -20,6 +20,45 @@ export class ApiError extends Error {
   }
 }
 
+/** Encodes a single path segment so interpolated values (ids, names, slugs)
+ *  can never escape the "/api/..." prefix or inject extra segments/queries. */
+function seg(value: string | number): string {
+  return encodeURIComponent(String(value));
+}
+
+/** Builds a "?k=v" query string from the truthy params, "" if none.
+ *  URLSearchParams percent-encodes values, so they cannot smuggle params. */
+function query(params: Record<string, number | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) q.set(key, String(value));
+  }
+  const qs = q.toString();
+  return qs ? `?${qs}` : "";
+}
+
+function toApiError(res: Response, data: unknown): ApiError {
+  const body = data as ApiErrorBody | undefined;
+  return new ApiError(
+    res.status,
+    body?.error?.code ?? "unknown",
+    body?.error?.message ?? res.statusText,
+  );
+}
+
+async function parseResponse<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : undefined;
+  if (!res.ok) throw toApiError(res, data);
+  return data as T;
+}
+
+// Same-origin invariant: every path passed here is a relative "/api/..."
+// string built from literals; dynamic path segments go through seg()
+// (encodeURIComponent) and query values through URLSearchParams, so no
+// runtime value can change the origin, traverse out of /api, or smuggle
+// extra query parameters.
 async function request<T>(
   path: string,
   init?: RequestInit & { json?: unknown },
@@ -37,18 +76,7 @@ async function request<T>(
     credentials: "same-origin",
     cache: "no-store",
   });
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
-  if (!res.ok) {
-    const body = data as ApiErrorBody | undefined;
-    throw new ApiError(
-      res.status,
-      body?.error?.code ?? "unknown",
-      body?.error?.message ?? res.statusText,
-    );
-  }
-  return data as T;
+  return parseResponse<T>(res);
 }
 
 export const api = {
@@ -56,39 +84,38 @@ export const api = {
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
 
   listProfiles: () => request<Profile[]>("/api/profiles"),
-  getProfile: (id: number) => request<Profile>(`/api/profiles/${id}`),
+  getProfile: (id: number) => request<Profile>(`/api/profiles/${seg(id)}`),
   createProfile: (body: { name: string; slug: string }) =>
     request<Profile>("/api/profiles", { method: "POST", json: body }),
   renameProfile: (id: number, name: string) =>
-    request<Profile>(`/api/profiles/${id}`, { method: "PATCH", json: { name } }),
+    request<Profile>(`/api/profiles/${seg(id)}`, {
+      method: "PATCH",
+      json: { name },
+    }),
   deleteProfile: (id: number) =>
-    request<void>(`/api/profiles/${id}`, { method: "DELETE" }),
+    request<void>(`/api/profiles/${seg(id)}`, { method: "DELETE" }),
   setProfileServers: (id: number, servers: string[]) =>
-    request<Profile>(`/api/profiles/${id}/servers`, {
+    request<Profile>(`/api/profiles/${seg(id)}/servers`, {
       method: "PUT",
       json: { servers },
     }),
   rotateProfileToken: (id: number) =>
-    request<Profile>(`/api/profiles/${id}/token`, { method: "POST" }),
+    request<Profile>(`/api/profiles/${seg(id)}/token`, { method: "POST" }),
 
   listServers: () => request<Server[]>("/api/servers"),
   installServer: (ref: string) =>
     request<Server>("/api/servers/install", { method: "POST", json: { ref } }),
   uninstallServer: (name: string) =>
-    request<void>(`/api/servers/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    }),
+    request<void>(`/api/servers/${seg(name)}`, { method: "DELETE" }),
 
   listCredentials: () => request<Credential[]>("/api/credentials"),
   putCredential: (server: string, body: CredentialPutBody) =>
-    request<void>(`/api/credentials/${encodeURIComponent(server)}`, {
+    request<void>(`/api/credentials/${seg(server)}`, {
       method: "PUT",
       json: body,
     }),
   deleteCredential: (server: string) =>
-    request<void>(`/api/credentials/${encodeURIComponent(server)}`, {
-      method: "DELETE",
-    }),
+    request<void>(`/api/credentials/${seg(server)}`, { method: "DELETE" }),
 
   listUsers: () => request<User[]>("/api/users"),
   impersonate: (user_id: number, ttl_minutes: number) =>
@@ -99,12 +126,6 @@ export const api = {
   stopImpersonation: () =>
     request<void>("/api/admin/impersonate", { method: "DELETE" }),
 
-  listAudit: (params: { before?: number; limit?: number; user_id?: number }) => {
-    const q = new URLSearchParams();
-    if (params.before) q.set("before", String(params.before));
-    if (params.limit) q.set("limit", String(params.limit));
-    if (params.user_id) q.set("user_id", String(params.user_id));
-    const qs = q.toString();
-    return request<AuditPage>(`/api/audit${qs ? `?${qs}` : ""}`);
-  },
+  listAudit: (params: { before?: number; limit?: number; user_id?: number }) =>
+    request<AuditPage>(`/api/audit${query(params)}`),
 };

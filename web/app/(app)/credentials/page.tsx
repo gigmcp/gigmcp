@@ -43,6 +43,234 @@ const codeTag = {
   code: (chunks: ReactNode) => <span className="font-mono">{chunks}</span>,
 };
 
+/* ------------------------------------------------------------------ */
+/* Validation / body-building helpers                                  */
+/* ------------------------------------------------------------------ */
+
+interface AdvancedFieldsState {
+  injectHeader: string;
+  injectFormat: string;
+  placeholder: string;
+  allowedHosts: string;
+}
+
+const EMPTY_ADVANCED: AdvancedFieldsState = {
+  injectHeader: "",
+  injectFormat: "",
+  placeholder: "",
+  allowedHosts: "",
+};
+
+/** Newline- or comma-separated host list → trimmed, non-empty entries. */
+function parseHostList(input: string): string[] {
+  return input
+    .split(/[\n,]+/)
+    .map((h) => h.trim())
+    .filter(Boolean);
+}
+
+/** PUT body from the form: only non-blank optional fields are included. */
+function buildCredentialBody(
+  secret: string,
+  advanced: AdvancedFieldsState,
+): CredentialPutBody {
+  const body: CredentialPutBody = { secret };
+  const injectHeader = advanced.injectHeader.trim();
+  if (injectHeader) body.inject_header = injectHeader;
+  const injectFormat = advanced.injectFormat.trim();
+  if (injectFormat) body.inject_format = injectFormat;
+  const placeholder = advanced.placeholder.trim();
+  if (placeholder) body.placeholder = placeholder;
+  if (advanced.allowedHosts.trim()) {
+    body.allowed_hosts = parseHostList(advanced.allowedHosts);
+  }
+  return body;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dialog field groups                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Label + control + optional hint, with the shared field spacing. */
+function FormField({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {hint != null && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function ServerField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  const t = useTranslations("credentials");
+  return (
+    <FormField
+      id="cred-server"
+      label={t("form.server.label")}
+      hint={t.rich("form.server.hint", { ...codeTag, pattern: SERVER_PATTERN })}
+    >
+      <Input
+        id="cred-server"
+        placeholder={t("form.server.placeholder")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="font-mono"
+      />
+    </FormField>
+  );
+}
+
+/** Write-only secret entry — never prefilled, never echoed back. */
+function SecretField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const t = useTranslations("credentials");
+  return (
+    <FormField id="cred-secret" label={t("form.secret.label")}>
+      <textarea
+        id="cred-secret"
+        className={textareaClass}
+        placeholder={t("form.secret.placeholder")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+      />
+    </FormField>
+  );
+}
+
+function AdvancedToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const t = useTranslations("credentials");
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
+    >
+      {open ? (
+        <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+      ) : (
+        <ChevronRightIcon className="size-3.5" aria-hidden="true" />
+      )}
+      {t("form.advanced.toggle")}
+    </button>
+  );
+}
+
+function AdvancedFields({
+  values,
+  onChange,
+}: {
+  values: AdvancedFieldsState;
+  onChange: (patch: Partial<AdvancedFieldsState>) => void;
+}) {
+  const t = useTranslations("credentials");
+  return (
+    <div className="mt-3 space-y-4">
+      <Separator />
+      <p className="text-xs text-muted-foreground">{t("form.advanced.note")}</p>
+
+      <FormField
+        id="cred-inject-header"
+        label={t("form.injectHeader.label")}
+        hint={t.rich("form.injectHeader.hint", {
+          ...codeTag,
+          pattern: HEADER_PATTERN,
+        })}
+      >
+        <Input
+          id="cred-inject-header"
+          placeholder={t("form.injectHeader.placeholder")}
+          value={values.injectHeader}
+          onChange={(e) => onChange({ injectHeader: e.target.value })}
+          className="font-mono"
+        />
+      </FormField>
+
+      <FormField
+        id="cred-inject-format"
+        label={t("form.injectFormat.label")}
+        hint={t.rich("form.injectFormat.hint", codeTag)}
+      >
+        <Input
+          id="cred-inject-format"
+          placeholder={t("form.injectFormat.placeholder")}
+          value={values.injectFormat}
+          onChange={(e) => onChange({ injectFormat: e.target.value })}
+          className="font-mono"
+        />
+      </FormField>
+
+      <FormField
+        id="cred-placeholder"
+        label={t("form.placeholder.label")}
+        hint={t("form.placeholder.hint")}
+      >
+        <Input
+          id="cred-placeholder"
+          placeholder={t("form.placeholder.placeholder")}
+          value={values.placeholder}
+          onChange={(e) => onChange({ placeholder: e.target.value })}
+          className="font-mono"
+        />
+      </FormField>
+
+      <FormField
+        id="cred-allowed-hosts"
+        label={t("form.allowedHosts.label")}
+        hint={t.rich("form.allowedHosts.hint", {
+          ...codeTag,
+          pattern: HOST_PATTERN,
+        })}
+      >
+        <textarea
+          id="cred-allowed-hosts"
+          className={textareaClass}
+          placeholder={t("form.allowedHosts.placeholder")}
+          value={values.allowedHosts}
+          onChange={(e) => onChange({ allowedHosts: e.target.value })}
+          spellCheck={false}
+        />
+      </FormField>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Create / edit dialog                                                */
+/* ------------------------------------------------------------------ */
+
 interface CredentialDialogProps {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -57,22 +285,17 @@ function CredentialDialog({
   const t = useTranslations("credentials");
   const [server, setServer] = useState(prefillServer ?? "");
   const [secret, setSecret] = useState("");
-  const [injectHeader, setInjectHeader] = useState("");
-  const [injectFormat, setInjectFormat] = useState("");
-  const [placeholder, setPlaceholder] = useState("");
-  const [allowedHosts, setAllowedHosts] = useState("");
+  const [advanced, setAdvanced] = useState<AdvancedFieldsState>(EMPTY_ADVANCED);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const put = usePutCredential();
+  const canSubmit = Boolean(server.trim()) && Boolean(secret);
 
   function reset() {
     setServer(prefillServer ?? "");
     setSecret("");
-    setInjectHeader("");
-    setInjectFormat("");
-    setPlaceholder("");
-    setAllowedHosts("");
+    setAdvanced(EMPTY_ADVANCED);
     setShowAdvanced(false);
     setError(null);
   }
@@ -83,22 +306,11 @@ function CredentialDialog({
   }
 
   function handleSubmit() {
-    if (!server.trim() || !secret) return;
+    if (!canSubmit) return;
     setError(null);
 
-    const body: CredentialPutBody = { secret };
-    if (injectHeader.trim()) body.inject_header = injectHeader.trim();
-    if (injectFormat.trim()) body.inject_format = injectFormat.trim();
-    if (placeholder.trim()) body.placeholder = placeholder.trim();
-    if (allowedHosts.trim()) {
-      body.allowed_hosts = allowedHosts
-        .split(/[\n,]+/)
-        .map((h) => h.trim())
-        .filter(Boolean);
-    }
-
     put.mutate(
-      { server: server.trim(), body },
+      { server: server.trim(), body: buildCredentialBody(secret, advanced) },
       {
         onSuccess: () => {
           toast.success(t("toast.saved", { server: server.trim() }));
@@ -128,126 +340,25 @@ function CredentialDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cred-server">{t("form.server.label")}</Label>
-            <Input
-              id="cred-server"
-              placeholder={t("form.server.placeholder")}
-              value={server}
-              onChange={(e) => setServer(e.target.value)}
-              disabled={!!prefillServer}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t.rich("form.server.hint", { ...codeTag, pattern: SERVER_PATTERN })}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cred-secret">{t("form.secret.label")}</Label>
-            <textarea
-              id="cred-secret"
-              className={textareaClass}
-              placeholder={t("form.secret.placeholder")}
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
+          <ServerField
+            value={server}
+            onChange={setServer}
+            disabled={!!prefillServer}
+          />
+          <SecretField value={secret} onChange={setSecret} />
 
           <div>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-150 ease-out hover:text-foreground"
-            >
-              {showAdvanced ? (
-                <ChevronDownIcon className="size-3.5" aria-hidden="true" />
-              ) : (
-                <ChevronRightIcon className="size-3.5" aria-hidden="true" />
-              )}
-              {t("form.advanced.toggle")}
-            </button>
-
+            <AdvancedToggle
+              open={showAdvanced}
+              onToggle={() => setShowAdvanced((v) => !v)}
+            />
             {showAdvanced && (
-              <div className="mt-3 space-y-4">
-                <Separator />
-                <p className="text-xs text-muted-foreground">
-                  {t("form.advanced.note")}
-                </p>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cred-inject-header">
-                    {t("form.injectHeader.label")}
-                  </Label>
-                  <Input
-                    id="cred-inject-header"
-                    placeholder={t("form.injectHeader.placeholder")}
-                    value={injectHeader}
-                    onChange={(e) => setInjectHeader(e.target.value)}
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t.rich("form.injectHeader.hint", {
-                      ...codeTag,
-                      pattern: HEADER_PATTERN,
-                    })}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cred-inject-format">
-                    {t("form.injectFormat.label")}
-                  </Label>
-                  <Input
-                    id="cred-inject-format"
-                    placeholder={t("form.injectFormat.placeholder")}
-                    value={injectFormat}
-                    onChange={(e) => setInjectFormat(e.target.value)}
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t.rich("form.injectFormat.hint", codeTag)}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cred-placeholder">
-                    {t("form.placeholder.label")}
-                  </Label>
-                  <Input
-                    id="cred-placeholder"
-                    placeholder={t("form.placeholder.placeholder")}
-                    value={placeholder}
-                    onChange={(e) => setPlaceholder(e.target.value)}
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("form.placeholder.hint")}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cred-allowed-hosts">
-                    {t("form.allowedHosts.label")}
-                  </Label>
-                  <textarea
-                    id="cred-allowed-hosts"
-                    className={textareaClass}
-                    placeholder={t("form.allowedHosts.placeholder")}
-                    value={allowedHosts}
-                    onChange={(e) => setAllowedHosts(e.target.value)}
-                    spellCheck={false}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t.rich("form.allowedHosts.hint", {
-                      ...codeTag,
-                      pattern: HOST_PATTERN,
-                    })}
-                  </p>
-                </div>
-              </div>
+              <AdvancedFields
+                values={advanced}
+                onChange={(patch) =>
+                  setAdvanced((prev) => ({ ...prev, ...patch }))
+                }
+              />
             )}
           </div>
 
@@ -255,15 +366,31 @@ function CredentialDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={put.isPending || !server.trim() || !secret}
-          >
+          <Button onClick={handleSubmit} disabled={put.isPending || !canSubmit}>
             {put.isPending ? t("dialog.saving") : t("dialog.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Read-only gating + table cells                                      */
+/* ------------------------------------------------------------------ */
+
+/** Wraps a disabled control with the impersonation-mode explanation. */
+function ReadOnlyTooltip({ children }: { children: ReactNode }) {
+  const t = useTranslations("credentials");
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger>
+          <span tabIndex={0}>{children}</span>
+        </TooltipTrigger>
+        <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -278,20 +405,86 @@ function AddCredentialButton({
   const t = useTranslations("credentials");
   if (readOnly) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger>
-            <span tabIndex={0}>
-              <Button disabled>{t("add")}</Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <ReadOnlyTooltip>
+        <Button disabled>{t("add")}</Button>
+      </ReadOnlyTooltip>
     );
   }
   return <Button onClick={onClick}>{t("add")}</Button>;
 }
+
+function CredentialActionsCell({
+  credential,
+  readOnly,
+  deleteCredential,
+  onEdit,
+}: {
+  credential: Credential;
+  readOnly: boolean;
+  deleteCredential: ReturnType<typeof useDeleteCredential>;
+  onEdit: (server: string) => void;
+}) {
+  const t = useTranslations("credentials");
+
+  const updateBtn = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={readOnly}
+      onClick={() => !readOnly && onEdit(credential.server)}
+    >
+      {t("actions.update")}
+    </Button>
+  );
+  const deleteBtn = (
+    <Button
+      variant="destructive"
+      size="sm"
+      disabled={deleteCredential.isPending || readOnly}
+    >
+      {t("actions.delete")}
+    </Button>
+  );
+
+  if (readOnly) {
+    return (
+      <div className="flex items-center gap-2">
+        <ReadOnlyTooltip>{updateBtn}</ReadOnlyTooltip>
+        <ReadOnlyTooltip>{deleteBtn}</ReadOnlyTooltip>
+      </div>
+    );
+  }
+
+  function handleDelete() {
+    deleteCredential.mutate(credential.server, {
+      onSuccess: () =>
+        toast.success(t("toast.deleted", { server: credential.server })),
+      onError: (err) => {
+        const msg =
+          err instanceof ApiError ? err.message : t("toast.deleteFailed");
+        toast.error(msg);
+      },
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {updateBtn}
+      <ConfirmDialog
+        trigger={deleteBtn}
+        title={t("deleteDialog.title", { server: credential.server })}
+        description={t("deleteDialog.description")}
+        confirmLabel={t("deleteDialog.confirm")}
+        isPending={deleteCredential.isPending}
+        onConfirm={handleDelete}
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function CredentialsPage() {
   const t = useTranslations("credentials");
@@ -328,76 +521,14 @@ export default function CredentialsPage() {
     },
     {
       header: t("table.actions"),
-      cell: (c) => {
-        const updateBtn = (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={readOnly}
-            onClick={() => !readOnly && setEditServer(c.server)}
-          >
-            {t("actions.update")}
-          </Button>
-        );
-        const deleteBtn = (
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={deleteCredential.isPending || readOnly}
-          >
-            {t("actions.delete")}
-          </Button>
-        );
-
-        if (readOnly) {
-          return (
-            <div className="flex items-center gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <span tabIndex={0}>{updateBtn}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <span tabIndex={0}>{deleteBtn}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          );
-        }
-
-        return (
-          <div className="flex items-center gap-2">
-            {updateBtn}
-            <ConfirmDialog
-              trigger={deleteBtn}
-              title={t("deleteDialog.title", { server: c.server })}
-              description={t("deleteDialog.description")}
-              confirmLabel={t("deleteDialog.confirm")}
-              isPending={deleteCredential.isPending}
-              onConfirm={() => {
-                deleteCredential.mutate(c.server, {
-                  onSuccess: () =>
-                    toast.success(t("toast.deleted", { server: c.server })),
-                  onError: (err) => {
-                    const msg =
-                      err instanceof ApiError
-                        ? err.message
-                        : t("toast.deleteFailed");
-                    toast.error(msg);
-                  },
-                });
-              }}
-            />
-          </div>
-        );
-      },
+      cell: (c) => (
+        <CredentialActionsCell
+          credential={c}
+          readOnly={readOnly}
+          deleteCredential={deleteCredential}
+          onEdit={setEditServer}
+        />
+      ),
     },
   ];
 

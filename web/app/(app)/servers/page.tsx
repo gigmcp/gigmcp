@@ -28,7 +28,22 @@ import { Label } from "@/components/ui/label";
 import type { Server } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disabled?: boolean }) {
+/** Wraps a disabled control with the read-only impersonation tooltip. */
+function ReadOnlyTooltip({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("servers");
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger>
+          <span tabIndex={0}>{children}</span>
+        </TooltipTrigger>
+        <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function InstallDialog({ disabled }: { disabled?: boolean }) {
   const t = useTranslations("servers");
   const [open, setOpen] = useState(false);
   const [ref, setRef] = useState("");
@@ -41,7 +56,6 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
         toast.success(t("install.success", { name: server.name }));
         setRef("");
         setOpen(false);
-        onSuccess();
       },
       onError: (err) => {
         const msg =
@@ -59,18 +73,7 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
 
   return (
     <>
-      {disabled ? (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <span tabIndex={0}>{trigger}</span>
-            </TooltipTrigger>
-            <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        trigger
-      )}
+      {disabled ? <ReadOnlyTooltip>{trigger}</ReadOnlyTooltip> : trigger}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -106,15 +109,54 @@ function InstallDialog({ onSuccess, disabled }: { onSuccess: () => void; disable
   );
 }
 
-export default function ServersPage() {
+/** Column definitions for the servers table; the uninstall mutation is held
+ *  here (called once per page) so its pending state stays shared across rows. */
+function useServerColumns(isAdmin: boolean): Column<Server>[] {
   const t = useTranslations("servers");
-  const me = useMe();
-  const servers = useServers();
   const uninstall = useUninstallServer();
   const readOnly = useReadOnly();
-  const isAdmin = me.data?.user.role === "admin";
 
-  const columns: Column<Server>[] = [
+  const actionsColumn: Column<Server> = {
+    header: t("table.actions"),
+    cell: (s) => {
+      const btn = (
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={uninstall.isPending || readOnly}
+        >
+          {t("uninstall.button")}
+        </Button>
+      );
+      if (readOnly) {
+        return <ReadOnlyTooltip>{btn}</ReadOnlyTooltip>;
+      }
+      return (
+        <ConfirmDialog
+          trigger={btn}
+          title={t("uninstall.confirmTitle", { name: s.name })}
+          description={t("uninstall.confirmDescription")}
+          confirmLabel={t("uninstall.confirmLabel")}
+          isPending={uninstall.isPending}
+          onConfirm={() => {
+            uninstall.mutate(s.name, {
+              onSuccess: () =>
+                toast.success(t("uninstall.success", { name: s.name })),
+              onError: (err) => {
+                const msg =
+                  err instanceof ApiError
+                    ? err.message
+                    : t("uninstall.error");
+                toast.error(msg);
+              },
+            });
+          }}
+        />
+      );
+    },
+  };
+
+  return [
     {
       header: t("table.id"),
       cell: (s) => (
@@ -127,59 +169,17 @@ export default function ServersPage() {
       header: t("table.name"),
       cell: (s) => <span className="font-mono">{s.name}</span>,
     },
-    ...(isAdmin
-      ? [
-          {
-            header: t("table.actions"),
-            cell: (s: Server) => {
-              const btn = (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={uninstall.isPending || readOnly}
-                >
-                  {t("uninstall.button")}
-                </Button>
-              );
-              if (readOnly) {
-                return (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <span tabIndex={0}>{btn}</span>
-                      </TooltipTrigger>
-                      <TooltipContent>{t("readOnlyTooltip")}</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                );
-              }
-              return (
-                <ConfirmDialog
-                  trigger={btn}
-                  title={t("uninstall.confirmTitle", { name: s.name })}
-                  description={t("uninstall.confirmDescription")}
-                  confirmLabel={t("uninstall.confirmLabel")}
-                  isPending={uninstall.isPending}
-                  onConfirm={() => {
-                    uninstall.mutate(s.name, {
-                      onSuccess: () =>
-                        toast.success(t("uninstall.success", { name: s.name })),
-                      onError: (err) => {
-                        const msg =
-                          err instanceof ApiError
-                            ? err.message
-                            : t("uninstall.error");
-                        toast.error(msg);
-                      },
-                    });
-                  }}
-                />
-              );
-            },
-          },
-        ]
-      : []),
+    ...(isAdmin ? [actionsColumn] : []),
   ];
+}
+
+export default function ServersPage() {
+  const t = useTranslations("servers");
+  const me = useMe();
+  const servers = useServers();
+  const readOnly = useReadOnly();
+  const isAdmin = me.data?.user.role === "admin";
+  const columns = useServerColumns(isAdmin);
 
   return (
     <div className="space-y-6">
@@ -192,7 +192,7 @@ export default function ServersPage() {
             {t("description")}
           </p>
         </div>
-        {isAdmin && <InstallDialog onSuccess={() => {}} disabled={readOnly} />}
+        {isAdmin && <InstallDialog disabled={readOnly} />}
       </div>
 
       {servers.isLoading ? (
@@ -210,9 +210,7 @@ export default function ServersPage() {
         <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border py-16">
           <ServerIcon className="size-5 text-muted-foreground" aria-hidden />
           <p className="text-sm text-muted-foreground">{t("empty.title")}</p>
-          {isAdmin && (
-            <InstallDialog onSuccess={() => {}} disabled={readOnly} />
-          )}
+          {isAdmin && <InstallDialog disabled={readOnly} />}
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">

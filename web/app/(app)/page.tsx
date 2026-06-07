@@ -36,27 +36,45 @@ const kindVariant = {
 const decisionVariant = (d: string) =>
   d === "allow" ? ("success" as const) : ("destructive" as const);
 
-export default function OverviewPage() {
+type StatQuery = { isLoading: boolean; data?: unknown[] };
+
+function StatsGrid({
+  profiles,
+  servers,
+  credentials,
+  users,
+  isAdmin,
+}: {
+  profiles: StatQuery;
+  servers: StatQuery;
+  credentials: StatQuery;
+  users: StatQuery;
+  isAdmin: boolean;
+}) {
   const t = useTranslations("overview");
   const format = useFormatter();
-  const me = useMe();
-  const profiles = useProfiles();
-  const servers = useServers();
-  const credentials = useCredentials();
-  const isAdmin = me.data?.user.role === "admin";
-  // enabled=isAdmin: skip the query for non-admins to avoid a 403 toast
-  const users = useUsers(isAdmin);
-  const audit = useQuery({
-    queryKey: [...keys.audit, { limit: 10 }],
-    queryFn: () => api.listAudit({ limit: 10 }),
-  });
 
-  const displayName = me.data?.user.display_name || me.data?.user.email || "";
-
-  const statValue = (q: { isLoading: boolean; data?: unknown[] }) =>
+  const statValue = (q: StatQuery) =>
     q.isLoading ? t("placeholder") : format.number(q.data?.length ?? 0);
 
-  const auditColumns: Column<AuditEvent>[] = [
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <StatCard label={t("stats.profiles")} value={statValue(profiles)} />
+      <StatCard label={t("stats.servers")} value={statValue(servers)} />
+      <StatCard
+        label={t("stats.credentials")}
+        value={statValue(credentials)}
+      />
+      {isAdmin && <StatCard label={t("stats.users")} value={statValue(users)} />}
+    </div>
+  );
+}
+
+function useAuditColumns(): Column<AuditEvent>[] {
+  const t = useTranslations("overview");
+  const format = useFormatter();
+
+  return [
     {
       header: t("activity.columns.time"),
       cell: (e) => (
@@ -113,6 +131,62 @@ export default function OverviewPage() {
       ),
     },
   ];
+}
+
+function RecentActivity({
+  audit,
+}: {
+  audit: { isLoading: boolean; data?: { events: AuditEvent[] } };
+}) {
+  const t = useTranslations("overview");
+  const auditColumns = useAuditColumns();
+
+  return (
+    <div>
+      <h2 className="mb-4 text-base font-semibold tracking-tight">
+        {t("activity.title")}
+      </h2>
+      {audit.isLoading ? (
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full rounded-md" />
+          ))}
+        </div>
+      ) : audit.data?.events.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-border py-12">
+          <Activity className="size-5 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            {t("activity.empty")}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <DataTable
+            columns={auditColumns}
+            data={audit.data?.events ?? []}
+            getKey={(e) => e.id}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function OverviewPage() {
+  const t = useTranslations("overview");
+  const me = useMe();
+  const profiles = useProfiles();
+  const servers = useServers();
+  const credentials = useCredentials();
+  const isAdmin = me.data?.user.role === "admin";
+  // enabled=isAdmin: skip the query for non-admins to avoid a 403 toast
+  const users = useUsers(isAdmin);
+  const audit = useQuery({
+    queryKey: [...keys.audit, { limit: 10 }],
+    queryFn: () => api.listAudit({ limit: 10 }),
+  });
+
+  const displayName = me.data?.user.display_name || me.data?.user.email || "";
 
   return (
     <div className="space-y-8">
@@ -123,43 +197,15 @@ export default function OverviewPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label={t("stats.profiles")} value={statValue(profiles)} />
-        <StatCard label={t("stats.servers")} value={statValue(servers)} />
-        <StatCard
-          label={t("stats.credentials")}
-          value={statValue(credentials)}
-        />
-        {isAdmin && <StatCard label={t("stats.users")} value={statValue(users)} />}
-      </div>
+      <StatsGrid
+        profiles={profiles}
+        servers={servers}
+        credentials={credentials}
+        users={users}
+        isAdmin={isAdmin}
+      />
 
-      <div>
-        <h2 className="mb-4 text-base font-semibold tracking-tight">
-          {t("activity.title")}
-        </h2>
-        {audit.isLoading ? (
-          <div className="space-y-3 rounded-lg border border-border p-4">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full rounded-md" />
-            ))}
-          </div>
-        ) : audit.data?.events.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-border py-12">
-            <Activity className="size-5 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              {t("activity.empty")}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <DataTable
-              columns={auditColumns}
-              data={audit.data?.events ?? []}
-              getKey={(e) => e.id}
-            />
-          </div>
-        )}
-      </div>
+      <RecentActivity audit={audit} />
     </div>
   );
 }
