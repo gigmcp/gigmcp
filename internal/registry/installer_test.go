@@ -136,3 +136,12 @@ func TestInstallUnknownRefFails(t *testing.T) {
 		t.Fatal("unknown ref must fail")
 	}
 }
+
+func TestUninstallRejectsInvalidName(t *testing.T) {
+	inst, _ := newTestInstaller(t, true)
+	for _, bad := range []string{"../evil", "evil/../../etc", "a/b", "..", "", "UPPER", "name_with_underscore"} {
+		if err := inst.Uninstall(context.Background(), bad); err == nil {
+			t.Errorf("Uninstall(%q) must be rejected", bad)
+		}
+	}
+}

@@ -8,10 +8,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"github.com/gigmcp/gigmcp/internal/oci"
 	"github.com/gigmcp/gigmcp/internal/store"
 )
+
+// uninstallNameRE mirrors the schema package's manifest-name rule; Uninstall
+// takes a raw caller-supplied name (e.g. from the REST API), so it must be
+// re-validated here before it reaches the filesystem glob.
+var uninstallNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // IndexInstaller implements Installer against the signed registry index.
 type IndexInstaller struct {
@@ -97,13 +103,16 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 }
 
 func (i *IndexInstaller) Uninstall(ctx context.Context, name string) error {
+	if !uninstallNameRE.MatchString(name) {
+		return fmt.Errorf("registry: invalid server name %q", name)
+	}
 	if err := i.Store.DeleteManifest(ctx, name); err != nil {
 		return err
 	}
 	if err := i.Store.DeleteServer(ctx, name); err != nil {
 		return err
 	}
-	// name is schema-validated [a-z0-9-]+, so the glob is meta-character-free.
+	// name re-validated above, so the glob is meta-character-free.
 	matches, err := filepath.Glob(filepath.Join(i.DataDir, "servers", name+"@*"))
 	if err != nil {
 		return err
