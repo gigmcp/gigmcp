@@ -2,7 +2,7 @@
 // an HTTPS GET with a placeholder Authorization header. Run sandboxed behind
 // the egress proxy, the placeholder is swapped for the real key; the tool
 // returns the upstream's response body so a test can assert what the upstream
-// actually received. PLACEHOLDER comes from $GIGE_PLACEHOLDER.
+// actually received. PLACEHOLDER comes from $GIG_PLACEHOLDER.
 package main
 
 import (
@@ -56,7 +56,7 @@ func newClient() *http.Client {
 }
 
 func main() {
-	placeholder := os.Getenv("GIGE_PLACEHOLDER")
+	placeholder := os.Getenv("GIG_PLACEHOLDER")
 	client := newClient()
 	s := mcp.NewServer(&mcp.Implementation{Name: "fetch-mcp", Version: "0.1.0"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "fetch", Description: "HTTPS GET a URL"},

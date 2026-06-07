@@ -74,7 +74,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
 func newKEK(t *testing.T) []byte {
@@ -276,7 +276,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/store"
 )
 
 func TestPutGetCredential(t *testing.T) {
@@ -442,7 +442,7 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 func TestLeafChainsToCA(t *testing.T) {
@@ -537,7 +537,7 @@ func NewCA() (*CA, error) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          sn,
-		Subject:               pkix.Name{CommonName: "gigemcp egress CA"},
+		Subject:               pkix.Name{CommonName: "gigmcp egress CA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		IsCA:                  true,
@@ -623,7 +623,7 @@ package proxy_test
 import (
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 func TestRegistryLookupByIP(t *testing.T) {
@@ -708,7 +708,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 // fakeResolver returns a fixed credential for any identity.
@@ -1014,8 +1014,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/netmgr"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 func requireNet(t *testing.T) {
@@ -1534,7 +1534,7 @@ func commandEgress(spec Spec) *exec.Cmd {
 // an HTTPS GET with a placeholder Authorization header. Run sandboxed behind
 // the egress proxy, the placeholder is swapped for the real key; the tool
 // returns the upstream's response body so a test can assert what the upstream
-// actually received. PLACEHOLDER comes from $GIGE_PLACEHOLDER.
+// actually received. PLACEHOLDER comes from $GIG_PLACEHOLDER.
 package main
 
 import (
@@ -1572,7 +1572,7 @@ func newClient() *http.Client {
 }
 
 func main() {
-	placeholder := os.Getenv("GIGE_PLACEHOLDER")
+	placeholder := os.Getenv("GIG_PLACEHOLDER")
 	client := newClient()
 	s := mcp.NewServer(&mcp.Implementation{Name: "fetch-mcp", Version: "0.1.0"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "fetch", Description: "HTTPS GET a URL"},
@@ -1614,9 +1614,9 @@ package gateway
 import (
 	"context"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
-	"github.com/gigemcp/gigemcp/internal/store"
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
 // CredResolver implements proxy.CredentialResolver over the store + vault.
@@ -1673,7 +1673,7 @@ func spawnEgressBackend(ctx context.Context, srv store.Server, alloc *netmgr.All
 		Exec: "/app/server",
 		Mounts: []sandbox.Mount{
 			{Src: srv.Binary, Dst: "/app/server"},
-			{Src: caFile, Dst: "/etc/gigemcp-ca.pem"},
+			{Src: caFile, Dst: "/etc/gigmcp-ca.pem"},
 		},
 		Egress: &sandbox.Egress{
 			BootstrapPath: bootstrapPath,
@@ -1688,9 +1688,9 @@ func spawnEgressBackend(ctx context.Context, srv store.Server, alloc *netmgr.All
 	cmd.ExtraFiles = []*os.File{r3, w4, wInfo}
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("HTTPS_PROXY=http://%s:%d", proxyIP, proxyPort),
-		"SSL_CERT_FILE=/etc/gigemcp-ca.pem",
-		"NODE_EXTRA_CA_CERTS=/etc/gigemcp-ca.pem",
-		"GIGE_PLACEHOLDER=PLACEHOLDER", // matches the stored credential's Placeholder
+		"SSL_CERT_FILE=/etc/gigmcp-ca.pem",
+		"NODE_EXTRA_CA_CERTS=/etc/gigmcp-ca.pem",
+		"GIG_PLACEHOLDER=PLACEHOLDER", // matches the stored credential's Placeholder
 	)
 	// MCP stdio is fd 0/1; create the transport over the command.
 	if err := cmd.Start(); err != nil {
@@ -1736,7 +1736,7 @@ func spawnEgressBackend(ctx context.Context, srv store.Server, alloc *netmgr.All
 - [ ] **Step 3: Transport lifecycle — use `mcp.IOTransport` (RESOLVED, verified v1.6.1).** Do NOT use `CommandTransport` (it owns `cmd.Start()` and would begin the MCP handshake before the network is up). The SDK provides `mcp.IOTransport{Reader io.ReadCloser, Writer io.WriteCloser}` — use it. The flow is naturally ordered and needs no concurrency tricks because the bootstrap blocks the real MCP server from starting until the handshake completes:
   1. Build the bwrap `cmd` from `sandbox.Command(spec)`.
   2. `stdout, _ := cmd.StdoutPipe()` and `stdin, _ := cmd.StdinPipe()` (these are the MCP channel; the server speaks newline-JSON on its stdio once it execs).
-  3. `cmd.ExtraFiles = []*os.File{r3, w4, wInfo}` (→ child fd 3,4,5), `cmd.Env = ...` (HTTPS_PROXY, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS, GIGE_PLACEHOLDER).
+  3. `cmd.ExtraFiles = []*os.File{r3, w4, wInfo}` (→ child fd 3,4,5), `cmd.Env = ...` (HTTPS_PROXY, SSL_CERT_FILE, NODE_EXTRA_CA_CERTS, GIG_PLACEHOLDER).
   4. `cmd.Start()`. At this point only the bootstrap runs; it is blocked reading fd 3, so nothing is written to stdout yet.
   5. Network handshake (synchronous, in the spawning goroutine): `readChildPid(rInfo)` → `CreateVethToHost` → `InjectPeer(veth, childPid)` → `w3.Write([]byte{1})` (inject-done) → `r4.Read` (await net-ready). The bootstrap then drops caps and execs the real MCP server.
   6. `client.Connect(ctx, &mcp.IOTransport{Reader: stdout, Writer: stdin}, nil)` — the initialize handshake now succeeds because the real server is finally speaking stdio.
@@ -1763,7 +1763,7 @@ func readChildPid(r *os.File) (int, error) {
 }
 ```
 
-In `run()`: build the vault from `GIGE_MASTER_KEY` (hex/base64 → 32 bytes), open the store, construct `CredResolver`, `proxy.NewRegistry()`, `proxy.New(reg, resolver)`; write the proxy CA PEM to a temp file (`caFile`) for mounting; start the proxy listening on `proxyIP:8080` (host-side veth IPs are reachable because the proxy binds `0.0.0.0:8080` or each host IP). Replace the skeleton's `sandbox.Command(... no egress ...)` backend loop with `spawnEgressBackend`. Seed a demo credential at startup if `GIGE_DEMO_TOKEN` is set (encrypt it, `PutCredential`) so the stack is usable like the skeleton.
+In `run()`: build the vault from `GIG_MASTER_KEY` (hex/base64 → 32 bytes), open the store, construct `CredResolver`, `proxy.NewRegistry()`, `proxy.New(reg, resolver)`; write the proxy CA PEM to a temp file (`caFile`) for mounting; start the proxy listening on `proxyIP:8080` (host-side veth IPs are reachable because the proxy binds `0.0.0.0:8080` or each host IP). Replace the skeleton's `sandbox.Command(... no egress ...)` backend loop with `spawnEgressBackend`. Seed a demo credential at startup if `GIG_DEMO_TOKEN` is set (encrypt it, `PutCredential`) so the stack is usable like the skeleton.
 
 - [ ] **Step 5: Build + vet** — `go build ./... && go vet ./...` clean. `go mod tidy`. (Behavioral proof is Task 10.)
 
@@ -1790,7 +1790,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 	// plus the gateway's exported spawn entry (see note)
 )
 
@@ -1811,7 +1811,7 @@ func TestEgressEndToEnd(t *testing.T) {
 	// Build the fetch-mcp + bootstrap binaries (CGO disabled, static).
 	bin := func(pkg string) string {
 		out := filepath.Join(t.TempDir(), filepath.Base(pkg))
-		c := exec.Command("go", "build", "-o", out, "github.com/gigemcp/gigemcp/"+pkg)
+		c := exec.Command("go", "build", "-o", out, "github.com/gigmcp/gigmcp/"+pkg)
 		c.Env = append(c.Environ(), "CGO_ENABLED=0")
 		if b, err := c.CombinedOutput(); err != nil {
 			t.Fatalf("build %s: %v\n%s", pkg, err, b)
@@ -1877,13 +1877,13 @@ Note: this test needs a small exported test harness. Add `internal/gateway/testh
     # except via the proxy (route isolation is primary; this is defense-in-depth).
 ```
 
-Add an entrypoint or startup step that runs `iptables -P FORWARD DROP` (document that the image must include `iptables`, or do it via netlink at gateway startup). If adding iptables to the image is heavy, implement the FORWARD-drop in Go at gateway start via netlink/nftables and note it; otherwise document the manual step. Add `GIGE_MASTER_KEY` (via `_FILE` secret) and `GIGE_DEMO_TOKEN` envs.
+Add an entrypoint or startup step that runs `iptables -P FORWARD DROP` (document that the image must include `iptables`, or do it via netlink at gateway startup). If adding iptables to the image is heavy, implement the FORWARD-drop in Go at gateway start via netlink/nftables and note it; otherwise document the manual step. Add `GIG_MASTER_KEY` (via `_FILE` secret) and `GIG_DEMO_TOKEN` envs.
 
 - [ ] **Step 3: Dockerfile** — ensure the runtime image builds `bootstrap` and `fetch-mcp` too (`go build -o /out/bootstrap ./cmd/bootstrap` etc.) and copies them to `/usr/local/bin/`. Bootstrap must be present for egress spawns.
 
-- [ ] **Step 4: README + DESIGN** — README: update the status block (egress proxy + vault now real; note the `NET_ADMIN` requirement and `GIGE_MASTER_KEY`). DESIGN: decisions #3 and #13 were already updated; add a one-line note to §3 threat model that egress runs NET_ADMIN-only (no SYS_ADMIN/privileged) and that route-isolation — not env vars — is the enforcement.
+- [ ] **Step 4: README + DESIGN** — README: update the status block (egress proxy + vault now real; note the `NET_ADMIN` requirement and `GIG_MASTER_KEY`). DESIGN: decisions #3 and #13 were already updated; add a one-line note to §3 threat model that egress runs NET_ADMIN-only (no SYS_ADMIN/privileged) and that route-isolation — not env vars — is the enforcement.
 
-- [ ] **Step 5: Full verification** — `make test` (all green incl. egress E2E), `make test-local` (Linux-only tests skip). Then boot the stack: `GIGE_MASTER_KEY=$(openssl rand -hex 32) GIGE_DEMO_TOKEN=xyz docker compose up --build -d` and confirm the gateway logs a sandboxed egress backend coming up. Tear down.
+- [ ] **Step 5: Full verification** — `make test` (all green incl. egress E2E), `make test-local` (Linux-only tests skip). Then boot the stack: `GIG_MASTER_KEY=$(openssl rand -hex 32) GIG_DEMO_TOKEN=xyz docker compose up --build -d` and confirm the gateway logs a sandboxed egress backend coming up. Tear down.
 
 - [ ] **Step 6: Commit** — `git add -A && git commit -m "feat: NET_ADMIN cap, FORWARD-drop hardening, egress build + docs"`
 

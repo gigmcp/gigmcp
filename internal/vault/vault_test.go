@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
 func newKEK(t *testing.T) []byte {

@@ -4,8 +4,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/netmgr"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 func requireNet(t *testing.T) {

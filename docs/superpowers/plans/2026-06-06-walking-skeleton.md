@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** An end-to-end thread through gigemcp: a Go gateway serving a bearer-authed streamable-HTTP MCP endpoint that spawns one echo MCP server inside a bubblewrap sandbox and proxies namespaced tool calls to it, backed by SQLite.
+**Goal:** An end-to-end thread through gigmcp: a Go gateway serving a bearer-authed streamable-HTTP MCP endpoint that spawns one echo MCP server inside a bubblewrap sandbox and proxies namespaced tool calls to it, backed by SQLite.
 
 **Architecture:** The gateway is an MCP *server* to clients (streamable HTTP) and an MCP *client* to each sandboxed backend (stdio over `CommandTransport` wrapping a `bwrap` command). Tools are re-exposed as `<backend>_<tool>`. This is DESIGN.md §7 step 1 — it deliberately proves the riskiest seams (bwrap-in-Docker, MCP session ↔ sandbox lifecycle) before any subsystem gets deep. Subsequent plans (egress proxy, vault/manifests, registry CI, auth/multi-user, dashboard) build on these seams.
 
-**Tech Stack:** Go (module `github.com/gigemcp/gigemcp`), `github.com/modelcontextprotocol/go-sdk` **v1.6.1** (API signatures below were verified against this version), `modernc.org/sqlite` (pure Go — keeps CGO_ENABLED=0 static builds), bubblewrap, Docker.
+**Tech Stack:** Go (module `github.com/gigmcp/gigmcp`), `github.com/modelcontextprotocol/go-sdk` **v1.6.1** (API signatures below were verified against this version), `modernc.org/sqlite` (pure Go — keeps CGO_ENABLED=0 static builds), bubblewrap, Docker.
 
 **Critical environment fact:** bwrap, namespaces, and Landlock do not exist on macOS. The dev machine is a Mac, so **all sandbox-touching tests run inside a Linux container** (`make test`). Sandbox tests skip themselves on macOS via `sandbox.Available()`. Pure-logic tests run anywhere (`make test-local`).
 
@@ -29,7 +29,7 @@
 ## File Structure
 
 ```
-gigemcp/
+gigmcp/
 ├── DESIGN.md                      # exists — commit as-is
 ├── LICENSE                        # AGPL-3.0 (Task 1)
 ├── README.md                      # quickstart (Task 10)
@@ -73,9 +73,9 @@ Responsibilities: `echo` knows nothing about sandboxing; `sandbox` knows nothing
 - [ ] **Step 1: Init repo and Go module**
 
 ```bash
-cd /Users/julianbeaulieu/Code/gigemcp
+cd /Users/julianbeaulieu/Code/gigmcp
 git init -b main
-go mod init github.com/gigemcp/gigemcp
+go mod init github.com/gigmcp/gigmcp
 ```
 
 - [ ] **Step 2: Create `.gitignore`**
@@ -129,7 +129,7 @@ WORKDIR /src
 - [ ] **Step 2: Create `Makefile`**
 
 ```makefile
-DEV_IMAGE := gigemcp-dev
+DEV_IMAGE := gigmcp-dev
 
 .PHONY: dev-image test test-local
 
@@ -144,8 +144,8 @@ test: dev-image
 		--security-opt seccomp=unconfined \
 		--security-opt apparmor=unconfined \
 		-v $(PWD):/src -w /src \
-		-v gigemcp-gomod:/go/pkg/mod \
-		-v gigemcp-gocache:/root/.cache/go-build \
+		-v gigmcp-gomod:/go/pkg/mod \
+		-v gigmcp-gocache:/root/.cache/go-build \
 		$(DEV_IMAGE) go test ./...
 
 # Host-side subset — sandbox tests self-skip on macOS.
@@ -185,7 +185,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/echo"
+	"github.com/gigmcp/gigmcp/internal/echo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -233,7 +233,7 @@ func TestEchoTool(t *testing.T) {
 go test ./internal/echo/
 ```
 
-Expected: FAIL — `no required module provides package github.com/gigemcp/gigemcp/internal/echo` / undefined `echo.NewServer`.
+Expected: FAIL — `no required module provides package github.com/gigmcp/gigmcp/internal/echo` / undefined `echo.NewServer`.
 
 - [ ] **Step 3: Write the implementation** — `internal/echo/echo.go`
 
@@ -285,7 +285,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/gigemcp/gigemcp/internal/echo"
+	"github.com/gigmcp/gigmcp/internal/echo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -330,7 +330,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 func requireSandbox(t *testing.T) {
@@ -390,12 +390,12 @@ func TestHostFilesHidden(t *testing.T) {
 
 func TestEnvCleared(t *testing.T) {
 	requireSandbox(t)
-	t.Setenv("GIGE_SECRET_CANARY", "leak")
+	t.Setenv("GIG_SECRET_CANARY", "leak")
 	out, err := runShell(t, "env")
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if strings.Contains(out, "GIGE_SECRET_CANARY") {
+	if strings.Contains(out, "GIG_SECRET_CANARY") {
 		t.Errorf("host environment leaked into sandbox:\n%s", out)
 	}
 }
@@ -523,7 +523,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/store"
 )
 
 func TestEnsureAndListServers(t *testing.T) {
@@ -703,7 +703,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/gateway"
 )
 
 func TestRequireBearer(t *testing.T) {
@@ -806,8 +806,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/echo"
-	"github.com/gigemcp/gigemcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/echo"
+	"github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -823,7 +823,7 @@ func connectEchoBackend(t *testing.T, ctx context.Context) *mcp.ClientSession {
 	}
 	t.Cleanup(func() { serverSess.Close() })
 
-	c := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: "test"}, nil)
+	c := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: "test"}, nil)
 	sess, err := c.Connect(ctx, clientTr, nil)
 	if err != nil {
 		t.Fatalf("backend client connect: %v", err)
@@ -908,7 +908,7 @@ type Backend struct {
 
 // New builds the aggregating MCP server over the given backends.
 func New(ctx context.Context, version string, backends []Backend) (*mcp.Server, error) {
-	gw := mcp.NewServer(&mcp.Implementation{Name: "gigemcp", Version: version}, nil)
+	gw := mcp.NewServer(&mcp.Implementation{Name: "gigmcp", Version: version}, nil)
 	for _, b := range backends {
 		sess := b.Session
 		tools, err := sess.ListTools(ctx, nil)
@@ -949,14 +949,14 @@ package config_test
 import (
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/config"
+	"github.com/gigmcp/gigmcp/internal/config"
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "tok")
-	t.Setenv("GIGE_ECHO_BIN", "/usr/local/bin/echo-mcp")
-	t.Setenv("GIGE_LISTEN", "")
-	t.Setenv("GIGE_DB_PATH", "")
+	t.Setenv("GIG_BEARER_TOKEN", "tok")
+	t.Setenv("GIG_ECHO_BIN", "/usr/local/bin/echo-mcp")
+	t.Setenv("GIG_LISTEN", "")
+	t.Setenv("GIG_DB_PATH", "")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -965,7 +965,7 @@ func TestFromEnv(t *testing.T) {
 	if cfg.Listen != ":8080" {
 		t.Errorf("Listen default: got %q", cfg.Listen)
 	}
-	if cfg.DBPath != "gigemcp.db" {
+	if cfg.DBPath != "gigmcp.db" {
 		t.Errorf("DBPath default: got %q", cfg.DBPath)
 	}
 	if cfg.BearerToken != "tok" || cfg.EchoBinary != "/usr/local/bin/echo-mcp" {
@@ -974,10 +974,10 @@ func TestFromEnv(t *testing.T) {
 }
 
 func TestFromEnvRequiresToken(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "")
-	t.Setenv("GIGE_ECHO_BIN", "/x")
+	t.Setenv("GIG_BEARER_TOKEN", "")
+	t.Setenv("GIG_ECHO_BIN", "/x")
 	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("expected error when GIGE_BEARER_TOKEN is empty")
+		t.Fatal("expected error when GIG_BEARER_TOKEN is empty")
 	}
 }
 ```
@@ -1005,25 +1005,25 @@ import (
 
 // Config is the gateway's runtime configuration.
 type Config struct {
-	Listen      string // GIGE_LISTEN, default ":8080"
-	BearerToken string // GIGE_BEARER_TOKEN, required
-	DBPath      string // GIGE_DB_PATH, default "gigemcp.db"
-	EchoBinary  string // GIGE_ECHO_BIN, required (skeleton's seeded backend)
+	Listen      string // GIG_LISTEN, default ":8080"
+	BearerToken string // GIG_BEARER_TOKEN, required
+	DBPath      string // GIG_DB_PATH, default "gigmcp.db"
+	EchoBinary  string // GIG_ECHO_BIN, required (skeleton's seeded backend)
 }
 
 // FromEnv loads Config from environment variables.
 func FromEnv() (Config, error) {
 	cfg := Config{
-		Listen:      envOr("GIGE_LISTEN", ":8080"),
-		BearerToken: os.Getenv("GIGE_BEARER_TOKEN"),
-		DBPath:      envOr("GIGE_DB_PATH", "gigemcp.db"),
-		EchoBinary:  os.Getenv("GIGE_ECHO_BIN"),
+		Listen:      envOr("GIG_LISTEN", ":8080"),
+		BearerToken: os.Getenv("GIG_BEARER_TOKEN"),
+		DBPath:      envOr("GIG_DB_PATH", "gigmcp.db"),
+		EchoBinary:  os.Getenv("GIG_ECHO_BIN"),
 	}
 	if cfg.BearerToken == "" {
-		return Config{}, errors.New("GIGE_BEARER_TOKEN must be set")
+		return Config{}, errors.New("GIG_BEARER_TOKEN must be set")
 	}
 	if cfg.EchoBinary == "" {
-		return Config{}, errors.New("GIGE_ECHO_BIN must be set")
+		return Config{}, errors.New("GIG_ECHO_BIN must be set")
 	}
 	return cfg, nil
 }
@@ -1061,7 +1061,7 @@ git commit -m "feat: tool aggregator with namespacing + env config"
 - [ ] **Step 1: Write main** — `cmd/gateway/main.go`
 
 ```go
-// Command gateway is the gigemcp walking skeleton: it seeds the echo server
+// Command gateway is the gigmcp walking skeleton: it seeds the echo server
 // in the store, spawns each stored server in a bubblewrap sandbox, and
 // serves an aggregated, bearer-authed streamable-HTTP MCP endpoint.
 package main
@@ -1072,10 +1072,10 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/gigemcp/gigemcp/internal/config"
-	"github.com/gigemcp/gigemcp/internal/gateway"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/config"
+	"github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -1093,7 +1093,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if !sandbox.Available() {
-		return fmt.Errorf("bwrap sandboxing unavailable: gigemcp requires Linux with bubblewrap installed")
+		return fmt.Errorf("bwrap sandboxing unavailable: gigmcp requires Linux with bubblewrap installed")
 	}
 
 	st, err := store.OpenSQLite(cfg.DBPath)
@@ -1119,7 +1119,7 @@ func run(ctx context.Context) error {
 			Exec:   "/app/server",
 			Mounts: []sandbox.Mount{{Src: srv.Binary, Dst: "/app/server"}},
 		})
-		client := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: version}, nil)
+		client := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: version}, nil)
 		sess, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 		if err != nil {
 			return fmt.Errorf("connect backend %q: %w", srv.Name, err)
@@ -1134,7 +1134,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gw }, nil)
-	log.Printf("gigemcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
+	log.Printf("gigmcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
 	return http.ListenAndServe(cfg.Listen, gateway.RequireBearer(cfg.BearerToken, handler))
 }
 ```
@@ -1176,8 +1176,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/gateway"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -1185,7 +1185,7 @@ import (
 func buildEchoBinary(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "echo-mcp")
-	cmd := exec.Command("go", "build", "-o", out, "github.com/gigemcp/gigemcp/cmd/echo-mcp")
+	cmd := exec.Command("go", "build", "-o", out, "github.com/gigmcp/gigmcp/cmd/echo-mcp")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build echo-mcp: %v\n%s", err, b)
@@ -1213,7 +1213,7 @@ func TestEndToEnd(t *testing.T) {
 		Exec:   "/app/server",
 		Mounts: []sandbox.Mount{{Src: bin, Dst: "/app/server"}},
 	})
-	backendClient := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: "e2e"}, nil)
+	backendClient := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: "e2e"}, nil)
 	backendSess, err := backendClient.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		t.Fatalf("connect sandboxed backend: %v", err)
@@ -1320,8 +1320,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/gateway /usr/local/bin/gateway
 COPY --from=build /out/echo-mcp /usr/local/bin/echo-mcp
-ENV GIGE_ECHO_BIN=/usr/local/bin/echo-mcp \
-    GIGE_DB_PATH=/data/gigemcp.db
+ENV GIG_ECHO_BIN=/usr/local/bin/echo-mcp \
+    GIG_DB_PATH=/data/gigmcp.db
 VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["gateway"]
@@ -1336,9 +1336,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      GIGE_BEARER_TOKEN: ${GIGE_BEARER_TOKEN:?set GIGE_BEARER_TOKEN in .env or the environment}
+      GIG_BEARER_TOKEN: ${GIG_BEARER_TOKEN:?set GIG_BEARER_TOKEN in .env or the environment}
     volumes:
-      - gigemcp-data:/data
+      - gigmcp-data:/data
     # bwrap needs unprivileged user namespaces, which Docker's default
     # seccomp/apparmor profiles block. A scoped allow-userns seccomp profile
     # replaces 'unconfined' in the hardening plan (DESIGN.md §5 item 7).
@@ -1347,13 +1347,13 @@ services:
       - apparmor=unconfined
 
 volumes:
-  gigemcp-data:
+  gigmcp-data:
 ```
 
 - [ ] **Step 3: Create `README.md`**
 
 ```markdown
-# gigemcp
+# gigmcp
 
 Open-source, security-first MCP gateway: run community MCP servers
 **sandboxed**, with credentials injected at the network boundary — one
@@ -1367,13 +1367,13 @@ for the full architecture and decision record. AGPL-3.0.
 ## Quickstart
 
 ```bash
-GIGE_BEARER_TOKEN=$(openssl rand -hex 24) docker compose up --build -d
+GIG_BEARER_TOKEN=$(openssl rand -hex 24) docker compose up --build -d
 ```
 
 Connect Claude Code:
 
 ```bash
-claude mcp add --transport http gigemcp http://localhost:8080 \
+claude mcp add --transport http gigmcp http://localhost:8080 \
   --header "Authorization: Bearer <your token>"
 ```
 
@@ -1391,11 +1391,11 @@ make test-local  # host-side subset (sandbox tests skip on macOS)
 - [ ] **Step 4: Build and boot the real stack**
 
 ```bash
-GIGE_BEARER_TOKEN=test-token-123 docker compose up --build -d
+GIG_BEARER_TOKEN=test-token-123 docker compose up --build -d
 sleep 2 && docker compose logs gateway
 ```
 
-Expected log lines: `backend "echo" running sandboxed (/usr/local/bin/echo-mcp)` and `gigemcp 0.1.0-skeleton listening on :8080 (1 backend(s))`.
+Expected log lines: `backend "echo" running sandboxed (/usr/local/bin/echo-mcp)` and `gigmcp 0.1.0-skeleton listening on :8080 (1 backend(s))`.
 
 - [ ] **Step 5: Smoke-test auth from the host**
 
@@ -1409,7 +1409,7 @@ Expected: `401` then a non-401 status (the MCP handler may answer 400/202 for a 
 - [ ] **Step 6: Manual verification with Claude Code** (requires user)
 
 ```bash
-claude mcp add --transport http gigemcp http://localhost:8080 --header "Authorization: Bearer test-token-123"
+claude mcp add --transport http gigmcp http://localhost:8080 --header "Authorization: Bearer test-token-123"
 ```
 
 In a Claude Code session: ask it to call `echo_echo` with message "hello from the sandbox". Expected reply contains `echo: hello from the sandbox`. Then clean up:

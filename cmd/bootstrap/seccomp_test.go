@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 // buildBootstrap compiles the bootstrap binary into dir and returns its path.
@@ -41,7 +41,7 @@ func TestSeccompBlocksUnshare(t *testing.T) {
 	binPath := buildBootstrap(t)
 
 	cmd := exec.Command(binPath)
-	cmd.Env = append(os.Environ(), "GIGE_SECCOMPTEST=block")
+	cmd.Env = append(os.Environ(), "GIG_SECCOMPTEST=block")
 	err := cmd.Run()
 	if err == nil {
 		t.Fatal("expected bootstrap to be killed, but it exited 0")
@@ -98,10 +98,10 @@ func TestSeccompAllowsNormalWork(t *testing.T) {
 	binPath := buildBootstrap(t)
 
 	cmd := exec.Command(binPath)
-	cmd.Env = append(os.Environ(), "GIGE_SECCOMPTEST=work")
+	cmd.Env = append(os.Environ(), "GIG_SECCOMPTEST=work")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected exit 0, got error: %v\noutput:\n%s", err, out)
 	}
-	t.Logf("PASS: bootstrap GIGE_SECCOMPTEST=work exited 0")
+	t.Logf("PASS: bootstrap GIG_SECCOMPTEST=work exited 0")
 }

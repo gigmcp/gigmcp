@@ -1,4 +1,4 @@
-# gigemcp
+# gigmcp
 
 Open-source, security-first MCP gateway: run community MCP servers
 **sandboxed**, with credentials injected at the
@@ -16,8 +16,8 @@ for the full architecture and decision record. AGPL-3.0.
 ## Quickstart
 
 ```bash
-GIGE_BEARER_TOKEN=$(openssl rand -hex 24) \
-GIGE_MASTER_KEY=$(openssl rand -hex 32) \
+GIG_BEARER_TOKEN=$(openssl rand -hex 24) \
+GIG_MASTER_KEY=$(openssl rand -hex 32) \
 docker compose up --build -d
 ```
 
@@ -25,15 +25,15 @@ docker compose up --build -d
 
 | Variable | Description |
 |---|---|
-| `GIGE_BEARER_TOKEN` | Bearer token for authenticating MCP clients |
-| `GIGE_MASTER_KEY` | 32-byte hex master key for the credential vault (`openssl rand -hex 32`) |
+| `GIG_BEARER_TOKEN` | Bearer token for authenticating MCP clients |
+| `GIG_MASTER_KEY` | 32-byte hex master key for the credential vault (`openssl rand -hex 32`) |
 
 **Optional:**
 
 | Variable | Description |
 |---|---|
-| `GIGE_DEMO_TOKEN` | Seeds a demo credential for the echo server on startup |
-| `GIGE_DEMO_ALLOW` | Comma-separated allowed hosts for the demo credential (default: `api.example.com`) |
+| `GIG_DEMO_TOKEN` | Seeds a demo credential for the echo server on startup |
+| `GIG_DEMO_ALLOW` | Comma-separated allowed hosts for the demo credential (default: `api.example.com`) |
 
 **Runtime requirements:** the gateway container needs `cap_add: NET_ADMIN` (already
 in `docker-compose.yml`). No `SYS_ADMIN` or privileged mode is needed — `NET_ADMIN`
@@ -48,7 +48,7 @@ placeholder for the vault-decrypted real key. The real key never enters the sand
 Connect Claude Code:
 
 ```bash
-claude mcp add --transport http gigemcp http://localhost:8080 \
+claude mcp add --transport http gigmcp http://localhost:8080 \
   --header "Authorization: Bearer <your token>"
 ```
 

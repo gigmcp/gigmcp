@@ -3,7 +3,7 @@ package proxy_test
 import (
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 func TestRegistryLookupByIP(t *testing.T) {

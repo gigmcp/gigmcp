@@ -18,7 +18,7 @@ type Backend struct {
 
 // New builds the aggregating MCP server over the given backends.
 func New(ctx context.Context, version string, backends []Backend) (*mcp.Server, error) {
-	gw := mcp.NewServer(&mcp.Implementation{Name: "gigemcp", Version: version}, nil)
+	gw := mcp.NewServer(&mcp.Implementation{Name: "gigmcp", Version: version}, nil)
 	for _, b := range backends {
 		sess := b.Session
 		tools, err := sess.ListTools(ctx, nil)

@@ -1,4 +1,4 @@
-module github.com/gigemcp/gigemcp
+module github.com/gigmcp/gigmcp
 
 go 1.26.2
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/echo"
-	"github.com/gigemcp/gigemcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/echo"
+	"github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -21,7 +21,7 @@ func connectEchoBackend(t *testing.T, ctx context.Context) *mcp.ClientSession {
 	}
 	t.Cleanup(func() { serverSess.Close() })
 
-	c := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: "test"}, nil)
+	c := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: "test"}, nil)
 	sess, err := c.Connect(ctx, clientTr, nil)
 	if err != nil {
 		t.Fatalf("backend client connect: %v", err)

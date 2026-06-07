@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gigemcp/gigemcp/internal/netmgr"
-	"github.com/gigemcp/gigemcp/internal/proxy"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -180,7 +180,7 @@ func SpawnEgressBackend(
 		Exec: "/app/server",
 		Mounts: []sandbox.Mount{
 			{Src: srv.Binary, Dst: "/app/server"},
-			{Src: caFile, Dst: "/etc/gigemcp-ca.pem"},
+			{Src: caFile, Dst: "/etc/gigmcp-ca.pem"},
 		},
 		Egress: &sandbox.Egress{
 			BootstrapPath: bootstrapPath,
@@ -195,9 +195,9 @@ func SpawnEgressBackend(
 			// None of these are secrets: proxy URL, CA path, placeholder.
 			Env: map[string]string{
 				"HTTPS_PROXY":         fmt.Sprintf("http://%s:%d", proxyIP, proxyPort),
-				"SSL_CERT_FILE":       "/etc/gigemcp-ca.pem",
-				"NODE_EXTRA_CA_CERTS": "/etc/gigemcp-ca.pem",
-				"GIGE_PLACEHOLDER":    "PLACEHOLDER",
+				"SSL_CERT_FILE":       "/etc/gigmcp-ca.pem",
+				"NODE_EXTRA_CA_CERTS": "/etc/gigmcp-ca.pem",
+				"GIG_PLACEHOLDER":     "PLACEHOLDER",
 			},
 		},
 	}
@@ -329,7 +329,7 @@ func SpawnEgressBackend(
 
 	// Step 5: connect the MCP session over the already-started process's stdio.
 	// The bootstrap has now exec'd the real server, which speaks MCP stdio.
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: "0.1.0"}, nil)
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: "0.1.0"}, nil)
 	sess, err := mcpClient.Connect(ctx, &mcp.IOTransport{Reader: stdout, Writer: stdin}, nil)
 	if err != nil {
 		netmgr.DeleteVeth(netlinkVeth)

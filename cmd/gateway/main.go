@@ -1,4 +1,4 @@
-// Command gateway is the gigemcp gateway: it seeds the echo server in the
+// Command gateway is the gigmcp gateway: it seeds the echo server in the
 // store, spawns each stored server in an egress-isolated bubblewrap sandbox
 // behind an embedded MITM proxy (vault-backed credential injection), and
 // serves an aggregated, bearer-authed streamable-HTTP MCP endpoint.
@@ -15,13 +15,13 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/gigemcp/gigemcp/internal/config"
-	gw "github.com/gigemcp/gigemcp/internal/gateway"
-	"github.com/gigemcp/gigemcp/internal/netmgr"
-	"github.com/gigemcp/gigemcp/internal/proxy"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
-	"github.com/gigemcp/gigemcp/internal/store"
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/config"
+	gw "github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/vault"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -39,7 +39,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if !sandbox.Available() {
-		return fmt.Errorf("bwrap sandboxing unavailable: gigemcp requires Linux with bubblewrap installed")
+		return fmt.Errorf("bwrap sandboxing unavailable: gigmcp requires Linux with bubblewrap installed")
 	}
 
 	// Belt-and-suspenders FORWARD-drop: ip_forward=1 is the default in the
@@ -49,16 +49,16 @@ func run(ctx context.Context) error {
 	// logged on failure but the gateway does NOT crash — route isolation remains.
 	applyForwardDrop()
 
-	// Build vault from GIGE_MASTER_KEY (hex-encoded 32 bytes).
+	// Build vault from GIG_MASTER_KEY (hex-encoded 32 bytes).
 	if cfg.MasterKey == "" {
-		return fmt.Errorf("GIGE_MASTER_KEY must be set (hex-encoded 32-byte master key)")
+		return fmt.Errorf("GIG_MASTER_KEY must be set (hex-encoded 32-byte master key)")
 	}
 	kek, err := hex.DecodeString(cfg.MasterKey)
 	if err != nil {
-		return fmt.Errorf("GIGE_MASTER_KEY must be hex-encoded: %w", err)
+		return fmt.Errorf("GIG_MASTER_KEY must be hex-encoded: %w", err)
 	}
 	if len(kek) != 32 {
-		return fmt.Errorf("GIGE_MASTER_KEY must decode to exactly 32 bytes, got %d", len(kek))
+		return fmt.Errorf("GIG_MASTER_KEY must decode to exactly 32 bytes, got %d", len(kek))
 	}
 	v, err := vault.New(kek)
 	if err != nil {
@@ -76,7 +76,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("seed echo server: %w", err)
 	}
 
-	// If GIGE_DEMO_TOKEN is set, seed a demo credential for the echo server.
+	// If GIG_DEMO_TOKEN is set, seed a demo credential for the echo server.
 	if cfg.DemoToken != "" {
 		if err := seedDemoCredential(ctx, st, v, cfg); err != nil {
 			return fmt.Errorf("seed demo credential: %w", err)
@@ -145,11 +145,11 @@ func run(ctx context.Context) error {
 		return err
 	}
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gwServer }, nil)
-	log.Printf("gigemcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
+	log.Printf("gigmcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
 	return http.ListenAndServe(cfg.Listen, gw.RequireBearer(cfg.BearerToken, handler))
 }
 
-// seedDemoCredential encrypts GIGE_DEMO_TOKEN and stores it for the echo server
+// seedDemoCredential encrypts GIG_DEMO_TOKEN and stores it for the echo server
 // so the stack works out-of-the-box without extra setup.
 func seedDemoCredential(ctx context.Context, st store.Store, v *vault.Vault, cfg config.Config) error {
 	encrypted, err := v.Encrypt([]byte(cfg.DemoToken))
@@ -202,7 +202,7 @@ func applyForwardDrop() {
 
 // writeTempCA writes PEM bytes to a temp file and returns its path.
 func writeTempCA(pem []byte) (string, error) {
-	f, err := os.CreateTemp("", "gigemcp-ca-*.pem")
+	f, err := os.CreateTemp("", "gigmcp-ca-*.pem")
 	if err != nil {
 		return "", err
 	}

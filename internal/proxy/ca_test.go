@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 func TestLeafChainsToCA(t *testing.T) {

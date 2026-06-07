@@ -1,4 +1,4 @@
-DEV_IMAGE := gigemcp-dev
+DEV_IMAGE := gigmcp-dev
 
 .PHONY: dev-image test test-local
 
@@ -17,8 +17,8 @@ test: dev-image
 		--security-opt systempaths=unconfined \
 		--cap-add NET_ADMIN \
 		-v $(PWD):/src -w /src \
-		-v gigemcp-gomod:/go/pkg/mod \
-		-v gigemcp-gocache:/root/.cache/go-build \
+		-v gigmcp-gomod:/go/pkg/mod \
+		-v gigmcp-gocache:/root/.cache/go-build \
 		$(DEV_IMAGE) go test ./...
 
 # Host-side subset — sandbox tests self-skip on macOS.

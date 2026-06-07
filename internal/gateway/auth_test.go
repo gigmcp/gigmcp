@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/gateway"
 )
 
 func TestRequireBearer(t *testing.T) {

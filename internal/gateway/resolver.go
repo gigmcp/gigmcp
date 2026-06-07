@@ -3,9 +3,9 @@ package gateway
 import (
 	"context"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
-	"github.com/gigemcp/gigemcp/internal/store"
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
 // CredResolver implements proxy.CredentialResolver over the store + vault.

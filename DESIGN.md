@@ -1,4 +1,4 @@
-# gigemcp — Design Decision Record
+# gigmcp — Design Decision Record
 
 > Open-source, security-first MCP gateway: a marketplace-backed runtime that runs
 > community MCP servers **sandboxed**, with **credential injection at the network
@@ -22,7 +22,7 @@ but is closed-source and does not run third-party code at all (see §6).
 - is fed by a curated, digest-pinned manifest registry (the future marketplace).
 
 **Key differentiator vs Composio:** Composio's security model is "we wrote all the
-connectors, trust us." gigemcp's model is "run *anyone's* server; the sandbox and
+connectors, trust us." gigmcp's model is "run *anyone's* server; the sandbox and
 proxy make trust unnecessary." Credentials can also stay entirely on user hardware
 (self-host), which Composio cannot offer.
 
@@ -39,14 +39,14 @@ proxy make trust unnecessary." Credentials can also stay entirely on user hardwa
 | 5 | Multi-tenancy granularity | Shared **code/image**, never shared **process**: one sandboxed instance per (server × user/profile), idle-reaped, spawned in milliseconds. |
 | 6 | Credential model | **Tier 1 "Sealed"** (default): placeholder token in sandbox env; embedded MITM egress proxy swaps in the real key per tenant. Key never enters the sandbox. **Tier 2 "Entrusted"**: real secret in sandbox env (DB strings, cert-pinned clients), egress allowlist still applies. **Tier 3 / local-resource servers: out of scope** (catalog targets SaaS APIs: Ubiquiti, Google, Slack, GitHub...). |
 | 7 | Entitlements manifests | Author-declared, PR-gated into a registry repo (owner approves), enforced as a hard cap by the proxy. Lint CI blocks wildcards/known exfil domains. Manifest changes on update ⇒ re-consent. |
-| 8 | Registry topology | GitHub org, two repos: `gigemcp` (gateway monorepo) + `gigemcp-registry` (manifests). CI compiles manifests → **signed `index.json`** artifact; runners consume the index, never the raw repo. |
+| 8 | Registry topology | GitHub org, two repos: `gigmcp` (gateway monorepo) + `gigmcp-registry` (manifests). CI compiles manifests → **signed `index.json`** artifact; runners consume the index, never the raw repo. |
 | 9 | Packaging | **OCI images**, built by registry CI from the author's tagged source, **pinned by digest** in the manifest. Runner pulls, verifies digest, extracts rootfs, runs entrypoint under bwrap. `npx`/`uvx` only as a clearly-marked untrusted self-host escape hatch (post-v1). |
 | 10 | Credential acquisition | v1: BYO keys + BYO OAuth apps (client id/secret via compose env / `*_FILE` Docker secrets), runner executes the OAuth flow, per-provider setup guides. Hosted managed OAuth broker later — manifest credential schema is source-agnostic so it bolts on. |
 | 11 | Client surface | One streamable-HTTP MCP endpoint per **profile** (`/mcp/p/<profile>`), per-profile bearer tokens. Meta-tools mode (search/load tools) as per-profile opt-in flag. Manifests mark tools `default: true/false` so installs expose a curated subset (Composio-style). |
 | 12 | Gateway language | **Go.** Single static binary, scratch image. |
 | 13 | Egress proxy | **Embedded** in the gateway binary, **hand-rolled net/http CONNECT MITM** (spike found martian/goproxy unmaintained; stdlib is simpler and a cleaner hook for source-IP lookup + header rewrite). Runtime ECDSA P-256 CA, per-host leaf minting (mutex-cached), allowlist checked at CONNECT time *before* a leaf is minted, header rewrite via `bufio`+`http.ReadRequest`. Identity binding is network-level: each sandbox netns gets a unique veth/IP recorded at spawn; proxy resolves `source IP → (server, user, profile)` from the accepted conn's RemoteAddr — unforgeable because the netns can only source its own /30. Per-request audit log falls out of this lookup. CA injected via `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE`; `HTTPS_PROXY` set in the sandbox as convenience only — **route isolation is the actual enforcement** (env-only proxying is bypassable and was proven insufficient). |
 | 14 | Storage | Repository interface with **SQLite** (zero-config default) and **Postgres** drivers. Rule: no Postgres-only features in core. |
-| 15 | Vault encryption | Envelope encryption: per-secret DEKs, XChaCha20-Poly1305 (libsodium primitives via `golang.org/x/crypto`), wrapped by master KEK from `GIGE_MASTER_KEY` env / `_FILE` secret. Versioned key IDs in ciphertext header for rotation. KEK never in DB. |
+| 15 | Vault encryption | Envelope encryption: per-secret DEKs, XChaCha20-Poly1305 (libsodium primitives via `golang.org/x/crypto`), wrapped by master KEK from `GIG_MASTER_KEY` env / `_FILE` secret. Versioned key IDs in ciphertext header for rotation. KEK never in DB. |
 | 16 | License & protection | **Unmodified AGPL-3.0** (gateway/control plane). Name/logo protected by **trademark policy** (TRADEMARK.md; register later), not license edits. **DCO** for contributions; copyright kept concentrated to preserve dual-licensing of the hosted product. Apache-2.0 for manifest schema/SDKs when they exist. |
 | 17 | Frontend | **Next.js** dashboard as pure frontend (separate `web` container). Visual style: model after **Composio's dashboard UI**. Astro reserved for future marketing/docs/marketplace static site. |
 | 18 | Auth | Go gateway is the **sole auth authority**: local email+password + generic **OIDC client** (`coreos/go-oidc`) covering social login (Google/GitHub) and enterprise SSO (Okta/Entra/Authentik/Authelia) with one config block. Go issues httpOnly session after OIDC callback; Next.js forwards it. No Auth.js session ownership. |
@@ -79,7 +79,7 @@ proxy make trust unnecessary." Credentials can also stay entirely on user hardwa
                             │                          └────────────────┘  └────────────────┘        │
                             └────────────────────────────────────────────────────────────────────────┘
 
- gigemcp-registry repo ──CI──▶ lint manifests ▶ build OCI images ▶ sign index.json ──▶ runner pulls by digest
+ gigmcp-registry repo ──CI──▶ lint manifests ▶ build OCI images ▶ sign index.json ──▶ runner pulls by digest
 ```
 
 **Request flow (Tier 1):** client calls tool → gateway routes to the user's sandbox
@@ -153,7 +153,7 @@ source:
   repo: github.com/author/slack-mcp
   tag: v1.4.2
 image:
-  ref: ghcr.io/gigemcp/slack-mcp
+  ref: ghcr.io/gigmcp/slack-mcp
   digest: sha256:…            # what was approved is what runs
 tier: sealed                   # sealed | entrusted
 entitlements:
@@ -186,7 +186,7 @@ digest present, schema valid. Manifest diff on version bump ⇒ runner forces re
 2. Sandbox runtime: OCI pull → digest verify → rootfs extract → bwrap spawn; per (server×user×profile) instances; idle reaping
 3. Embedded egress proxy: IP identity binding, allowlists, Tier-1 injection, Tier-2 env injection, audit log
 4. Vault: envelope encryption; SQLite + Postgres backends
-5. `gigemcp-registry`: schema, lint CI, image build CI, signed `index.json`, ~8–10 launch manifests (Ubiquiti, Slack, GitHub, Google, …)
+5. `gigmcp-registry`: schema, lint CI, image build CI, signed `index.json`, ~8–10 launch manifests (Ubiquiti, Slack, GitHub, Google, …)
 6. Auth & multi-user: OIDC + local login, admin/user roles, user management, invitations, config-only impersonation
 7. Next.js dashboard: servers, profiles, credentials (incl. BYO OAuth flow), users/admin, audit log — ruthlessly minimal
 8. BYO OAuth: provider client id/secret via compose env / Docker secrets; per-provider setup guides
@@ -211,7 +211,7 @@ it, injecting the user's OAuth token from their managed store. Isolation is logi
 physical — defensible only because no untrusted code executes; also why it's cheap.
 Their MCP product is C-shaped (dashboard-configured tool subsets per endpoint); their
 Rube product is D-shaped (universal meta-tool router). Their moat is ~300 verified OAuth
-apps — bureaucracy, not code. gigemcp's answers: sandbox makes untrusted code safe
+apps — bureaucracy, not code. gigmcp's answers: sandbox makes untrusted code safe
 (breadth they can't match), BYO-then-broker neutralizes the OAuth moat over time,
 AGPL + self-host neutralizes the trust objection.
 
@@ -230,11 +230,11 @@ before deepening any subsystem:
    real API (GitHub PAT is the easiest first target).
 3. **Vault & manifests:** envelope encryption; manifest schema; runner consumes a local
    `index.json`.
-4. **Registry pipeline:** `gigemcp-registry` CI — lint, image build, sign, publish index.
+4. **Registry pipeline:** `gigmcp-registry` CI — lint, image build, sign, publish index.
 5. **Auth & multi-user:** OIDC, sessions, roles, REST API.
 6. **Dashboard:** Next.js against the API.
 7. **Hardening pass:** Tier-2, OAuth BYO flow, impersonation-B, audit UI, idle reaping,
    seccomp profile docs, threat-model doc.
 
-Repo layout: monorepo `gigemcp/` → `cmd/gateway/`, `internal/{mcp,sandbox,proxy,vault,auth,store,registry}/`,
+Repo layout: monorepo `gigmcp/` → `cmd/gateway/`, `internal/{mcp,sandbox,proxy,vault,auth,store,registry}/`,
 `web/` (Next.js), `deploy/` (compose, seccomp profile), `docs/`.

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/store"
 )
 
 func TestEnsureAndListServers(t *testing.T) {

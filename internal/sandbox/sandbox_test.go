@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 func requireSandbox(t *testing.T) {
@@ -58,7 +58,7 @@ func TestHostFilesHidden(t *testing.T) {
 	// Canary in the current working directory (e.g. /src in the dev
 	// container), which is NOT bind-mounted into the sandbox — and NOT
 	// under /tmp, so the --tmpfs mask is not what hides it.
-	secret, err := os.CreateTemp(".", "gige-canary-*.txt")
+	secret, err := os.CreateTemp(".", "gig-canary-*.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,12 +83,12 @@ func TestHostFilesHidden(t *testing.T) {
 
 func TestEnvCleared(t *testing.T) {
 	requireSandbox(t)
-	t.Setenv("GIGE_SECRET_CANARY", "leak")
+	t.Setenv("GIG_SECRET_CANARY", "leak")
 	out, err := runShell(t, "env")
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if strings.Contains(out, "GIGE_SECRET_CANARY") {
+	if strings.Contains(out, "GIG_SECRET_CANARY") {
 		t.Errorf("host environment leaked into sandbox:\n%s", out)
 	}
 }
@@ -152,8 +152,8 @@ func TestEgressCommandArgv(t *testing.T) {
 			PeerVeth:      "vs0",
 			InfoFD:        5,
 			Env: map[string]string{
-				"HTTPS_PROXY":      "http://10.88.0.1:8081",
-				"GIGE_PLACEHOLDER": "PLACEHOLDER",
+				"HTTPS_PROXY":     "http://10.88.0.1:8081",
+				"GIG_PLACEHOLDER": "PLACEHOLDER",
 			},
 		},
 	}
@@ -214,8 +214,8 @@ func TestEgressCommandArgv(t *testing.T) {
 	if !hasTriple(args, "--setenv", "HTTPS_PROXY", "http://10.88.0.1:8081") {
 		t.Error("egress mode missing --setenv HTTPS_PROXY http://10.88.0.1:8081")
 	}
-	if !hasTriple(args, "--setenv", "GIGE_PLACEHOLDER", "PLACEHOLDER") {
-		t.Error("egress mode missing --setenv GIGE_PLACEHOLDER PLACEHOLDER")
+	if !hasTriple(args, "--setenv", "GIG_PLACEHOLDER", "PLACEHOLDER") {
+		t.Error("egress mode missing --setenv GIG_PLACEHOLDER PLACEHOLDER")
 	}
 }
 

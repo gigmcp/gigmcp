@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/gateway"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,7 +19,7 @@ import (
 func buildEchoBinary(t *testing.T) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "echo-mcp")
-	cmd := exec.Command("go", "build", "-o", out, "github.com/gigemcp/gigemcp/cmd/echo-mcp")
+	cmd := exec.Command("go", "build", "-o", out, "github.com/gigmcp/gigmcp/cmd/echo-mcp")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build echo-mcp: %v\n%s", err, b)
@@ -47,7 +47,7 @@ func TestEndToEnd(t *testing.T) {
 		Exec:   "/app/server",
 		Mounts: []sandbox.Mount{{Src: bin, Dst: "/app/server"}},
 	})
-	backendClient := mcp.NewClient(&mcp.Implementation{Name: "gigemcp-gw", Version: "e2e"}, nil)
+	backendClient := mcp.NewClient(&mcp.Implementation{Name: "gigmcp-gw", Version: "e2e"}, nil)
 	backendSess, err := backendClient.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	if err != nil {
 		t.Fatalf("connect sandboxed backend: %v", err)

@@ -44,7 +44,7 @@ func NewCA() (*CA, error) {
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          sn,
-		Subject:               pkix.Name{CommonName: "gigemcp egress CA"},
+		Subject:               pkix.Name{CommonName: "gigmcp egress CA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		IsCA:                  true,

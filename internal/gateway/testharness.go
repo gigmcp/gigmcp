@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/netmgr"
-	"github.com/gigemcp/gigemcp/internal/proxy"
-	"github.com/gigemcp/gigemcp/internal/store"
-	"github.com/gigemcp/gigemcp/internal/vault"
+	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/vault"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

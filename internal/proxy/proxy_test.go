@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/proxy"
 )
 
 // fakeResolver returns a fixed credential for any identity.

@@ -1,7 +1,7 @@
 # Handoff — Manifest / Registry Workstream
 
 > Audience: the engineer/agent building the **manifest + registry + OCI-installer**
-> workstream of gigemcp, working **in parallel** with a second agent building the
+> workstream of gigmcp, working **in parallel** with a second agent building the
 > **frontend / control-plane** workstream (auth, users, profiles, sessions, REST
 > API, Next.js dashboard).
 >
@@ -30,7 +30,7 @@
 
 ## 1. Mission + fit in the product
 
-gigemcp is an AGPL, security-first MCP gateway: it runs *untrusted, community* MCP
+gigmcp is an AGPL, security-first MCP gateway: it runs *untrusted, community* MCP
 servers inside kernel-enforced sandboxes (bwrap: user/pid/net/mount namespaces +
 seccomp + cap-drop) and injects credentials at an egress MITM proxy so a
 compromised tool never sees the raw key. It is the open, self-hostable answer to
@@ -38,7 +38,7 @@ Composio: "run anyone's server; the sandbox + proxy make trust unnecessary."
 
 Today the gateway runs **one hardcoded server** (an `echo` binary already baked
 into the image). That is the walking skeleton. **Your workstream is what turns
-gigemcp into a real product**: a curated, signed *registry* of community servers,
+gigmcp into a real product**: a curated, signed *registry* of community servers,
 packaged as digest-pinned OCI images, with author-declared *entitlement manifests*
 (egress allowlist, credential schema, tool subset, security tier) that the gateway
 *installs*, *verifies*, and *enforces*. You replace "hardcoded echo binary" with
@@ -47,10 +47,10 @@ extract, run sandboxed, enforce its manifest."
 
 You span **two repos**:
 
-1. **`gigemcp-registry`** (a *new, separate* GitHub repo — DESIGN #8): the manifest
+1. **`gigmcp-registry`** (a *new, separate* GitHub repo — DESIGN #8): the manifest
    format, example/launch manifests, lint CI, OCI image-build CI, and a signing
    step that publishes a **signed `index.json`** artifact.
-2. **`gigemcp`** (this repo): the gateway-side **runner/installer** that consumes
+2. **`gigmcp`** (this repo): the gateway-side **runner/installer** that consumes
    the signed `index.json`, pulls + verifies images by digest, extracts them, and
    records the server + manifest in the store; plus the refactor that makes egress
    allowlist + credential-injection schema come from the **manifest** instead of
@@ -72,7 +72,7 @@ Verified current facts:
 
 - **Servers are seeded by hand.** `cmd/gateway/main.go` `run()` (lines ~74-77)
   calls `st.EnsureServer(ctx, "echo", cfg.EchoBinary)` — the `echo` server's
-  binary path comes from the `GIGE_ECHO_BIN` env var (`internal/config/config.go`,
+  binary path comes from the `GIG_ECHO_BIN` env var (`internal/config/config.go`,
   `EchoBinary`, *required*). Tests additionally use a `fetch` server
   (`cmd/fetch-mcp`) the same way. **This seeding is exactly what registry-driven
   install replaces.**
@@ -112,7 +112,7 @@ Verified current facts:
   - **mounts the server binary as a single read-only bind: `{Src: srv.Binary,
     Dst: "/app/server"}`** and runs `Exec: "/app/server"`,
   - sets non-secret sandbox env (`HTTPS_PROXY`, `SSL_CERT_FILE`,
-    `NODE_EXTRA_CA_CERTS`, `GIGE_PLACEHOLDER`),
+    `NODE_EXTRA_CA_CERTS`, `GIG_PLACEHOLDER`),
   - registers `sourceIP → proxy.Identity{Server: srv.Name, Tenant: "default"}` in
     the proxy registry, then connects the MCP stdio session.
   **It consumes a `store.Server` with a `Binary` path and builds the `Egress`
@@ -132,7 +132,7 @@ Verified current facts:
   that's yours (seam/area §4.4). Note the known follow-up in DESIGN §5: tool-
   namespace collision handling + rejecting backend names containing `_` once
   multiple backends exist — relevant the moment registry installs >1 server.
-- **Config** (`internal/config/config.go`) is env-only; `GIGE_ECHO_BIN` is
+- **Config** (`internal/config/config.go`) is env-only; `GIG_ECHO_BIN` is
   currently *required* — registry-driven install should remove that hard
   requirement (coordinate; it's a startup-path edit, see §6.D).
 - **Stable, done, tested, do-not-touch:** `internal/{sandbox,netmgr,proxy,vault,
@@ -149,8 +149,8 @@ Read `DESIGN.md` in full; these are the ones that govern your workstream.
 - **#7 Entitlements manifests.** Author-declared, **PR-gated** into the registry
   repo (owner approves), **enforced as a hard cap by the proxy**. **Lint CI blocks
   wildcards / known exfil domains.** **Manifest changes on update ⇒ re-consent.**
-- **#8 Registry topology.** GitHub org, **two repos**: `gigemcp` (gateway monorepo)
-  + `gigemcp-registry` (manifests). CI **compiles manifests → a *signed*
+- **#8 Registry topology.** GitHub org, **two repos**: `gigmcp` (gateway monorepo)
+  + `gigmcp-registry` (manifests). CI **compiles manifests → a *signed*
   `index.json`** artifact; **runners consume the index, never the raw repo**.
 - **#9 Packaging.** **OCI images**, built by registry CI from the author's tagged
   source, **pinned by digest** in the manifest. **Runner pulls, verifies digest,
@@ -175,7 +175,7 @@ source:
   repo: github.com/author/slack-mcp
   tag: v1.4.2
 image:
-  ref: ghcr.io/gigemcp/slack-mcp
+  ref: ghcr.io/gigmcp/slack-mcp
   digest: sha256:…            # what was approved is what runs
 tier: sealed                   # sealed | entrusted
 entitlements:
@@ -220,7 +220,7 @@ forces re-consent.
 
 ## 4. What you OWN (5 areas → concrete deliverables)
 
-### 4.1 The `gigemcp-registry` repo (new, separate GitHub repo)
+### 4.1 The `gigmcp-registry` repo (new, separate GitHub repo)
 
 - **Manifest format**: a documented YAML schema (refine §4 above). Ship a
   machine-checkable schema (JSON Schema or a Go struct + validator in a shared,
@@ -238,7 +238,7 @@ forces re-consent.
   image digest**, and **require schema validity**. CI must **fail the PR** on any
   violation. Maintain the exfil denylist as a checked-in, reviewable file.
 - **Image-build pipeline**: build an **OCI image from the author's tagged source**
-  (DESIGN #9), push to a registry (likely `ghcr.io/gigemcp/<name>`), and **capture
+  (DESIGN #9), push to a registry (likely `ghcr.io/gigmcp/<name>`), and **capture
   the resulting digest** — the digest the manifest pins is the digest CI produced
   ("what was approved is what runs").
 - **Signing step → signed `index.json`**: compile all approved manifests into a
@@ -252,7 +252,7 @@ forces re-consent.
 
 **Repo layout (proposed):**
 ```
-gigemcp-registry/
+gigmcp-registry/
 ├── manifests/<name>/<version>.yaml     # one file per server version
 ├── schema/                             # JSON Schema and/or vendored Go validator
 ├── denylist/exfil-domains.txt          # checked-in, reviewed
@@ -402,7 +402,7 @@ type Installer interface {
 - **You replace** the hardcoded `EnsureServer("echo", cfg.EchoBinary)` + demo
   credential seeding with **registry-driven install** (install-on-startup from a
   configured set, and/or install-on-demand via the `Installer` the API calls).
-  Also relax the `GIGE_ECHO_BIN`-required check in `internal/config` (coordinate).
+  Also relax the `GIG_ECHO_BIN`-required check in `internal/config` (coordinate).
 - **Frontend also extends `run()`** (mounting the REST API server + auth).
 - **Protocol:** keep your additions in **separate helper functions** (e.g.
   `installFromIndex(...)`, `spawnInstalled(...)`) called from `run()`, mirroring the
@@ -492,7 +492,7 @@ CI → gateway `internal/oci` + `internal/registry` + `Installer` → store
 
 ## 8. How to build / test
 
-- **Gateway (this repo):** Go module `github.com/gigemcp/gigemcp`, Go 1.26.
+- **Gateway (this repo):** Go module `github.com/gigmcp/gigmcp`, Go 1.26.
   - `make test` — full suite incl. sandbox/egress/vault tests, in a Linux container
     with `--cap-add NET_ADMIN` + relaxed seccomp/apparmor/systempaths (bwrap needs
     unprivileged userns; see Makefile + DESIGN §3). **Your OCI/registry/installer
@@ -503,7 +503,7 @@ CI → gateway `internal/oci` + `internal/registry` + `Installer` → store
     spawn/sandbox integration must run in the container via `make test`.
   - Keep `CGO_ENABLED=0` (modernc sqlite + scratch image). **Your OCI library choice
     must not break static builds** — verify in Spike A.
-- **`gigemcp-registry` (separate repo):** its **CI is its own** (GitHub Actions:
+- **`gigmcp-registry` (separate repo):** its **CI is its own** (GitHub Actions:
   lint, image-build, sign+publish index). The **runner-side** consumption of the
   index is tested in *this* repo (`internal/registry` against a fixture
   `index.json` + signature). Use a **fixture signed index + tiny fixture OCI image**
@@ -524,7 +524,7 @@ CI → gateway `internal/oci` + `internal/registry` + `Installer` → store
   §6.E single-binary vs rootfs).
 - `internal/gateway/gateway.go` — aggregator `New` (add default-subset filter).
 - `cmd/gateway/main.go` — `run()` (replace seeding; §6.D).
-- `internal/config/config.go` — relax `GIGE_ECHO_BIN`; add registry/index config.
+- `internal/config/config.go` — relax `GIG_ECHO_BIN`; add registry/index config.
 - `internal/sandbox/sandbox.go` — **read-only** unless the rootfs extension (§6.E)
   is agreed.
 - New: `internal/oci/`, `internal/registry/`.

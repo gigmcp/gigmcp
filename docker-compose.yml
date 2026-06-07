@@ -4,17 +4,17 @@ services:
     ports:
       - "8080:8080"
     environment:
-      GIGE_BEARER_TOKEN: ${GIGE_BEARER_TOKEN:?set GIGE_BEARER_TOKEN in .env or the environment}
-      # GIGE_MASTER_KEY: hex-encoded 32-byte master KEK for the credential vault.
+      GIG_BEARER_TOKEN: ${GIG_BEARER_TOKEN:?set GIG_BEARER_TOKEN in .env or the environment}
+      # GIG_MASTER_KEY: hex-encoded 32-byte master KEK for the credential vault.
       # Generate with: openssl rand -hex 32
       # Required — the gateway will refuse to start without it.
-      GIGE_MASTER_KEY: ${GIGE_MASTER_KEY:?set GIGE_MASTER_KEY (openssl rand -hex 32)}
+      GIG_MASTER_KEY: ${GIG_MASTER_KEY:?set GIG_MASTER_KEY (openssl rand -hex 32)}
       # Optional: seed a demo credential for the echo server on startup.
-      # GIGE_DEMO_TOKEN and GIGE_DEMO_ALLOW are pass-through; unset = no demo cred.
-      GIGE_DEMO_TOKEN: ${GIGE_DEMO_TOKEN:-}
-      GIGE_DEMO_ALLOW: ${GIGE_DEMO_ALLOW:-}
+      # GIG_DEMO_TOKEN and GIG_DEMO_ALLOW are pass-through; unset = no demo cred.
+      GIG_DEMO_TOKEN: ${GIG_DEMO_TOKEN:-}
+      GIG_DEMO_ALLOW: ${GIG_DEMO_ALLOW:-}
     volumes:
-      - gigemcp-data:/data
+      - gigmcp-data:/data
     # NET_ADMIN is required: the egress proxy creates a veth pair per sandbox and
     # moves the peer end into the bwrap child's network namespace (LinkSetNsPid).
     # No SYS_ADMIN or privileged mode is needed — NET_ADMIN is sufficient.
@@ -37,4 +37,4 @@ services:
       - systempaths=unconfined
 
 volumes:
-  gigemcp-data:
+  gigmcp-data:

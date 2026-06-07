@@ -21,11 +21,11 @@ RUN apt-get update \
 COPY --from=build /out/gateway /usr/local/bin/gateway
 COPY --from=build /out/echo-mcp /usr/local/bin/echo-mcp
 # bootstrap is the trusted in-sandbox init binary; it is bind-mounted into each
-# egress sandbox at GIGE_BOOTSTRAP_PATH (default /usr/local/bin/bootstrap).
+# egress sandbox at GIG_BOOTSTRAP_PATH (default /usr/local/bin/bootstrap).
 COPY --from=build /out/bootstrap /usr/local/bin/bootstrap
-ENV GIGE_ECHO_BIN=/usr/local/bin/echo-mcp \
-    GIGE_DB_PATH=/data/gigemcp.db \
-    GIGE_BOOTSTRAP_PATH=/usr/local/bin/bootstrap
+ENV GIG_ECHO_BIN=/usr/local/bin/echo-mcp \
+    GIG_DB_PATH=/data/gigmcp.db \
+    GIG_BOOTSTRAP_PATH=/usr/local/bin/bootstrap
 VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["gateway"]

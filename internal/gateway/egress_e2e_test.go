@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/gateway"
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/gateway"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 // buildBin compiles a Go package as a CGO_ENABLED=0 static binary and returns
@@ -22,7 +22,7 @@ import (
 func buildBin(t *testing.T, pkg string) string {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), filepath.Base(pkg))
-	c := exec.Command("go", "build", "-o", out, "github.com/gigemcp/gigemcp/"+pkg)
+	c := exec.Command("go", "build", "-o", out, "github.com/gigmcp/gigmcp/"+pkg)
 	c.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if b, err := c.CombinedOutput(); err != nil {
 		t.Fatalf("build %s: %v\n%s", pkg, err, b)
@@ -90,13 +90,13 @@ func TestEgressEndToEnd(t *testing.T) {
 	//
 	// Behavioral proof (already demonstrated above): the upstream received
 	// "Bearer REALKEY" while the sandbox only ever knew "PLACEHOLDER"
-	// (GIGE_PLACEHOLDER=PLACEHOLDER is the only env var referencing the credential;
+	// (GIG_PLACEHOLDER=PLACEHOLDER is the only env var referencing the credential;
 	// REALKEY lives exclusively in the vault and is injected by the proxy
 	// after leaving the sandbox boundary).
 	//
 	// Structural proof: SpawnEgressBackend uses bwrap --clearenv + explicit
 	// --setenv flags (from sandbox.commandEgress). The only credential-related
-	// env var passed into the sandbox is GIGE_PLACEHOLDER=PLACEHOLDER.
+	// env var passed into the sandbox is GIG_PLACEHOLDER=PLACEHOLDER.
 	// REALKEY is never in bwrap's argv or environment — it only exists in the
 	// gateway process's memory (in the vault, decrypted on-demand by the proxy).
 	//
@@ -112,7 +112,7 @@ func TestEgressEndToEnd(t *testing.T) {
 // assertKeyNotInSandboxEnv reads the real /proc/<ChildPID>/environ of the live
 // sandbox child process and enforces the key-isolation guarantee:
 //   - REALKEY must NOT appear anywhere in the child's environment.
-//   - GIGE_PLACEHOLDER=PLACEHOLDER must be present.
+//   - GIG_PLACEHOLDER=PLACEHOLDER must be present.
 //
 // The test runs as container root, so it can read /proc/<pid>/environ for any
 // process. The backend must still be alive at assertion time (before Close()).
@@ -148,12 +148,12 @@ func assertKeyNotInSandboxEnv(t *testing.T, gw *gateway.EgressTestGateway) {
 
 	foundPlaceholder := false
 	for _, e := range entries {
-		if e == "GIGE_PLACEHOLDER=PLACEHOLDER" {
+		if e == "GIG_PLACEHOLDER=PLACEHOLDER" {
 			foundPlaceholder = true
 			break
 		}
 	}
 	if !foundPlaceholder {
-		t.Errorf("GIGE_PLACEHOLDER=PLACEHOLDER not found in sandbox /proc environ — bwrap --setenv may not have worked")
+		t.Errorf("GIG_PLACEHOLDER=PLACEHOLDER not found in sandbox /proc environ — bwrap --setenv may not have worked")
 	}
 }

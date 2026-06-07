@@ -22,17 +22,17 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/gigemcp/gigemcp/internal/seccomp"
+	"github.com/gigmcp/gigmcp/internal/seccomp"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
 func main() {
 	// Hidden self-exec mode for the cap-drop unit test (see cmd/bootstrap/capdrop_test.go).
-	// Triggered only when GIGE_CAPTEST=1; normal operation is unaffected.
+	// Triggered only when GIG_CAPTEST=1; normal operation is unaffected.
 	// Mirrors the real sequence: dropAllCaps (bset drop, needs uid=0+CAP_SETPCAP)
 	// → dropPrivs (setgroups/setgid/setuid→65534) → capsZero → exec.
-	if os.Getenv("GIGE_CAPTEST") == "1" {
+	if os.Getenv("GIG_CAPTEST") == "1" {
 		runtime.LockOSThread()
 		if err := dropAllCaps(); err != nil {
 			fmt.Fprintln(os.Stderr, "bootstrap captest: dropAllCaps:", err)
@@ -57,7 +57,7 @@ func main() {
 	//          killed by SIGSYS (signal 31 / exit 159).
 	// "work":  installs the filter, spawns 20 goroutines doing work + loopback TCP,
 	//          then exits 0 — proves the Go runtime survives the filter.
-	switch os.Getenv("GIGE_SECCOMPTEST") {
+	switch os.Getenv("GIG_SECCOMPTEST") {
 	case "block":
 		runtime.LockOSThread()
 		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
@@ -321,7 +321,7 @@ func lookPath(p string) (string, error) {
 	return "", fmt.Errorf("not found in PATH: %s", p)
 }
 
-// seccomptestWork is used by the GIGE_SECCOMPTEST=work mode. It spawns 20
+// seccomptestWork is used by the GIG_SECCOMPTEST=work mode. It spawns 20
 // goroutines (exercising the Go runtime's clone-based thread creation) and
 // has each goroutine attempt a loopback TCP dial, then waits for all of them.
 // If any goroutine encounters an unexpected error it prints to stderr and

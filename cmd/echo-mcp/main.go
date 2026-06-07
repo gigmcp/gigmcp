@@ -6,7 +6,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/gigemcp/gigemcp/internal/echo"
+	"github.com/gigmcp/gigmcp/internal/echo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

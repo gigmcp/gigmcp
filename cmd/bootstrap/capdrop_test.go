@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/sandbox"
+	"github.com/gigmcp/gigmcp/internal/sandbox"
 )
 
 // TestCapDropDeterministic builds the bootstrap binary, runs it 10 times with
-// GIGE_CAPTEST=1, and asserts that every iteration exits with all-zero caps
+// GIG_CAPTEST=1, and asserts that every iteration exits with all-zero caps
 // and NoNewPrivs=1.  This exercises the LockOSThread + [2]CapUserData fixes:
 // without them the test is either flaky (wrong thread) or leaves CapInh/CapBnd
 // non-zero.
@@ -50,7 +50,7 @@ func TestCapDropDeterministic(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		cmd := exec.Command(binPath)
-		cmd.Env = append(os.Environ(), "GIGE_CAPTEST=1")
+		cmd.Env = append(os.Environ(), "GIG_CAPTEST=1")
 		out, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("iteration %d: bootstrap exited with error: %v\nstdout:\n%s", i, err, out)

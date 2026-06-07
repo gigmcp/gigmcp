@@ -79,7 +79,7 @@ func commandNoNet(spec Spec) *exec.Cmd {
 		"--setenv", "PATH", "/usr/bin:/bin",
 		// --tmpfs /etc: consistency/future-proofing: gives the sandbox an empty
 		// /etc rather than none. Must precede caller mounts so that any bind
-		// into /etc (e.g. a CA cert at /etc/gigemcp-ca.pem) lands on a
+		// into /etc (e.g. a CA cert at /etc/gigmcp-ca.pem) lands on a
 		// world-accessible tmpfs (mode 0755) rather than a bwrap-created 0700
 		// directory (which would be inaccessible if a uid drop is later added).
 		"--tmpfs", "/etc",
@@ -136,7 +136,7 @@ func commandEgress(spec Spec) *exec.Cmd {
 		// bwrap creates 0700 directories for bind-mount parents; after dropPrivs() drops
 		// to uid 65534, /etc (if bwrap-created) is inaccessible. A tmpfs at /etc is
 		// created with mode 0755, so any bind mount overlaid on it (e.g. the CA cert
-		// at /etc/gigemcp-ca.pem) remains readable by the server process at uid 65534.
+		// at /etc/gigmcp-ca.pem) remains readable by the server process at uid 65534.
 		"--tmpfs", "/etc",
 	}
 

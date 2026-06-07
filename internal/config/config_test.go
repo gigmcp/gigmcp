@@ -3,14 +3,14 @@ package config_test
 import (
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/config"
+	"github.com/gigmcp/gigmcp/internal/config"
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "tok")
-	t.Setenv("GIGE_ECHO_BIN", "/usr/local/bin/echo-mcp")
-	t.Setenv("GIGE_LISTEN", "")
-	t.Setenv("GIGE_DB_PATH", "")
+	t.Setenv("GIG_BEARER_TOKEN", "tok")
+	t.Setenv("GIG_ECHO_BIN", "/usr/local/bin/echo-mcp")
+	t.Setenv("GIG_LISTEN", "")
+	t.Setenv("GIG_DB_PATH", "")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -19,7 +19,7 @@ func TestFromEnv(t *testing.T) {
 	if cfg.Listen != ":8080" {
 		t.Errorf("Listen default: got %q", cfg.Listen)
 	}
-	if cfg.DBPath != "gigemcp.db" {
+	if cfg.DBPath != "gigmcp.db" {
 		t.Errorf("DBPath default: got %q", cfg.DBPath)
 	}
 	if cfg.BearerToken != "tok" || cfg.EchoBinary != "/usr/local/bin/echo-mcp" {
@@ -28,29 +28,29 @@ func TestFromEnv(t *testing.T) {
 }
 
 func TestFromEnvRequiresToken(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "")
-	t.Setenv("GIGE_ECHO_BIN", "/x")
+	t.Setenv("GIG_BEARER_TOKEN", "")
+	t.Setenv("GIG_ECHO_BIN", "/x")
 	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("expected error when GIGE_BEARER_TOKEN is empty")
+		t.Fatal("expected error when GIG_BEARER_TOKEN is empty")
 	}
 }
 
 func TestFromEnvRequiresEchoBin(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "tok")
-	t.Setenv("GIGE_ECHO_BIN", "")
+	t.Setenv("GIG_BEARER_TOKEN", "tok")
+	t.Setenv("GIG_ECHO_BIN", "")
 	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("expected error when GIGE_ECHO_BIN is empty")
+		t.Fatal("expected error when GIG_ECHO_BIN is empty")
 	}
 }
 
 func TestFromEnvNewFields(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "tok")
-	t.Setenv("GIGE_ECHO_BIN", "/bin/echo-mcp")
-	t.Setenv("GIGE_MASTER_KEY", "abc123")
-	t.Setenv("GIGE_PROXY_PORT", "9090")
-	t.Setenv("GIGE_BOOTSTRAP_PATH", "/usr/local/bin/bootstrap")
-	t.Setenv("GIGE_DEMO_TOKEN", "demotoken")
-	t.Setenv("GIGE_DEMO_ALLOW", "api.example.com")
+	t.Setenv("GIG_BEARER_TOKEN", "tok")
+	t.Setenv("GIG_ECHO_BIN", "/bin/echo-mcp")
+	t.Setenv("GIG_MASTER_KEY", "abc123")
+	t.Setenv("GIG_PROXY_PORT", "9090")
+	t.Setenv("GIG_BOOTSTRAP_PATH", "/usr/local/bin/bootstrap")
+	t.Setenv("GIG_DEMO_TOKEN", "demotoken")
+	t.Setenv("GIG_DEMO_ALLOW", "api.example.com")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -74,10 +74,10 @@ func TestFromEnvNewFields(t *testing.T) {
 }
 
 func TestFromEnvProxyPortDefault(t *testing.T) {
-	t.Setenv("GIGE_BEARER_TOKEN", "tok")
-	t.Setenv("GIGE_ECHO_BIN", "/bin/echo-mcp")
-	t.Setenv("GIGE_PROXY_PORT", "")
-	t.Setenv("GIGE_BOOTSTRAP_PATH", "")
+	t.Setenv("GIG_BEARER_TOKEN", "tok")
+	t.Setenv("GIG_ECHO_BIN", "/bin/echo-mcp")
+	t.Setenv("GIG_PROXY_PORT", "")
+	t.Setenv("GIG_BOOTSTRAP_PATH", "")
 
 	cfg, err := config.FromEnv()
 	if err != nil {

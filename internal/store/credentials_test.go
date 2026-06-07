@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gigemcp/gigemcp/internal/store"
+	"github.com/gigmcp/gigmcp/internal/store"
 )
 
 func TestPutGetCredential(t *testing.T) {

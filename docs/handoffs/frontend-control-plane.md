@@ -1,6 +1,6 @@
 # Handoff: Frontend + Control-Plane Workstream
 
-> **Audience:** the engineer/agent building gigemcp's control plane (REST API, auth,
+> **Audience:** the engineer/agent building gigmcp's control plane (REST API, auth,
 > multi-user data model, profile-scoped MCP endpoints) and the Next.js dashboard.
 > You work **in parallel** with a separate agent building the **manifest/registry**
 > workstream. This doc is the contract that keeps you two from colliding.
@@ -26,7 +26,7 @@
 
 ## 1. Mission
 
-gigemcp is an AGPL, security-first MCP gateway: it runs untrusted community MCP
+gigmcp is an AGPL, security-first MCP gateway: it runs untrusted community MCP
 servers in kernel-enforced sandboxes and injects credentials at the network
 boundary so a compromised tool can never read your keys (the Composio
 alternative that can run *anyone's* server). The secure **runtime** already
@@ -49,7 +49,7 @@ it, watch the audit log" real.
   `internal/gateway/gateway.go` (`New`) connects to backends and re-exposes each
   backend tool as `<backend>_<tool>`. `cmd/gateway/main.go` `run()` is the wiring.
 - **Single static bearer token** auth: `internal/gateway/auth.go` `RequireBearer`
-  — one token from `GIGE_BEARER_TOKEN`, constant-time compared. This is the ONLY
+  — one token from `GIG_BEARER_TOKEN`, constant-time compared. This is the ONLY
   auth that exists today.
 - **SQLite store** (`internal/store`): `Store` interface in `store.go`, sqlite
   impl in `sqlite.go`, credentials in `credentials.go`. Pure-Go driver
@@ -95,7 +95,7 @@ to run egress (see Makefile + docker-compose.yml).
 - **#14 Storage:** repository interface, SQLite (zero-config default) + Postgres
   drivers; **no Postgres-only features in core**. Add tables additively.
 - **#15 Vault:** envelope encryption (XChaCha20-Poly1305, per-secret DEK wrapped
-  by a master KEK from `GIGE_MASTER_KEY`). Already built — you **consume**
+  by a master KEK from `GIG_MASTER_KEY`). Already built — you **consume**
   `internal/vault` for credential CRUD; you never touch its internals.
 - **#17 Frontend:** **Next.js** dashboard as a **pure frontend in a separate
   `web` container**, modeled visually on Composio's dashboard. Astro reserved for
@@ -197,7 +197,7 @@ service to `docker-compose.yml`.
   the sandbox currently mounts a single binary, but OCI images for Node/Python are
   full rootfses — a coordinated extension to `internal/sandbox` is needed (registry
   doc §6.E). Start with static-binary images to avoid touching sandbox initially.
-- The **manifest schema**, the `gigemcp-registry` repo, OCI image pulling, and the
+- The **manifest schema**, the `gigmcp-registry` repo, OCI image pulling, and the
   actual "install a server" implementation — **owned by the registry workstream.**
   Your server-install API endpoint **calls** their `Installer` interface; it does
   not implement install.
