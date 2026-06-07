@@ -22,5 +22,17 @@ type Store interface {
 	PutCredential(ctx context.Context, c Credential) error
 	// GetCredential fetches a credential by (server, tenant); returns error if not found.
 	GetCredential(ctx context.Context, server, tenant string) (Credential, error)
+	// PutManifest upserts a manifest record by server (consent preserved).
+	PutManifest(ctx context.Context, m ManifestRecord) error
+	// GetManifest fetches the manifest for a server; ErrManifestNotFound if none.
+	GetManifest(ctx context.Context, server string) (ManifestRecord, error)
+	// ListManifests returns all manifest records ordered by server.
+	ListManifests(ctx context.Context) ([]ManifestRecord, error)
+	// RecordConsent stores the manifest hash the user accepted for server.
+	RecordConsent(ctx context.Context, server, hash string) error
+	// DeleteManifest removes a server's manifest record.
+	DeleteManifest(ctx context.Context, server string) error
+	// DeleteServer removes a server row (registry uninstall).
+	DeleteServer(ctx context.Context, name string) error
 	Close() error
 }
