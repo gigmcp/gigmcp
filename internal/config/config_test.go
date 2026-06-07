@@ -35,11 +35,11 @@ func TestFromEnvRequiresToken(t *testing.T) {
 	}
 }
 
-func TestFromEnvRequiresEchoBin(t *testing.T) {
+func TestFromEnvEchoBinOptional(t *testing.T) {
 	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "")
-	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("expected error when GIG_ECHO_BIN is empty")
+	if _, err := config.FromEnv(); err != nil {
+		t.Fatalf("GIG_ECHO_BIN is now optional; got unexpected error: %v", err)
 	}
 }
 

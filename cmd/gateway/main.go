@@ -1,12 +1,15 @@
-// Command gateway is the gigmcp gateway: it seeds the echo server in the
-// store, spawns each stored server in an egress-isolated bubblewrap sandbox
-// behind an embedded MITM proxy (vault-backed credential injection), and
-// serves an aggregated, bearer-authed streamable-HTTP MCP endpoint.
+// Command gateway is the gigmcp gateway: it seeds the echo backend only if
+// GIG_ECHO_BIN is set (legacy/dev fallback), installs GIG_INSTALL refs from
+// the signed registry index, spawns each stored server in an egress-isolated
+// bubblewrap sandbox behind an embedded MITM proxy (vault-backed credential
+// injection), and serves an aggregated, bearer-authed streamable-HTTP MCP
+// endpoint.
 package main
 
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -18,7 +21,9 @@ import (
 	"github.com/gigmcp/gigmcp/internal/config"
 	gw "github.com/gigmcp/gigmcp/internal/gateway"
 	"github.com/gigmcp/gigmcp/internal/netmgr"
+	"github.com/gigmcp/gigmcp/internal/oci"
 	"github.com/gigmcp/gigmcp/internal/proxy"
+	"github.com/gigmcp/gigmcp/internal/registry"
 	"github.com/gigmcp/gigmcp/internal/sandbox"
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/gigmcp/gigmcp/internal/vault"
@@ -71,9 +76,16 @@ func run(ctx context.Context) error {
 	}
 	defer st.Close()
 
-	// Seed the echo backend.
-	if _, err := st.EnsureServer(ctx, "echo", cfg.EchoBinary); err != nil {
-		return fmt.Errorf("seed echo server: %w", err)
+	// Legacy dev fallback: seed the echo backend only if GIG_ECHO_BIN is set.
+	if cfg.EchoBinary != "" {
+		if _, err := st.EnsureServer(ctx, "echo", cfg.EchoBinary); err != nil {
+			return fmt.Errorf("seed echo server: %w", err)
+		}
+	}
+
+	// Registry-driven install of the configured boot set (GIG_INSTALL).
+	if err := installFromIndex(ctx, st, cfg); err != nil {
+		return err
 	}
 
 	// If GIG_DEMO_TOKEN is set, seed a demo credential for the echo server.
@@ -123,16 +135,9 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("list servers: %w", err)
 	}
 
-	var backends []gw.Backend
-	var cleanups []func()
-	for _, srv := range servers {
-		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "")
-		if err != nil {
-			return fmt.Errorf("spawn egress backend %q: %w", srv.Name, err)
-		}
-		cleanups = append(cleanups, eb.Cleanup)
-		backends = append(backends, gw.Backend{Name: srv.Name, Session: eb.Session})
-		log.Printf("backend %q running in egress sandbox (pid=%d)", srv.Name, eb.ChildPID)
+	backends, cleanups, err := spawnInstalled(ctx, st, servers, alloc, reg, cfg, caFile)
+	if err != nil {
+		return err
 	}
 	defer func() {
 		for _, c := range cleanups {
@@ -216,4 +221,85 @@ func writeTempCA(pem []byte) (string, error) {
 		return "", err
 	}
 	return f.Name(), nil
+}
+
+// installFromIndex installs each GIG_INSTALL ref from the signed registry
+// index (record-only; spawning happens in spawnInstalled). Boot installs are
+// operator-initiated, so consent is recorded at install time.
+func installFromIndex(ctx context.Context, st store.Store, cfg config.Config) error {
+	if cfg.Install == "" {
+		return nil
+	}
+	inst := &registry.IndexInstaller{
+		Store:       st,
+		Client:      &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey},
+		Puller:      &oci.Puller{},
+		DataDir:     cfg.DataDir,
+		AutoConsent: true,
+	}
+	for _, ref := range strings.Split(cfg.Install, ",") {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, err := inst.Install(ctx, ref); err != nil {
+			return fmt.Errorf("install %q: %w", ref, err)
+		}
+		log.Printf("installed %q from registry index", ref)
+	}
+	return nil
+}
+
+// spawnInstalled spawns every stored server, enforcing re-consent (fail
+// closed) and wiring the manifest's placeholder + default tool subset.
+func spawnInstalled(
+	ctx context.Context,
+	st store.Store,
+	servers []store.Server,
+	alloc *netmgr.Allocator,
+	reg *proxy.Registry,
+	cfg config.Config,
+	caFile string,
+) ([]gw.Backend, []func(), error) {
+	var backends []gw.Backend
+	var cleanups []func()
+	for _, srv := range servers {
+		placeholder := ""
+		var expose map[string]bool
+		rec, err := st.GetManifest(ctx, srv.Name)
+		switch {
+		case err == nil:
+			if rec.NeedsReconsent() {
+				log.Printf("backend %q requires re-consent (manifest changed); NOT spawning", srv.Name)
+				continue
+			}
+			if len(rec.Injections) > 0 {
+				placeholder = rec.Injections[0].Placeholder
+			}
+			expose = map[string]bool{}
+			for _, tl := range rec.Tools {
+				if tl.Default {
+					expose[tl.Name] = true
+				}
+			}
+		case errors.Is(err, store.ErrManifestNotFound):
+			// legacy server (GIG_ECHO_BIN): no manifest, expose all tools
+		default:
+			for _, c := range cleanups {
+				c()
+			}
+			return nil, nil, fmt.Errorf("manifest for %q: %w", srv.Name, err)
+		}
+		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, placeholder)
+		if err != nil {
+			for _, c := range cleanups {
+				c()
+			}
+			return nil, nil, fmt.Errorf("spawn egress backend %q: %w", srv.Name, err)
+		}
+		cleanups = append(cleanups, eb.Cleanup)
+		backends = append(backends, gw.Backend{Name: srv.Name, Session: eb.Session, Expose: expose})
+		log.Printf("backend %q running in egress sandbox (pid=%d)", srv.Name, eb.ChildPID)
+	}
+	return backends, cleanups, nil
 }
