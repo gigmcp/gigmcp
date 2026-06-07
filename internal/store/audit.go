@@ -7,14 +7,22 @@ import (
 	"time"
 )
 
+// Kind constants for AuditEvent.Kind. Use these instead of raw strings so the
+// compiler catches typos and callers don't need to import the schema comment.
+const (
+	AuditKindEgress = "egress"
+	AuditKindAuth   = "auth"
+	AuditKindAdmin  = "admin"
+)
+
 // AuditEvent is one persisted audit row (spec §3, §7). Kind partitions the
-// stream: "egress" (proxy resolutions, written by the AuditingResolver),
-// "auth" (login/logout) and "admin" (profile/credential/impersonation/install
-// mutations, written synchronously by API handlers).
+// stream: AuditKindEgress (proxy resolutions, written by the AuditingResolver),
+// AuditKindAuth (login/logout) and AuditKindAdmin (profile/credential/
+// impersonation/install mutations, written synchronously by API handlers).
 type AuditEvent struct {
 	ID        int64
 	TS        time.Time
-	Kind      string // 'egress' | 'auth' | 'admin'
+	Kind      string // AuditKindEgress | AuditKindAuth | AuditKindAdmin
 	UserID    *int64
 	ProfileID *int64
 	Server    string
@@ -34,7 +42,8 @@ CREATE TABLE IF NOT EXISTS audit (
 	host       TEXT NOT NULL DEFAULT '',
 	decision   TEXT NOT NULL DEFAULT '',
 	detail     TEXT NOT NULL DEFAULT ''
-);`
+);
+CREATE INDEX IF NOT EXISTS audit_user_id ON audit(user_id, id);`
 
 // AppendAudit inserts an audit row. A zero TS means "now".
 func (s *sqliteStore) AppendAudit(ctx context.Context, e AuditEvent) error {
@@ -58,11 +67,22 @@ func (s *sqliteStore) AppendAudit(ctx context.Context, e AuditEvent) error {
 
 // ListAudit returns audit rows newest-first with keyset pagination:
 // beforeID == 0 starts at the newest row; pass the last row's ID to get the
-// next page. userID filters to one user's events (0 = all). limit is clamped
-// to [1,500] (defaults to 100).
+// next page. userID filters to one user's events (0 = all events — admin
+// paths only). limit is clamped to [1,500]; ≤0 defaults to 100, >500 clamps
+// to 500.
+//
+// WARNING: callers must pass a validated userID; 0 returns ALL events across
+// all users and should only be used by admin paths.
+//
+// NOTE: rows where user_id IS NULL are invisible under any non-zero userID
+// filter (the WHERE user_id=? predicate never matches NULL). The API layer
+// must be aware that NULL-user rows only appear in the admin (userID==0) view.
 func (s *sqliteStore) ListAudit(ctx context.Context, beforeID int64, limit int, userID int64) ([]AuditEvent, error) {
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 {
 		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
 	}
 	q := `SELECT id,ts,kind,user_id,profile_id,server,host,decision,detail FROM audit`
 	var conds []string
@@ -71,7 +91,7 @@ func (s *sqliteStore) ListAudit(ctx context.Context, beforeID int64, limit int, 
 		conds = append(conds, "id < ?")
 		args = append(args, beforeID)
 	}
-	if userID > 0 {
+	if userID != 0 {
 		conds = append(conds, "user_id = ?")
 		args = append(args, userID)
 	}
