@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -40,13 +41,15 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		// http.MaxBytesReader sets a sentinel error whose message contains
-		// "http: request body too large".
-		if err.Error() == "http: request body too large" {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
 			writeErr(w, http.StatusRequestEntityTooLarge, codeInvalid, "request body too large")
 			return false
 		}
-		writeErr(w, http.StatusBadRequest, codeInvalid, "invalid JSON body")
+		// Pass the decoder error through so callers can diagnose strict-mode
+		// rejections (e.g. `json: unknown field "slugg"`). Decode errors
+		// describe only the client's own bytes; nothing internal leaks.
+		writeErr(w, http.StatusBadRequest, codeInvalid, "invalid JSON body: "+err.Error())
 		return false
 	}
 	return true

@@ -237,15 +237,29 @@ func TestProfileInputBounds(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, cookie := seedUserSession(t, st, "alice@x", "user")
 
-	// Oversized body → 4xx (413 or 400).
+	// Oversized body → 413 via *http.MaxBytesError.
 	oversized := `{"name":"` + strings.Repeat("x", 70000) + `","slug":"ok-slug"}`
-	code, _ := doJSON(t, ts, cookie, "POST", "/api/profiles", oversized)
-	if code != http.StatusRequestEntityTooLarge && code != http.StatusBadRequest {
-		t.Fatalf("oversized body: want 413 or 400, got %d", code)
+	code, body := doJSON(t, ts, cookie, "POST", "/api/profiles", oversized)
+	if code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized body: want 413, got %d %s", code, body)
+	}
+
+	// Unknown field → 400 with the field name in the message (strict decode
+	// must be diagnosable by dashboard developers).
+	code, body = doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"N","slug":"ok-slug","slugg":"typo"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("unknown field: want 400, got %d %s", code, body)
+	}
+	var uf errResp
+	if err := json.Unmarshal(body, &uf); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !strings.Contains(uf.Err.Message, "slugg") {
+		t.Fatalf("unknown-field message must name the field, got %q", uf.Err.Message)
 	}
 
 	// Empty name → 400.
-	code, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"","slug":"ok-slug"}`)
+	code, body = doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"","slug":"ok-slug"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("empty name: want 400, got %d %s", code, body)
 	}
