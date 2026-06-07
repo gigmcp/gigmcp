@@ -34,5 +34,11 @@ type Store interface {
 	DeleteManifest(ctx context.Context, server string) error
 	// DeleteServer removes a server row (registry uninstall).
 	DeleteServer(ctx context.Context, name string) error
+	// UpsertUserByOIDC JIT-provisions or refreshes a user by (issuer, subject).
+	UpsertUserByOIDC(ctx context.Context, issuer, subject, email, displayName, role string) (User, error)
+	// GetUser fetches a user by id; ErrUserNotFound if missing.
+	GetUser(ctx context.Context, id int64) (User, error)
+	// ListUsers returns all users ordered by id.
+	ListUsers(ctx context.Context) ([]User, error)
 	Close() error
 }
