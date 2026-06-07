@@ -290,7 +290,7 @@ func spawnInstalled(
 			}
 			return nil, nil, fmt.Errorf("manifest for %q: %w", srv.Name, err)
 		}
-		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, placeholder)
+		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "default", placeholder)
 		if err != nil {
 			for _, c := range cleanups {
 				c()

@@ -116,6 +116,10 @@ func sandboxPayloadPID(bwrapChildPID int) (int, error) {
 // returns an EgressBackend with the connected MCP client session, the sandbox
 // child PID, and a cleanup function.
 //
+// tenant is the proxy identity bound to the sandbox's source IP — a profile ID
+// (decimal string) for profile-scoped backends, or the literal "default" for
+// the legacy path.
+//
 // placeholder is the high-entropy sentinel injected into the sandbox as
 // GIG_PLACEHOLDER; it is used by the proxy to recognise credential slots in
 // outbound requests and substitute the real credential value. Pass "" to use
@@ -138,6 +142,7 @@ func SpawnEgressBackend(
 	proxyPort int,
 	caFile string,
 	bootstrapPath string,
+	tenant string,      // proxy identity bound to the sandbox's source IP — profile ID (decimal) or "default"
 	placeholder string, // manifest-generated sentinel; "" = legacy "PLACEHOLDER"
 ) (*EgressBackend, error) {
 	if placeholder == "" {
@@ -334,7 +339,7 @@ func SpawnEgressBackend(
 	r4.Close()
 
 	// Step 4: register sandbox source IP → tenant identity in the proxy registry.
-	reg.Bind(sub.SandboxIP.String(), proxy.Identity{Server: srv.Name, Tenant: "default"})
+	reg.Bind(sub.SandboxIP.String(), proxy.Identity{Server: srv.Name, Tenant: tenant})
 	log.Printf("backend %q egress sandbox up: bwrap-child-pid=%d subnet=%s/%s", srv.Name, childPid, sub.SandboxIP, sub.HostIP)
 
 	// Step 5: connect the MCP session over the already-started process's stdio.

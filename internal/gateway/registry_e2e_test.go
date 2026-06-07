@@ -193,7 +193,7 @@ func TestRegistryInstallE2E(t *testing.T) {
 
 	alloc := netmgr.NewAllocator("10.97.0.0/16")
 
-	eb, err := gateway.SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, placeholder)
+	eb, err := gateway.SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, "default", placeholder)
 	if err != nil {
 		t.Fatalf("SpawnEgressBackend: %v", err)
 	}

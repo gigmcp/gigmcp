@@ -153,7 +153,7 @@ func StartEgressGatewayForTest(
 	srv := store.Server{Name: "fetch", Binary: fetchBin}
 
 	// 8. Spawn the egress sandbox.
-	eb, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, "")
+	eb, err := SpawnEgressBackend(ctx, srv, alloc, reg, proxyPort, caFile, bootstrapBin, "default", "")
 	if err != nil {
 		t.Fatalf("SpawnEgressBackend: %v", err)
 	}
