@@ -17,7 +17,7 @@ type Config struct {
 	Listen           string        // GIG_LISTEN, default ":8080"
 	BearerToken      string        // GIG_BEARER_TOKEN, required
 	DBPath           string        // GIG_DB_PATH, default "gigmcp.db"
-	EchoBinary       string        // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding — handoff §6.D)
+	EchoBinary       string        // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding)
 	MasterKey        string        // GIG_MASTER_KEY, required for vault (hex-encoded 32 bytes)
 	ProxyPort        int           // GIG_PROXY_PORT, default 8081 (egress MITM proxy)
 	BootstrapPath    string        // GIG_BOOTSTRAP_PATH, default "/usr/local/bin/bootstrap"
@@ -64,7 +64,7 @@ func FromEnv() (Config, error) {
 		return Config{}, errors.New("GIG_BEARER_TOKEN must be set")
 	}
 	// GIG_ECHO_BIN is now an OPTIONAL legacy/dev fallback (registry-driven
-	// install replaces seeding — handoff §6.D).
+	// install replaces seeding).
 	if cfg.Install != "" && (cfg.RegistryIndexURL == "" || cfg.RegistryPubKey == "") {
 		return Config{}, errors.New("GIG_INSTALL requires GIG_REGISTRY_INDEX_URL and GIG_REGISTRY_PUBKEY")
 	}

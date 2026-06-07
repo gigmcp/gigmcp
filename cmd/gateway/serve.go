@@ -11,7 +11,7 @@ import (
 	"github.com/gigmcp/gigmcp/internal/vault"
 )
 
-// buildMux assembles the single :8080 mux (spec §2):
+// buildMux assembles the single :8080 mux:
 //
 //	/mcp        → legacy aggregator + RequireBearer (transitional until cutover)
 //	/mcp/p/     → ProfileHost (per-profile bearer tokens)
@@ -35,8 +35,7 @@ import (
 // client endpoint becomes /mcp/p/<slug>, and README.md must be updated
 // (see Task 18 Step 3a).
 //
-// Kept as the one run() helper so the registry workstream's run() additions
-// merge cleanly (handoff §6.2).
+// Kept as the one run() helper so future run() additions merge cleanly.
 func buildMux(
 	st store.Store,
 	v *vault.Vault,

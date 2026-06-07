@@ -19,7 +19,7 @@ var ErrSlugTaken = errors.New("store: slug already taken")
 // Profile is a named bundle of servers exposed at /mcp/p/<slug> behind its
 // own bearer token (DESIGN #11). TokenHash is the SHA-256 hex of the token —
 // plaintext is shown once at create/rotate and never stored. MetaTools is the
-// DESIGN #11 opt-in flag (schema only in v1; implementation deferred).
+// DESIGN #11 opt-in flag (schema only; implementation deferred).
 type Profile struct {
 	ID        int64
 	Slug      string

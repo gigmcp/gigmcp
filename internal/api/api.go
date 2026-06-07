@@ -1,4 +1,4 @@
-// Package api is the REST control plane (spec §5): JSON endpoints behind the
+// Package api is the REST control plane: JSON endpoints behind the
 // session middleware, mounted under /api/ on the gateway's single mux. It
 // imports auth and registry, never gateway (ProfileInvalidator decouples it
 // from the ProfileHost).

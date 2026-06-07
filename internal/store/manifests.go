@@ -30,8 +30,8 @@ type ToolEntry struct {
 }
 
 // ManifestRecord is the persisted, enforcement-relevant projection of a
-// registry manifest (handoff seam §6.A, option A: separate table, separate
-// file — the frontend workstream never touches this).
+// registry manifest (kept in its own table and file, separate from the
+// control-plane store).
 type ManifestRecord struct {
 	Server        string
 	Version       string

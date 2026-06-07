@@ -23,7 +23,7 @@ type auditRecord struct {
 }
 
 // AuditingResolver decorates a proxy.CredentialResolver with persistent
-// egress auditing (spec §7) — ZERO edits to the no-touch proxy package.
+// egress auditing — ZERO edits to the no-touch proxy package.
 // Writes go through a buffered channel to a single writer goroutine so audit
 // can never block the egress hot path; on overflow events are dropped and
 // counted, never blocking.

@@ -6,9 +6,8 @@ import (
 	"github.com/gigmcp/gigmcp/internal/store"
 )
 
-// Installer is the install seam shared with the frontend workstream
-// (handoff §6.B) — its REST API calls exactly this. Record-only: Install
-// never spawns; the gateway run-loop owns spawning.
+// Installer is the install seam consumed by the REST API. Record-only:
+// Install never spawns; the gateway run-loop owns spawning.
 type Installer interface {
 	// Install resolves ref (name@version | name = latest | sha256:<digest>),
 	// pulls + verifies + extracts the pinned image, and records the server +

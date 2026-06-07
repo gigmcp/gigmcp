@@ -21,7 +21,7 @@ func TestCredentialPutEncryptsAndScopesToUser(t *testing.T) {
 		t.Fatalf("put: %d %s", code, body)
 	}
 
-	// The row is keyed by the OWNING USER ID as decimal string (spec §3).
+	// The row is keyed by the OWNING USER ID as decimal string.
 	cred, err := st.GetCredential(ctx, "github", store.UserTenant(u.ID))
 	if err != nil {
 		t.Fatalf("row missing under user-id tenant: %v", err)

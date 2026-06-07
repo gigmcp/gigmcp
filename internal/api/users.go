@@ -10,7 +10,7 @@ import (
 )
 
 // handleListUsers — GET /api/users (admin): read-only list — roles come from
-// the IdP, there is no local user editing in v1.
+// the IdP, there is no local user editing.
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.Store.ListUsers(r.Context())
 	if err != nil {

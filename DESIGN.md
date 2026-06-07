@@ -1,4 +1,4 @@
-# gigmcp — Design Decision Record
+# Gig'MCP — Design Decision Record
 
 > Open-source, security-first MCP gateway: a marketplace-backed runtime that runs
 > community MCP servers **sandboxed**, with **credential injection at the network
@@ -22,7 +22,7 @@ but is closed-source and does not run third-party code at all (see §6).
 - is fed by a curated, digest-pinned manifest registry (the future marketplace).
 
 **Key differentiator vs Composio:** Composio's security model is "we wrote all the
-connectors, trust us." gigmcp's model is "run *anyone's* server; the sandbox and
+connectors, trust us." Gig'MCP's model is "run *anyone's* server; the sandbox and
 proxy make trust unnecessary." Credentials can also stay entirely on user hardware
 (self-host), which Composio cannot offer.
 
@@ -32,16 +32,16 @@ proxy make trust unnecessary." Credentials can also stay entirely on user hardwa
 
 | # | Decision | Choice |
 |---|----------|--------|
-| 1 | v1 product slice | Secure runtime/gateway. Marketplace UI deferred (registry repo is the interim marketplace). |
+| 1 | Product slice | Secure runtime/gateway. Marketplace UI deferred (registry repo is the interim marketplace). |
 | 2 | Deployment target | Docker-native from the start; Linux-only runtime. Runs on homelab/VPS; on Mac dev machines it runs inside Docker. |
-| 3 | Sandbox provisioning | **No Docker socket.** Gateway spawns MCP servers as bwrap sandboxed child processes inside its own container (user/pid/mount/net namespaces + seccomp + Landlock + cgroups). Requires `seccomp=unconfined`/`systempaths=unconfined` (until a custom seccomp profile allowing unprivileged userns ships — see §3 KNOWN HARDENING GAP). **Egress networking validated NET_ADMIN-only (no SYS_ADMIN, no privileged):** bwrap creates the netns via userns (`--unshare-net`); the gateway uses `--userns-block-fd` to pause the child, writes a uid/gid map covering uids 0..65534 to `/proc/<child>/uid_map` + `gid_map` (enabling both uid 0 for bootstrap's CAP_NET_ADMIN and uid 65534 for the server), then unblocks the child; moves a veth into the bwrap child's netns by host PID via `LinkSetNsPid` (avoids the named-netns bind-mount that needs SYS_ADMIN); and a trusted in-sandbox bootstrap (`cmd/bootstrap`) configures the link + default route, drops **all** caps (`CapEff=0`), drops to uid/gid 65534 (nobody), and `execve`s the untrusted server. **The server process runs as uid 65534 with zero capabilities — verified.** |
+| 3 | Sandbox provisioning | **No Docker socket.** Gateway spawns MCP servers as bwrap sandboxed child processes inside its own container (user/pid/mount/net namespaces + seccomp + Landlock + cgroups). Requires `seccomp=unconfined`/`systempaths=unconfined` (until a custom seccomp profile allowing unprivileged userns ships — see the SECCOMP STATUS note in §3). **Egress networking validated NET_ADMIN-only (no SYS_ADMIN, no privileged):** bwrap creates the netns via userns (`--unshare-net`); the gateway uses `--userns-block-fd` to pause the child, writes a uid/gid map covering uids 0..65534 to `/proc/<child>/uid_map` + `gid_map` (enabling both uid 0 for bootstrap's CAP_NET_ADMIN and uid 65534 for the server), then unblocks the child; moves a veth into the bwrap child's netns by host PID via `LinkSetNsPid` (avoids the named-netns bind-mount that needs SYS_ADMIN); and a trusted in-sandbox bootstrap (`cmd/bootstrap`) configures the link + default route, drops **all** caps (`CapEff=0`), drops to uid/gid 65534 (nobody), and `execve`s the untrusted server. **The server process runs as uid 65534 with zero capabilities — verified.** |
 | 4 | Hosted product shape | Hosted control plane is fine holding keys (users who object can self-host). Same codebase self-hosts. |
 | 5 | Multi-tenancy granularity | Shared **code/image**, never shared **process**: one sandboxed instance per (server × user/profile), idle-reaped, spawned in milliseconds. |
 | 6 | Credential model | **Tier 1 "Sealed"** (default): placeholder token in sandbox env; embedded MITM egress proxy swaps in the real key per tenant. Key never enters the sandbox. **Tier 2 "Entrusted"**: real secret in sandbox env (DB strings, cert-pinned clients), egress allowlist still applies. **Tier 3 / local-resource servers: out of scope** (catalog targets SaaS APIs: Ubiquiti, Google, Slack, GitHub...). |
 | 7 | Entitlements manifests | Author-declared, PR-gated into a registry repo (owner approves), enforced as a hard cap by the proxy. Lint CI blocks wildcards/known exfil domains. Manifest changes on update ⇒ re-consent. |
 | 8 | Registry topology | GitHub org, two repos: `gigmcp` (gateway monorepo) + `gigmcp-registry` (manifests). CI compiles manifests → **signed `index.json`** artifact; runners consume the index, never the raw repo. |
-| 9 | Packaging | **OCI images**, built by registry CI from the author's tagged source, **pinned by digest** in the manifest. Runner pulls, verifies digest, extracts rootfs, runs entrypoint under bwrap. `npx`/`uvx` only as a clearly-marked untrusted self-host escape hatch (post-v1). |
-| 10 | Credential acquisition | v1: BYO keys + BYO OAuth apps (client id/secret via compose env / `*_FILE` Docker secrets), runner executes the OAuth flow, per-provider setup guides. Hosted managed OAuth broker later — manifest credential schema is source-agnostic so it bolts on. |
+| 9 | Packaging | **OCI images**, built by registry CI from the author's tagged source, **pinned by digest** in the manifest. Runner pulls, verifies digest, extracts rootfs, runs entrypoint under bwrap. `npx`/`uvx` only as a clearly-marked untrusted self-host escape hatch (not currently implemented). |
+| 10 | Credential acquisition | BYO keys + BYO OAuth apps (client id/secret via compose env / `*_FILE` Docker secrets), runner executes the OAuth flow, per-provider setup guides. Hosted managed OAuth broker later — manifest credential schema is source-agnostic so it bolts on. |
 | 11 | Client surface | One streamable-HTTP MCP endpoint per **profile** (`/mcp/p/<profile>`), per-profile bearer tokens. Meta-tools mode (search/load tools) as per-profile opt-in flag. Manifests mark tools `default: true/false` so installs expose a curated subset (Composio-style). |
 | 12 | Gateway language | **Go.** Single static binary, scratch image. |
 | 13 | Egress proxy | **Embedded** in the gateway binary, **hand-rolled net/http CONNECT MITM** (spike found martian/goproxy unmaintained; stdlib is simpler and a cleaner hook for source-IP lookup + header rewrite). Runtime ECDSA P-256 CA, per-host leaf minting (mutex-cached), allowlist checked at CONNECT time *before* a leaf is minted, header rewrite via `bufio`+`http.ReadRequest`. Identity binding is network-level: each sandbox netns gets a unique veth/IP recorded at spawn; proxy resolves `source IP → (server, user, profile)` from the accepted conn's RemoteAddr — unforgeable because the netns can only source its own /30. Per-request audit log falls out of this lookup. CA injected via `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE`; `HTTPS_PROXY` set in the sandbox as convenience only — **route isolation is the actual enforcement** (env-only proxying is bypassable and was proven insufficient). |
@@ -50,8 +50,8 @@ proxy make trust unnecessary." Credentials can also stay entirely on user hardwa
 | 16 | License & protection | **Unmodified AGPL-3.0** (gateway/control plane). Name/logo protected by **trademark policy** (TRADEMARK.md; register later), not license edits. **DCO** for contributions; copyright kept concentrated to preserve dual-licensing of the hosted product. Apache-2.0 for manifest schema/SDKs when they exist. |
 | 17 | Frontend | **Next.js** dashboard as pure frontend (separate `web` container). Visual style: model after **Composio's dashboard UI**. Astro reserved for future marketing/docs/marketplace static site. |
 | 18 | Auth | Go gateway is the **sole auth authority**: local email+password + generic **OIDC client** (`coreos/go-oidc`) covering social login (Google/GitHub) and enterprise SSO (Okta/Entra/Authentik/Authelia) with one config block. Go issues httpOnly session after OIDC callback; Next.js forwards it. No Auth.js session ownership. |
-| 19 | Multi-user | Multi-user **in v1**: `user_id` on every table, roles `admin`/`user`, OIDC + local login, admin user management, invitations. |
-| 20 | Impersonation | **Config-only (option B)**: admin sees the user's view (profiles, server status, logs) but cannot execute tools or touch secrets. Time-boxed, banner-visible, loud audit event visible to the impersonated user too. Full impersonation = deliberate org-level toggle, off by default, post-v1. |
+| 19 | Multi-user | Multi-user **from the start**: `user_id` on every table, roles `admin`/`user`, OIDC + local login, admin user management, invitations. |
+| 20 | Impersonation | **Config-only (option B)**: admin sees the user's view (profiles, server status, logs) but cannot execute tools or touch secrets. Time-boxed, banner-visible, loud audit event visible to the impersonated user too. Full impersonation = deliberate org-level toggle, off by default; not currently implemented. |
 
 ---
 
@@ -180,7 +180,7 @@ digest present, schema valid. Manifest diff on version bump ⇒ runner forces re
 
 ---
 
-## 5. v1 Scope (single release — deliberately large, per owner's call)
+## 5. Scope (deliberately large, per owner's call)
 
 1. Go gateway: streamable-HTTP MCP endpoint, profile routing, per-profile bearer tokens
 2. Sandbox runtime: OCI pull → digest verify → rootfs extract → bwrap spawn; per (server×user×profile) instances; idle reaping
@@ -197,7 +197,7 @@ collision handling once multiple backends exist — reject/deduplicate duplicate
 names and backend names containing `_` (ambiguous `backend_tool` parsing). Deferred to the
 multi-backend/registry plan; harmless at skeleton stage (single hardcoded backend).
 
-**Explicit roadmap (NOT v1):** hosted control plane & managed OAuth broker, marketplace
+**Future work (explicitly out of scope):** hosted control plane & managed OAuth broker, marketplace
 website, meta-tools mode default-on, npx escape hatch, full impersonation toggle,
 groups/RBAC beyond two roles, gVisor/microVM isolation option, trademark registration.
 
@@ -211,7 +211,7 @@ it, injecting the user's OAuth token from their managed store. Isolation is logi
 physical — defensible only because no untrusted code executes; also why it's cheap.
 Their MCP product is C-shaped (dashboard-configured tool subsets per endpoint); their
 Rube product is D-shaped (universal meta-tool router). Their moat is ~300 verified OAuth
-apps — bureaucracy, not code. gigmcp's answers: sandbox makes untrusted code safe
+apps — bureaucracy, not code. Gig'MCP's answers: sandbox makes untrusted code safe
 (breadth they can't match), BYO-then-broker neutralizes the OAuth moat over time,
 AGPL + self-host neutralizes the trust objection.
 
@@ -237,4 +237,4 @@ before deepening any subsystem:
    seccomp profile docs, threat-model doc.
 
 Repo layout: monorepo `gigmcp/` → `cmd/gateway/`, `internal/{mcp,sandbox,proxy,vault,auth,store,registry}/`,
-`web/` (Next.js), `deploy/` (compose, seccomp profile), `docs/`.
+`web/` (Next.js), `deploy/` (compose, seccomp profile).

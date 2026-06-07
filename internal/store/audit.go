@@ -15,7 +15,7 @@ const (
 	AuditKindAdmin  = "admin"
 )
 
-// AuditEvent is one persisted audit row (spec §3, §7). Kind partitions the
+// AuditEvent is one persisted audit row. Kind partitions the
 // stream: AuditKindEgress (proxy resolutions, written by the AuditingResolver),
 // AuditKindAuth (login/logout) and AuditKindAdmin (profile/credential/
 // impersonation/install mutations, written synchronously by API handlers).

@@ -15,8 +15,8 @@ import (
 //
 // TRANSITIONAL FIELDS: inject_header, inject_format, placeholder and
 // allowed_hosts populate the credential-row columns only until the registry
-// workstream's manifest sourcing lands (spec §5, §10 seam "credentials
-// columns"); then the body shrinks to {secret} and these inputs disappear.
+// workstream's manifest sourcing lands; then the body shrinks to {secret}
+// and these inputs disappear.
 type credentialPutBody struct {
 	Secret       string   `json:"secret"`
 	InjectHeader string   `json:"inject_header"`

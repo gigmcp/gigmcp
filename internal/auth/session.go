@@ -23,7 +23,7 @@ import (
 const SessionCookie = "gig_session"
 
 // NewSessionToken returns a fresh opaque session token: 32 random bytes,
-// base64url unpadded (43 chars). Only its SHA-256 is stored (spec §1 #1).
+// base64url unpadded (43 chars). Only its SHA-256 is stored.
 func NewSessionToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -34,7 +34,7 @@ func NewSessionToken() (string, error) {
 
 // NewProfileToken returns a fresh profile bearer token: "gig_" + 32 random
 // bytes base64url. The prefix makes leaked tokens greppable. Plaintext is
-// shown once at create/rotate; only the SHA-256 is stored (spec §1 #2).
+// shown once at create/rotate; only the SHA-256 is stored.
 func NewProfileToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

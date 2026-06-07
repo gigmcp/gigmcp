@@ -39,13 +39,13 @@ type CredResolver struct {
 	Vault *vault.Vault
 }
 
-// Resolve assembles the proxy credential from TWO sources (DESIGN #7,
-// seam §6.C): the MANIFEST (by server) supplies the author-declared hard cap
+// Resolve assembles the proxy credential from TWO sources (DESIGN #7):
+// the MANIFEST (by server) supplies the author-declared hard cap
 // — allowlist + injection schema + placeholder; the VAULT (by server,tenant)
 // supplies only the real secret. Servers without a manifest (legacy
 // GIG_ECHO_BIN seeding) fall back to the credential row's own fields.
 //
-// Tenant join (spec §6, this plan): if id.Tenant parses as an int64 AND
+// Tenant join: if id.Tenant parses as an int64 AND
 // names an existing profile, the credential lookup uses the profile OWNER's
 // user id as a decimal string (credentials are per-user; one key serves all
 // of that user's profiles). Otherwise the tenant is used literally — this
@@ -80,7 +80,7 @@ func (c *CredResolver) Resolve(id proxy.Identity, host string) (proxy.Credential
 	if err != nil {
 		return proxy.Credential{}, err
 	}
-	// v1 enforces the FIRST credential's injection (multi-credential rewrite
+	// The FIRST credential's injection is enforced (multi-credential rewrite
 	// is a follow-up; the schema already supports it).
 	var inj store.Injection
 	if len(rec.Injections) > 0 {

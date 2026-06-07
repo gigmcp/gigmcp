@@ -13,7 +13,7 @@ import (
 	"github.com/gigmcp/gigmcp/internal/store"
 )
 
-// slugRe: lowercase DNS-ish, 2–63 chars, no leading hyphen (spec Task rule).
+// slugRe: lowercase DNS-ish, 2–63 chars, no leading hyphen.
 var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}$`)
 
 type profileJSON struct {
@@ -263,7 +263,7 @@ func (s *Server) handlePutProfileServers(w http.ResponseWriter, r *http.Request)
 }
 
 // handleRotateProfileToken — POST /api/profiles/{id}/token: returns the new
-// plaintext once. Rotation does NOT invalidate the runtime (spec §6).
+// plaintext once. Rotation does NOT invalidate the runtime.
 func (s *Server) handleRotateProfileToken(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadOwnedProfile(w, r)
 	if !ok {

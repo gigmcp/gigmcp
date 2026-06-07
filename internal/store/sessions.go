@@ -10,7 +10,7 @@ import (
 // ErrSessionNotFound is returned for unknown or expired sessions.
 var ErrSessionNotFound = errors.New("store: session not found")
 
-// Session is an opaque DB-backed browser session (spec §1 decision 1).
+// Session is an opaque DB-backed browser session.
 // TokenHash is the SHA-256 hex of the cookie value — the plaintext never
 // touches the database. The impersonation columns implement DESIGN #20
 // view-as mode.

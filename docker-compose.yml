@@ -62,16 +62,15 @@ services:
     cap_add:
       - NET_ADMIN
     # bwrap needs unprivileged user namespaces, which Docker's default
-    # seccomp/apparmor profiles block. A scoped allow-userns seccomp profile
-    # replaces 'unconfined' in the hardening plan (DESIGN.md §5 item 7).
+    # seccomp/apparmor profiles block — hence seccomp=unconfined at the Docker
+    # layer (a scoped allow-userns Docker profile is a follow-up item).
+    # Defense in depth: inside each sandbox an application-level seccomp-BPF
+    # filter (internal/seccomp, installed by cmd/bootstrap before execve)
+    # closes the nested-userns escape — unshare/setns and clone(CLONE_NEWUSER)
+    # are killed, clone3 returns ENOSYS — and denies mount, ptrace, keyctl,
+    # bpf, and module-loading syscalls. See DESIGN.md "SECCOMP STATUS".
     # systempaths=unconfined unmasks /proc so bwrap can mount a fresh procfs
     # in the sandbox's pid namespace (see Makefile test target).
-    #
-    # KNOWN HARDENING GAP: seccomp=unconfined lets untrusted code call
-    # unshare(CLONE_NEWUSER) and gain full capabilities inside a nested user
-    # namespace. A scoped seccomp profile denying namespace-creation syscalls
-    # (unshare/setns/clone-newuser) and ptrace/keyctl is required before
-    # running genuinely hostile code. See DESIGN.md §3 for the full note.
     security_opt:
       - seccomp=unconfined
       - apparmor=unconfined

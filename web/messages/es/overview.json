@@ -1,7 +1,7 @@
 {
   "title": "Inicio",
   "welcome": "Bienvenido, {name}",
-  "description": "Tu plano de control de gigmcp de un vistazo.",
+  "description": "Tu plano de control de Gig'MCP de un vistazo.",
   "placeholder": "—",
   "stats": {
     "profiles": "Perfiles",

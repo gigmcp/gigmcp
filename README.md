@@ -1,10 +1,10 @@
-# gigmcp
+# Gig'MCP
 
-Open-source, security-first MCP gateway: run community MCP servers
-**sandboxed**, with credentials injected at the
+Gig'MCP is an open-source, security-first MCP gateway: run community MCP
+servers **sandboxed**, with credentials injected at the
 network boundary so one compromised tool never exposes your keys.
 See [DESIGN.md](DESIGN.md)
-for the full architecture and decision record. AGPL-3.0.
+for the full architecture and decision record.
 
 > **Status: egress proxy + credential vault complete.** One bundled echo server,
 > bearer auth, bubblewrap sandboxing, SQLite, embedded MITM egress proxy with
@@ -56,9 +56,20 @@ You should see one tool, `echo_echo`, served by an MCP server running in an
 egress-isolated bubblewrap sandbox: private network namespace, no host filesystem,
 cleared environment, credential injected only at the proxy.
 
+## Building
+
+The docker build currently requires a sibling checkout of
+[github.com/gigmcp/registry](https://github.com/gigmcp/registry) at
+`../gigmcp-registry` — the `go.mod` `replace` directive and the compose
+`additional_contexts` both point there.
+
 ## Development
 
 ```bash
 make test        # full suite incl. sandbox + egress + vault tests, in a Linux container
 make test-local  # host-side subset (Linux-only tests skip on macOS)
 ```
+
+## License
+
+[AGPL-3.0](LICENSE).

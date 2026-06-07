@@ -21,7 +21,7 @@ import {
 import type { AuditEvent } from "@/lib/types";
 import type { Column } from "@/components/data-table";
 
-// NOTE: The server's GET /api/audit does not support a kind filter in v1.
+// NOTE: The server's GET /api/audit does not support a kind filter.
 // Kind filtering below is client-side, applied to the already-loaded rows.
 
 type KindFilter = "egress" | "auth" | "admin";
@@ -117,7 +117,7 @@ export default function AuditPage() {
   const allEvents: AuditEvent[] =
     query.data?.pages.flatMap((p) => p.events) ?? [];
 
-  // Client-side kind filter (no server support in v1)
+  // Client-side kind filter (no server-side support)
   const filtered =
     activeKinds.size === 0
       ? allEvents
@@ -214,7 +214,7 @@ export default function AuditPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-4">
-        {/* Kind filter chips — client-side only (server has no kind filter in v1) */}
+        {/* Kind filter chips — client-side only (server has no kind filter) */}
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">
             {t("filters.kind")}

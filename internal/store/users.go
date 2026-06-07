@@ -11,8 +11,8 @@ import (
 var ErrUserNotFound = errors.New("store: user not found")
 
 // User is a JIT-provisioned account keyed by the OIDC (issuer, subject) pair.
-// Role is a CACHE of the IdP role claim, refreshed on every login (spec §3);
-// it is never edited locally in v1.
+// Role is a CACHE of the IdP role claim, refreshed on every login;
+// it is never edited locally.
 type User struct {
 	ID          int64
 	Issuer      string

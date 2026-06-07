@@ -1,7 +1,7 @@
 {
   "title": "Übersicht",
   "welcome": "Willkommen, {name}",
-  "description": "Deine gigmcp Control Plane auf einen Blick.",
+  "description": "Deine Gig'MCP Control Plane auf einen Blick.",
   "placeholder": "—",
   "stats": {
     "profiles": "Profile",

@@ -31,13 +31,13 @@ type profileRuntime struct {
 	cleanups []func()
 }
 
-// ProfileHost serves the per-profile MCP endpoints at /mcp/p/{slug}
-// (spec §6). Runtimes are LAZY (DESIGN #5): the first authorized request to
+// ProfileHost serves the per-profile MCP endpoints at /mcp/p/{slug}.
+// Runtimes are LAZY (DESIGN #5): the first authorized request to
 // a profile spawns its bundle (each server with Tenant = the profile ID) and
 // builds the aggregator; later requests reuse it. Invalidate tears a runtime
 // down after bundle edits or deletion (token rotation does NOT invalidate).
 //
-// Idle reaping is out of v1 scope: the sandbox count is bounded by
+// Idle reaping is not implemented: the sandbox count is bounded by
 // profiles × servers (documented limitation).
 //
 // Concurrency model:
@@ -262,7 +262,7 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 // the next request rebuilds it lazily. Implements api.ProfileInvalidator.
 //
 // In-flight requests against the torn-down runtime will fail with a transport
-// error and must reconnect (re-auth + respawn). This is the accepted v1
+// error and must reconnect (re-auth + respawn). This is the accepted
 // semantic: Invalidate is a rare, operator-triggered event (bundle edit or
 // profile deletion), not a hot path. If a spawn is in progress when Invalidate
 // is called, the build is allowed to finish; the built runtime will be stored

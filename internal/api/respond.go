@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-// Error-code constants (spec §5).
+// Error-code constants used in the uniform error envelope.
 const (
 	codeUnauthenticated  = "unauthenticated"
 	codeForbidden        = "forbidden"
@@ -27,7 +27,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// writeErr emits the uniform {"error":{"code","message"}} envelope (spec §5).
+// writeErr emits the uniform {"error":{"code","message"}} envelope.
 func writeErr(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }

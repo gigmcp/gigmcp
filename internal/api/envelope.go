@@ -9,7 +9,7 @@ import (
 
 // envelopeWriter intercepts responses from the inner mux and rewrites bare
 // 404/405 text/plain replies (emitted by Go's ServeMux) as JSON envelopes so
-// all /api/* error responses share the same shape (spec §5).
+// all /api/* error responses share the same shape.
 //
 // NOTE: this wrapper buffers the full response body until the handler returns
 // and does NOT implement http.Flusher. Streaming handlers (SSE, chunked) must

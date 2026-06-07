@@ -7,8 +7,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "gigmcp",
-  description: "gigmcp control plane",
+  title: "Gig'MCP",
+  description: "Gig'MCP control plane",
 };
 
 export default async function RootLayout({

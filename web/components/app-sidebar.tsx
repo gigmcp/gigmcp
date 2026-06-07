@@ -44,7 +44,7 @@ export function AppSidebar({
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="flex items-center gap-2 px-6 py-5 text-sm font-semibold tracking-tight">
         <Logo className="h-4 w-auto" />
-        gigmcp
+        Gig&apos;MCP
       </div>
       <nav className="flex-1 space-y-0.5 px-3">
         {items.map((n) => {

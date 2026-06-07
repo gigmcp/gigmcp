@@ -1,6 +1,6 @@
 // Package registry fetches and verifies the signed registry index and
 // installs servers from it: resolve → pull by digest → verify → extract →
-// record (handoff §4.2). Record-only: spawning stays in the gateway run-loop.
+// record. Record-only: spawning stays in the gateway run-loop.
 package registry
 
 import (

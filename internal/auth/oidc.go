@@ -23,7 +23,7 @@ import (
 
 // RolesClaim is Zitadel's project-roles ID-token claim: a map of
 // role-key → {orgID: orgDomain}. Membership of the configured admin role key
-// maps to gigmcp role "admin" (spec §1 decision 6, §4).
+// maps to gigmcp role "admin".
 const RolesClaim = "urn:zitadel:iam:org:project:roles"
 
 // flowCookie carries state+nonce+PKCE verifier between login and callback.
@@ -75,7 +75,7 @@ func NewAuthenticator(ctx context.Context, cfg config.Config, st store.Store) (*
 }
 
 // flowState is the signed payload of the 10-minute flow cookie — no DB row
-// for pending logins (spec §4). The flow cookie is stateless, so a valid
+// for pending logins. The flow cookie is stateless, so a valid
 // signed cookie can be replayed within the 10-minute window; the auth code
 // it carries is single-use at the IdP, bounding actual exploit to a
 // narrow race with no persistent account gain.
@@ -263,7 +263,7 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 // LogoutHandler — POST /api/auth/logout: delete the session row, clear the
-// cookie. Local logout only in v1 (RP-initiated Zitadel logout is a follow-up).
+// cookie. Local logout only (RP-initiated Zitadel logout is a follow-up).
 func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
 		hash := HashToken(c.Value)

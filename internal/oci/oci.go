@@ -2,7 +2,7 @@
 // Daemonless: pure go-containerregistry (Spike A: pull-by-digest verified,
 // CGO_ENABLED=0 static builds preserved, OCI-layout reads work offline).
 //
-// v1 packaging is static self-contained binaries (spec decision #2): exactly
+// Packaging is static self-contained binaries (spec decision #2): exactly
 // one file is extracted and later bind-mounted at /app/server by the existing
 // sandbox — NO internal/sandbox changes.
 package oci
