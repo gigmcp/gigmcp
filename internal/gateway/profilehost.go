@@ -33,6 +33,15 @@ type profileRuntime struct {
 //
 // Idle reaping is out of v1 scope: the sandbox count is bounded by
 // profiles × servers (documented limitation).
+//
+// Concurrency model:
+//   - h.mu guards ONLY the runtimes map and the building map (short holds).
+//   - Per-profile in-flight coordination is done via a channel stored in the
+//     building map: the first goroutine to find a profile cold creates a channel
+//     and begins spawning; subsequent goroutines for the SAME profile wait on that
+//     channel and reuse the result when the spawn completes.
+//   - Warm path: lock → map hit → unlock → serve. A spawning profile A never
+//     blocks warm requests to profile B.
 type ProfileHost struct {
 	Store   store.Store
 	Spawn   SpawnFunc
@@ -40,6 +49,10 @@ type ProfileHost struct {
 
 	mu       sync.Mutex
 	runtimes map[int64]*profileRuntime
+	// building tracks in-flight spawns. The chan struct{} is closed (broadcast)
+	// when the spawn finishes (successfully or not). All waiters then re-check
+	// runtimes under h.mu.
+	building map[int64]chan struct{}
 }
 
 // Handler routes /mcp/p/{slug}. No method in the pattern: streamable HTTP
@@ -88,17 +101,62 @@ func (h *ProfileHost) serve(w http.ResponseWriter, r *http.Request) {
 	rt.handler.ServeHTTP(w, r)
 }
 
-// getOrCreate returns the profile's runtime, lazily spawning it.
+// getOrCreate returns the profile's runtime, lazily spawning it once per
+// profile. Concurrent cold-start requests for the SAME profile coalesce:
+// only one goroutine spawns; the rest wait and share the result.
+// Concurrent requests for DIFFERENT profiles are fully independent — a
+// slow spawn of profile A never blocks a warm request to profile B.
 func (h *ProfileHost) getOrCreate(p store.Profile) (*profileRuntime, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.runtimes == nil {
-		h.runtimes = map[int64]*profileRuntime{}
-	}
-	if rt, ok := h.runtimes[p.ID]; ok {
-		return rt, nil
-	}
+	for {
+		h.mu.Lock()
+		if h.runtimes == nil {
+			h.runtimes = map[int64]*profileRuntime{}
+		}
+		if h.building == nil {
+			h.building = map[int64]chan struct{}{}
+		}
 
+		// Warm path: runtime already exists.
+		if rt, ok := h.runtimes[p.ID]; ok {
+			h.mu.Unlock()
+			return rt, nil
+		}
+
+		// Another goroutine is already spawning this profile — wait for it.
+		if ch, inflight := h.building[p.ID]; inflight {
+			h.mu.Unlock()
+			<-ch
+			// After the spawn completes, loop back and pick up the result (or
+			// the error — the builder did not store a runtime on failure, so we
+			// will attempt a fresh spawn rather than caching errors).
+			continue
+		}
+
+		// We are the first goroutine for this cold profile: claim the slot.
+		ch := make(chan struct{})
+		h.building[p.ID] = ch
+		h.mu.Unlock()
+
+		// Perform the spawn outside the lock.
+		rt, err := h.spawnProfile(p)
+
+		h.mu.Lock()
+		delete(h.building, p.ID)
+		if err == nil {
+			h.runtimes[p.ID] = rt
+		}
+		h.mu.Unlock()
+
+		// Broadcast: all waiting goroutines wake up and loop.
+		close(ch)
+
+		return rt, err
+	}
+}
+
+// spawnProfile does the actual (slow) work of spawning backend sandboxes and
+// building the aggregator for a profile. Called with no locks held.
+func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 	// Sandboxes outlive the triggering request: Background, not r.Context().
 	ctx := context.Background()
 	names, err := h.Store.GetProfileServers(ctx, p.ID)
@@ -164,12 +222,19 @@ func (h *ProfileHost) getOrCreate(p store.Profile) (*profileRuntime, error) {
 		handler:  mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return agg }, nil),
 		cleanups: cleanups,
 	}
-	h.runtimes[p.ID] = rt
 	return rt, nil
 }
 
 // Invalidate tears down one profile's runtime (bundle change or delete);
 // the next request rebuilds it lazily. Implements api.ProfileInvalidator.
+//
+// In-flight requests against the torn-down runtime will fail with a transport
+// error and must reconnect (re-auth + respawn). This is the accepted v1
+// semantic: Invalidate is a rare, operator-triggered event (bundle edit or
+// profile deletion), not a hot path. If a spawn is in progress when Invalidate
+// is called, the build is allowed to finish; the built runtime will be stored
+// and then torn down on the NEXT Invalidate (or Close). The subsequent request
+// after the first Invalidate re-spawns cleanly.
 func (h *ProfileHost) Invalidate(profileID int64) {
 	h.mu.Lock()
 	rt := h.runtimes[profileID]
