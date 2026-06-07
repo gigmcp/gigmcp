@@ -71,5 +71,9 @@ type Store interface {
 	SetProfileServers(ctx context.Context, id int64, names []string) error
 	// GetProfileServers returns the profile's bundled server names.
 	GetProfileServers(ctx context.Context, id int64) ([]string, error)
+	// AppendAudit inserts an audit row (zero TS = now).
+	AppendAudit(ctx context.Context, e AuditEvent) error
+	// ListAudit pages audit rows newest-first (keyset: beforeID, 0 = newest; userID 0 = all).
+	ListAudit(ctx context.Context, beforeID int64, limit int, userID int64) ([]AuditEvent, error)
 	Close() error
 }
