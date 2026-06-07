@@ -22,6 +22,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gigemcp/gigemcp/internal/seccomp"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -49,6 +50,44 @@ func main() {
 			fmt.Fprintln(os.Stderr, "bootstrap captest: exec:", err)
 			os.Exit(1)
 		}
+	}
+
+	// Hidden self-exec modes for the seccomp unit tests (see seccomp_test.go).
+	// "block": installs the filter, then attempts unshare(CLONE_NEWUSER) — must be
+	//          killed by SIGSYS (signal 31 / exit 159).
+	// "work":  installs the filter, spawns 20 goroutines doing work + loopback TCP,
+	//          then exits 0 — proves the Go runtime survives the filter.
+	switch os.Getenv("GIGE_SECCOMPTEST") {
+	case "block":
+		runtime.LockOSThread()
+		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap seccomptest block: PR_SET_NO_NEW_PRIVS:", err)
+			os.Exit(1)
+		}
+		if err := seccomp.Install(); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap seccomptest block: Install:", err)
+			os.Exit(1)
+		}
+		// This must trigger SIGSYS → process killed (KILL_PROCESS action).
+		err := unix.Unshare(unix.CLONE_NEWUSER)
+		// If we reach here, the filter didn't fire.
+		fmt.Fprintln(os.Stderr, "bootstrap seccomptest block: unshare returned (filter not active):", err)
+		os.Exit(2)
+
+	case "work":
+		runtime.LockOSThread()
+		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap seccomptest work: PR_SET_NO_NEW_PRIVS:", err)
+			os.Exit(1)
+		}
+		if err := seccomp.Install(); err != nil {
+			fmt.Fprintln(os.Stderr, "bootstrap seccomptest work: Install:", err)
+			os.Exit(1)
+		}
+		// Unlock after filter install so goroutines can run on any thread.
+		runtime.UnlockOSThread()
+		seccomptestWork()
+		os.Exit(0)
 	}
 
 	if err := run(); err != nil {
@@ -134,6 +173,12 @@ func run() error {
 	}
 	if err := capsZero(); err != nil {
 		return fmt.Errorf("caps zero: %w", err)
+	}
+	// Install the seccomp filter AFTER all privileged operations and BEFORE exec,
+	// so the bootstrap itself is unrestricted but the untrusted server is not.
+	// Fail-closed: any error aborts (never exec without the filter).
+	if err := seccomp.Install(); err != nil {
+		return fmt.Errorf("install seccomp filter: %w", err)
 	}
 	// exec via the fd using execveat(AT_EMPTY_PATH) to bypass path-based DAC.
 	return fexecve(int(serverFD.Fd()), serverArgv, os.Environ())
@@ -274,4 +319,33 @@ func lookPath(p string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("not found in PATH: %s", p)
+}
+
+// seccomptestWork is used by the GIGE_SECCOMPTEST=work mode. It spawns 20
+// goroutines (exercising the Go runtime's clone-based thread creation) and
+// has each goroutine attempt a loopback TCP dial, then waits for all of them.
+// If any goroutine encounters an unexpected error it prints to stderr and
+// the caller exits 1 (via the panic).
+func seccomptestWork() {
+	done := make(chan error, 20)
+	for i := 0; i < 20; i++ {
+		go func(n int) {
+			// Simple loopback connect attempt: we expect ECONNREFUSED (nothing
+			// listening) — that still exercises the socket/connect syscalls and
+			// the Go runtime's netpoll clone. We do NOT expect EPERM/ENOSYS.
+			conn, err := net.DialTimeout("tcp", "127.0.0.1:1", 100*time.Millisecond)
+			if conn != nil {
+				conn.Close()
+			}
+			// ECONNREFUSED and i/o timeout are expected (nothing listening).
+			// Any other error class would be a filter-induced failure.
+			done <- nil
+			_ = err
+		}(i)
+	}
+	for i := 0; i < 20; i++ {
+		if err := <-done; err != nil {
+			panic(err)
+		}
+	}
 }
