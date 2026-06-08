@@ -1,0 +1,84 @@
+{
+  "title": "Apps",
+  "description": "Installierte Integrationen für deine Profile.",
+  "uncategorized": "Integration",
+  "readOnlyTooltip": "Schreibgeschützt bei Ansicht als anderer Benutzer",
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "API-Schlüssel",
+    "basic": "Basic-Auth",
+    "custom_env": "Benutzerdefiniert",
+    "none": "Kein Setup"
+  },
+  "action": {
+    "manage": "Verwalten",
+    "addKey": "Schlüssel hinzufügen",
+    "addToProfile": "Zum Profil hinzufügen",
+    "connectComingSoon": "Verbinden (bald)"
+  },
+  "empty": {
+    "title": "Noch keine Apps installiert"
+  },
+  "install": {
+    "button": "App installieren",
+    "dialogTitle": "App installieren",
+    "dialogDescription": "Wähle eine App aus dem Registry-Katalog oder installiere per Ref.",
+    "searchPlaceholder": "Apps suchen…",
+    "noResults": "Keine Apps gefunden.",
+    "emptyCatalog": "Der Registry-Katalog ist leer.",
+    "installedBadge": "Installiert",
+    "confirmInstall": "{name} installieren",
+    "byRefToggle": "Stattdessen per Ref installieren",
+    "refLabel": "App-Ref",
+    "refPlaceholder": "name@version oder sha256:digest",
+    "submit": "Installieren",
+    "submitting": "Wird installiert…",
+    "success": "App \"{name}\" installiert",
+    "error": "Installation fehlgeschlagen",
+    "registryDisabled": {
+      "title": "Keine Registry konfiguriert",
+      "description": "Für diesen Gateway ist keine App-Registry konfiguriert. Du kannst trotzdem per Ref installieren."
+    },
+    "registryUnavailable": {
+      "title": "Die Registry konnte nicht erreicht werden.",
+      "retry": "Erneut versuchen"
+    }
+  },
+  "detail": {
+    "back": "Apps",
+    "version": "Version {version}",
+    "connect": {
+      "title": "Konto verbinden",
+      "apiKeyDescription": "Gib deine Zugangsdaten ein. Sie werden verschlüsselt und am Egress-Proxy injiziert — die Sandbox-App sieht sie nie.",
+      "secretLabel": "Secret",
+      "secretPlaceholder": "Secret hier einfügen…",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "connected": "Verbunden",
+      "noSetupTitle": "Kein Setup erforderlich",
+      "noSetupDescription": "Diese App benötigt keine Zugangsdaten. Füge sie einfach einem Profil hinzu.",
+      "oauthTitle": "Mit OAuth verbinden",
+      "oauthComingSoon": "OAuth-Verbindung kommt bald.",
+      "saved": "{name} verbunden",
+      "saveFailed": "Zugangsdaten konnten nicht gespeichert werden"
+    },
+    "network": {
+      "title": "Netzwerkzugriff",
+      "enforced": "erzwungen",
+      "intro": "Diese App darf nur folgende Ziele erreichen:",
+      "noHosts": "Diese App hat keinen deklarierten Netzwerkzugriff.",
+      "injectionNote": "Dein Token wird am Proxy injiziert — die Sandbox-App sieht ihn nie."
+    },
+    "tools": {
+      "title": "Verfügbare Tools ({count})",
+      "empty": "Diese App deklariert keine Tools."
+    },
+    "profiles": {
+      "title": "In Profilen verwenden",
+      "empty": "Du hast noch keine Profile.",
+      "saved": "Profil \"{name}\" aktualisiert",
+      "saveFailed": "Profil konnte nicht aktualisiert werden"
+    },
+    "notFound": "App nicht gefunden."
+  }
+}

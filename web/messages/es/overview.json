@@ -1,0 +1,53 @@
+{
+  "title": "Resumen",
+  "welcome": "Bienvenido, {name}",
+  "description": "Tu plano de control de Gig'MCP de un vistazo.",
+  "placeholder": "—",
+  "stats": {
+    "toolCalls": "Llamadas a herramientas",
+    "apps": "Aplicaciones",
+    "connected": "Conectados",
+    "profiles": "Perfiles"
+  },
+  "heatmap": {
+    "title": "Actividad",
+    "cell": "{date}: {count, plural, one {# evento} other {# eventos}}"
+  },
+  "activity": {
+    "title": "Actividad reciente",
+    "empty": "Sin actividad aún.",
+    "columns": {
+      "time": "Hora",
+      "kind": "Tipo",
+      "server": "Servidor",
+      "host": "Host",
+      "decision": "Decisión",
+      "detail": "Detalle"
+    }
+  },
+  "suggested": {
+    "title": "Aplicaciones sugeridas",
+    "empty": "No hay sugerencias por ahora."
+  },
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "Clave API",
+    "basic": "Auth básica",
+    "custom_env": "Personalizado",
+    "none": "Sin configuración"
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Permitido",
+    "deny": "Denegado",
+    "denied": "Denegado",
+    "resolved": "Resuelto",
+    "error": "Error",
+    "login": "Inicio de sesión",
+    "logout": "Cierre de sesión"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "title": "Account collegati",
+  "description": "Le tue connessioni tramite chiave API e auth di base. I segreti sono in sola scrittura e vengono iniettati al proxy di egress — l'app in sandbox non li vede mai.",
+  "add": "Aggiungi connessione",
+  "readOnlyTooltip": "Sola lettura mentre si visualizza come un altro utente",
+  "table": {
+    "server": "App",
+    "injectHeader": "Header iniettato",
+    "allowedHosts": "Host consentiti",
+    "actions": "Azioni",
+    "hostCount": "{count, plural, one {# host} other {# host}}",
+    "none": "—"
+  },
+  "actions": {
+    "update": "Aggiorna",
+    "delete": "Disconnetti"
+  },
+  "empty": {
+    "description": "Nessun account collegato. Connetti un'app dalla sua pagina di dettaglio."
+  },
+  "deleteDialog": {
+    "title": "Disconnettere \"{server}\"?",
+    "description": "Il segreto memorizzato verrà rimosso definitivamente.",
+    "confirm": "Disconnetti"
+  },
+  "dialog": {
+    "addTitle": "Aggiungi connessione",
+    "updateTitle": "Aggiorna connessione — {server}",
+    "description": "I segreti sono in sola scrittura. Il salvataggio sostituisce il segreto esistente; nulla viene mai visualizzato.",
+    "save": "Salva connessione",
+    "saving": "Salvataggio…"
+  },
+  "form": {
+    "server": {
+      "label": "Nome app",
+      "placeholder": "es. stripe",
+      "hint": "Pattern: <code>{pattern}</code>"
+    },
+    "secret": {
+      "label": "Segreto",
+      "placeholder": "Incolla qui il tuo segreto…"
+    },
+    "advanced": {
+      "toggle": "Avanzate (transitorio)",
+      "note": "Questi campi saranno in seguito ricavati dal manifest."
+    },
+    "injectHeader": {
+      "label": "Header iniettato",
+      "placeholder": "Authorization",
+      "hint": "Pattern: <code>{pattern}</code>, max 64 caratteri."
+    },
+    "injectFormat": {
+      "label": "Formato iniezione",
+      "placeholder": "Bearer '{token}'",
+      "hint": "Deve contenere <code>'{token}'</code>, max 256 caratteri."
+    },
+    "placeholder": {
+      "label": "Segnaposto",
+      "placeholder": "REPLACE_ME",
+      "hint": "8–256 caratteri."
+    },
+    "allowedHosts": {
+      "label": "Host consentiti",
+      "placeholder": "api.example.com\n*.other.com",
+      "hint": "Un host per riga (o separati da virgola). Fino a 253 caratteri ciascuno, pattern <code>{pattern}</code>."
+    }
+  },
+  "toast": {
+    "saved": "Connessione per \"{server}\" salvata",
+    "deleted": "Connessione per \"{server}\" disconnessa",
+    "deleteFailed": "Disconnessione non riuscita"
+  },
+  "errors": {
+    "saveFailed": "Salvataggio della connessione non riuscito"
+  }
+}

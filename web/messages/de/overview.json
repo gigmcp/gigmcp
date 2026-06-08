@@ -1,0 +1,53 @@
+{
+  "title": "Übersicht",
+  "welcome": "Willkommen, {name}",
+  "description": "Deine Gig'MCP Control Plane auf einen Blick.",
+  "placeholder": "—",
+  "stats": {
+    "toolCalls": "Tool-Aufrufe",
+    "apps": "Apps",
+    "connected": "Verbunden",
+    "profiles": "Profile"
+  },
+  "heatmap": {
+    "title": "Aktivität",
+    "cell": "{date}: {count, plural, one {# Ereignis} other {# Ereignisse}}"
+  },
+  "activity": {
+    "title": "Letzte Aktivitäten",
+    "empty": "Noch keine Aktivitäten.",
+    "columns": {
+      "time": "Zeit",
+      "kind": "Kategorie",
+      "server": "Server",
+      "host": "Host",
+      "decision": "Entscheidung",
+      "detail": "Detail"
+    }
+  },
+  "suggested": {
+    "title": "Vorgeschlagene Apps",
+    "empty": "Derzeit keine Vorschläge."
+  },
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "API-Schlüssel",
+    "basic": "Basic-Auth",
+    "custom_env": "Benutzerdefiniert",
+    "none": "Kein Setup"
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Erlaubt",
+    "deny": "Abgelehnt",
+    "denied": "Verweigert",
+    "resolved": "Aufgelöst",
+    "error": "Fehler",
+    "login": "Anmeldung",
+    "logout": "Abmeldung"
+  }
+}

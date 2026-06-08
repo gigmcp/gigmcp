@@ -1,0 +1,37 @@
+{
+  "title": "Utilisateurs",
+  "description": "Tous les utilisateurs enregistrés. Écran réservé aux administrateurs.",
+  "adminOnly": {
+    "title": "Administrateurs uniquement",
+    "description": "Vous avez besoin d'un compte administrateur pour accéder à cette page."
+  },
+  "table": {
+    "id": "ID",
+    "email": "E-mail",
+    "displayName": "Nom d'affichage",
+    "role": "Rôle",
+    "actions": "Actions",
+    "noValue": "—"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "Utilisateur"
+  },
+  "empty": "Aucun utilisateur trouvé.",
+  "actions": {
+    "impersonate": "Usurper",
+    "stopViewing": "Arrêter",
+    "stopping": "Arrêt…"
+  },
+  "dialog": {
+    "title": "Afficher en tant que {name}",
+    "description": "Vous verrez le dashboard comme cet utilisateur. Toutes les modifications sont bloquées lors de la consultation en tant qu'un autre utilisateur.",
+    "ttlLabel": "Durée (minutes, max 60)",
+    "submit": "Afficher en tant que cet utilisateur",
+    "starting": "Démarrage…"
+  },
+  "toast": {
+    "viewingAs": "Affichage en tant que {email}",
+    "impersonationFailed": "Échec de l'usurpation"
+  }
+}

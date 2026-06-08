@@ -1,0 +1,84 @@
+{
+  "title": "Applications",
+  "description": "Intégrations installées disponibles pour vos profils.",
+  "uncategorized": "Intégration",
+  "readOnlyTooltip": "Lecture seule lors de la consultation en tant qu'un autre utilisateur",
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "Clé API",
+    "basic": "Auth basique",
+    "custom_env": "Personnalisé",
+    "none": "Aucune configuration"
+  },
+  "action": {
+    "manage": "Gérer",
+    "addKey": "Ajouter une clé",
+    "addToProfile": "Ajouter au profil",
+    "connectComingSoon": "Connexion (bientôt)"
+  },
+  "empty": {
+    "title": "Aucune application installée"
+  },
+  "install": {
+    "button": "Installer une application",
+    "dialogTitle": "Installer une application",
+    "dialogDescription": "Choisissez une application dans le catalogue du registre ou installez par référence.",
+    "searchPlaceholder": "Rechercher des applications…",
+    "noResults": "Aucune application ne correspond à votre recherche.",
+    "emptyCatalog": "Le catalogue du registre est vide.",
+    "installedBadge": "Installé",
+    "confirmInstall": "Installer {name}",
+    "byRefToggle": "Installer par référence à la place",
+    "refLabel": "Référence de l'application",
+    "refPlaceholder": "nom@version ou sha256:digest",
+    "submit": "Installer",
+    "submitting": "Installation en cours…",
+    "success": "Application \"{name}\" installée",
+    "error": "Échec de l'installation",
+    "registryDisabled": {
+      "title": "Aucun registre configuré",
+      "description": "Cette passerelle n'a pas de registre d'applications configuré. Vous pouvez toujours installer par référence ci-dessous."
+    },
+    "registryUnavailable": {
+      "title": "Le registre n'a pas pu être atteint.",
+      "retry": "Réessayer"
+    }
+  },
+  "detail": {
+    "back": "Applications",
+    "version": "Version {version}",
+    "connect": {
+      "title": "Connecter votre compte",
+      "apiKeyDescription": "Saisissez vos identifiants. Ils sont chiffrés et injectés au proxy d'egress — l'application en bac à sable ne les voit jamais.",
+      "secretLabel": "Secret",
+      "secretPlaceholder": "Collez votre secret…",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "connected": "Connecté",
+      "noSetupTitle": "Aucune configuration requise",
+      "noSetupDescription": "Cette application n'a pas besoin d'identifiants. Ajoutez-la simplement à un profil.",
+      "oauthTitle": "Connexion avec OAuth",
+      "oauthComingSoon": "La connexion OAuth arrive bientôt.",
+      "saved": "{name} connecté",
+      "saveFailed": "Impossible d'enregistrer vos identifiants"
+    },
+    "network": {
+      "title": "Accès réseau",
+      "enforced": "appliqué",
+      "intro": "Cette application ne peut atteindre que :",
+      "noHosts": "Cette application n'a aucun accès réseau déclaré.",
+      "injectionNote": "Votre token est injecté au proxy — l'application en bac à sable ne le voit jamais."
+    },
+    "tools": {
+      "title": "Outils disponibles ({count})",
+      "empty": "Cette application ne déclare aucun outil."
+    },
+    "profiles": {
+      "title": "Utiliser dans les profils",
+      "empty": "Vous n'avez pas encore de profils.",
+      "saved": "Profil \"{name}\" mis à jour",
+      "saveFailed": "Impossible de mettre à jour le profil"
+    },
+    "notFound": "Application introuvable."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  // components/ui/** are shadcn-generated library files; their full export surface (incl. unused variants) is intentional.
+  "ignoreExports": [{ "file": "components/ui/**", "exports": ["*"] }],
+  // The only clone group is a shared import block across pages — sorted imports are meaningless duplication.
+  "duplicates": { "ignoreImports": true }
+}

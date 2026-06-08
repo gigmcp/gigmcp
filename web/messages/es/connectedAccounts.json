@@ -1,0 +1,76 @@
+{
+  "title": "Cuentas conectadas",
+  "description": "Tus conexiones por clave API y auth básica. Los secretos son de solo escritura y se inyectan en el proxy de egreso — la aplicación en sandbox nunca los ve.",
+  "add": "Añadir conexión",
+  "readOnlyTooltip": "Solo lectura mientras se visualiza como otro usuario",
+  "table": {
+    "server": "Aplicación",
+    "injectHeader": "Cabecera inyectada",
+    "allowedHosts": "Hosts permitidos",
+    "actions": "Acciones",
+    "hostCount": "{count, plural, one {# host} other {# hosts}}",
+    "none": "—"
+  },
+  "actions": {
+    "update": "Actualizar",
+    "delete": "Desconectar"
+  },
+  "empty": {
+    "description": "No hay cuentas conectadas aún. Conecta una aplicación desde su página de detalle."
+  },
+  "deleteDialog": {
+    "title": "¿Desconectar \"{server}\"?",
+    "description": "El secreto almacenado se eliminará de forma permanente.",
+    "confirm": "Desconectar"
+  },
+  "dialog": {
+    "addTitle": "Añadir conexión",
+    "updateTitle": "Actualizar conexión — {server}",
+    "description": "Los secretos son de solo escritura. Al guardar se reemplaza el secreto existente; nunca se muestra nada.",
+    "save": "Guardar conexión",
+    "saving": "Guardando…"
+  },
+  "form": {
+    "server": {
+      "label": "Nombre de la aplicación",
+      "placeholder": "ej. stripe",
+      "hint": "Patrón: <code>{pattern}</code>"
+    },
+    "secret": {
+      "label": "Secreto",
+      "placeholder": "Pega tu secreto aquí…"
+    },
+    "advanced": {
+      "toggle": "Avanzado (transitorio)",
+      "note": "Estos campos se obtendrán del manifiesto más adelante."
+    },
+    "injectHeader": {
+      "label": "Cabecera inyectada",
+      "placeholder": "Authorization",
+      "hint": "Patrón: <code>{pattern}</code>, máx. 64 caracteres."
+    },
+    "injectFormat": {
+      "label": "Formato de inyección",
+      "placeholder": "Bearer '{token}'",
+      "hint": "Debe contener <code>'{token}'</code>, máx. 256 caracteres."
+    },
+    "placeholder": {
+      "label": "Marcador de posición",
+      "placeholder": "REPLACE_ME",
+      "hint": "8–256 caracteres."
+    },
+    "allowedHosts": {
+      "label": "Hosts permitidos",
+      "placeholder": "api.example.com\n*.other.com",
+      "hint": "Un host por línea (o separados por comas). Hasta 253 caracteres cada uno, patrón <code>{pattern}</code>."
+    }
+  },
+  "toast": {
+    "saved": "Conexión para \"{server}\" guardada",
+    "deleted": "Conexión para \"{server}\" desconectada",
+    "deleteFailed": "Error al desconectar"
+  },
+  "errors": {
+    "saveFailed": "Error al guardar la conexión"
+  }
+}

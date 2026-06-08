@@ -1,0 +1,37 @@
+{
+  "title": "Utenti",
+  "description": "Tutti gli utenti registrati. Schermata riservata agli amministratori.",
+  "adminOnly": {
+    "title": "Solo amministratori",
+    "description": "È necessario un account amministratore per visualizzare questa pagina."
+  },
+  "table": {
+    "id": "ID",
+    "email": "Email",
+    "displayName": "Nome visualizzato",
+    "role": "Ruolo",
+    "actions": "Azioni",
+    "noValue": "—"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "Utente"
+  },
+  "empty": "Nessun utente trovato.",
+  "actions": {
+    "impersonate": "Impersona",
+    "stopViewing": "Interrompi visualizzazione",
+    "stopping": "Interruzione…"
+  },
+  "dialog": {
+    "title": "Visualizza come {name}",
+    "description": "Vedrai il dashboard come questo utente. Tutte le modifiche sono bloccate durante la visualizzazione come un altro utente.",
+    "ttlLabel": "Durata (minuti, max 60)",
+    "submit": "Visualizza come utente",
+    "starting": "Avvio…"
+  },
+  "toast": {
+    "viewingAs": "Stai visualizzando come {email}",
+    "impersonationFailed": "Impersonazione non riuscita"
+  }
+}

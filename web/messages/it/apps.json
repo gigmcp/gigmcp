@@ -1,0 +1,84 @@
+{
+  "title": "App",
+  "description": "Integrazioni installate disponibili per i tuoi profili.",
+  "uncategorized": "Integrazione",
+  "readOnlyTooltip": "Sola lettura mentre si visualizza come un altro utente",
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "Chiave API",
+    "basic": "Auth di base",
+    "custom_env": "Personalizzato",
+    "none": "Nessuna configurazione"
+  },
+  "action": {
+    "manage": "Gestisci",
+    "addKey": "Aggiungi chiave",
+    "addToProfile": "Aggiungi al profilo",
+    "connectComingSoon": "Connetti (in arrivo)"
+  },
+  "empty": {
+    "title": "Nessuna app installata"
+  },
+  "install": {
+    "button": "Installa app",
+    "dialogTitle": "Installa app",
+    "dialogDescription": "Scegli un'app dal catalogo del registro o installa tramite ref.",
+    "searchPlaceholder": "Cerca app…",
+    "noResults": "Nessuna app corrisponde alla ricerca.",
+    "emptyCatalog": "Il catalogo del registro è vuoto.",
+    "installedBadge": "Installato",
+    "confirmInstall": "Installa {name}",
+    "byRefToggle": "Installa tramite ref invece",
+    "refLabel": "Ref dell'app",
+    "refPlaceholder": "nome@versione o sha256:digest",
+    "submit": "Installa",
+    "submitting": "Installazione in corso…",
+    "success": "App \"{name}\" installata",
+    "error": "Installazione non riuscita",
+    "registryDisabled": {
+      "title": "Nessun registro configurato",
+      "description": "Questo gateway non ha un registro app configurato. Puoi comunque installare tramite ref qui sotto."
+    },
+    "registryUnavailable": {
+      "title": "Impossibile raggiungere il registro.",
+      "retry": "Riprova"
+    }
+  },
+  "detail": {
+    "back": "App",
+    "version": "Versione {version}",
+    "connect": {
+      "title": "Connetti il tuo account",
+      "apiKeyDescription": "Inserisci le tue credenziali. Vengono cifrate e iniettate al proxy di egress — l'app in sandbox non le vede mai.",
+      "secretLabel": "Segreto",
+      "secretPlaceholder": "Incolla il tuo segreto…",
+      "save": "Salva",
+      "saving": "Salvataggio…",
+      "connected": "Connesso",
+      "noSetupTitle": "Nessuna configurazione necessaria",
+      "noSetupDescription": "Questa app non richiede credenziali. Aggiungila semplicemente a un profilo.",
+      "oauthTitle": "Connetti con OAuth",
+      "oauthComingSoon": "La connessione OAuth è in arrivo.",
+      "saved": "{name} connesso",
+      "saveFailed": "Impossibile salvare le credenziali"
+    },
+    "network": {
+      "title": "Accesso alla rete",
+      "enforced": "applicato",
+      "intro": "Questa app può raggiungere solo:",
+      "noHosts": "Questa app non ha accesso di rete dichiarato.",
+      "injectionNote": "Il tuo token viene iniettato al proxy — l'app in sandbox non lo vede mai."
+    },
+    "tools": {
+      "title": "Strumenti disponibili ({count})",
+      "empty": "Questa app non dichiara strumenti."
+    },
+    "profiles": {
+      "title": "Usa nei profili",
+      "empty": "Non hai ancora profili.",
+      "saved": "Profilo \"{name}\" aggiornato",
+      "saveFailed": "Impossibile aggiornare il profilo"
+    },
+    "notFound": "App non trovata."
+  }
+}

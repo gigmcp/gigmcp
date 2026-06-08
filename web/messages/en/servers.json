@@ -1,0 +1,46 @@
+{
+  "title": "Servers",
+  "description": "Installed MCP servers available for profiles.",
+  "readOnlyTooltip": "Read-only while viewing as another user",
+  "table": {
+    "id": "ID",
+    "name": "Name",
+    "actions": "Actions"
+  },
+  "install": {
+    "button": "Install server",
+    "dialogTitle": "Install server",
+    "dialogDescription": "Pick a server from the registry catalog, or install by ref.",
+    "searchPlaceholder": "Search servers…",
+    "noResults": "No servers match your search.",
+    "emptyCatalog": "The registry catalog is empty.",
+    "installedBadge": "Installed",
+    "confirmInstall": "Install {name}",
+    "byRefToggle": "Install by ref instead",
+    "refLabel": "Server ref",
+    "refPlaceholder": "name@version or sha256:digest",
+    "submit": "Install",
+    "submitting": "Installing…",
+    "success": "Installed server \"{name}\"",
+    "error": "Install failed",
+    "registryDisabled": {
+      "title": "No registry configured",
+      "description": "This gateway has no server registry configured. You can still install by ref below."
+    },
+    "registryUnavailable": {
+      "title": "The registry could not be reached.",
+      "retry": "Retry"
+    }
+  },
+  "uninstall": {
+    "button": "Uninstall",
+    "confirmTitle": "Uninstall \"{name}\"?",
+    "confirmDescription": "This will remove the server from all profiles that reference it.",
+    "confirmLabel": "Uninstall",
+    "success": "Uninstalled server \"{name}\"",
+    "error": "Uninstall failed"
+  },
+  "empty": {
+    "title": "No servers installed yet"
+  }
+}

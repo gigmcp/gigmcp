@@ -1,0 +1,24 @@
+{
+  "title": "Auth-Konfigurationen",
+  "subtitle": "OAuth-Client-Zugangsdaten für Anbieter. Verwaltete Anbieter nutzen unsere verifizierten Apps; BYO-Anbieter nutzen Ihr eigenes OAuth-Projekt.",
+  "vendor": "Anbieter (z.B. google)",
+  "modeByo": "Eigene verwenden",
+  "modeManaged": "Verwaltet",
+  "authorizeUrl": "Autorisierungs-URL",
+  "tokenUrl": "Token-URL",
+  "clientId": "Client-ID",
+  "clientSecret": "Client-Secret (leer lassen, um das aktuelle beizubehalten)",
+  "defaultScopes": "Standard-Scopes (leerzeichen-getrennt)",
+  "pkce": "PKCE verwenden",
+  "save": "Speichern",
+  "saving": "Wird gespeichert…",
+  "secretSet": "Secret gesetzt",
+  "secretMissing": "kein Secret",
+  "delete": "Löschen",
+  "loading": "Wird geladen…",
+  "empty": "Noch keine Auth-Konfigurationen.",
+  "errors": {
+    "saveFailed": "Auth-Konfiguration konnte nicht gespeichert werden",
+    "deleteFailed": "Auth-Konfiguration konnte nicht gelöscht werden"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "title": "Connected Accounts",
+  "description": "Your API-key and basic-auth connections. Secrets are write-only and injected at the egress proxy — the sandboxed app never sees them.",
+  "add": "Add connection",
+  "readOnlyTooltip": "Read-only while viewing as another user",
+  "table": {
+    "server": "App",
+    "injectHeader": "Inject header",
+    "allowedHosts": "Allowed hosts",
+    "actions": "Actions",
+    "hostCount": "{count, plural, one {# host} other {# hosts}}",
+    "none": "—"
+  },
+  "actions": {
+    "update": "Update",
+    "delete": "Disconnect"
+  },
+  "empty": {
+    "description": "No connected accounts yet. Connect an app from its detail page."
+  },
+  "deleteDialog": {
+    "title": "Disconnect \"{server}\"?",
+    "description": "The stored secret will be permanently removed.",
+    "confirm": "Disconnect"
+  },
+  "dialog": {
+    "addTitle": "Add connection",
+    "updateTitle": "Update connection — {server}",
+    "description": "Secrets are write-only. Saving replaces the existing secret; nothing is ever displayed.",
+    "save": "Save connection",
+    "saving": "Saving…"
+  },
+  "form": {
+    "server": {
+      "label": "App name",
+      "placeholder": "e.g. stripe",
+      "hint": "Pattern: <code>{pattern}</code>"
+    },
+    "secret": {
+      "label": "Secret",
+      "placeholder": "Paste your secret here…"
+    },
+    "advanced": {
+      "toggle": "Advanced (transitional)",
+      "note": "These fields will eventually be sourced from the manifest."
+    },
+    "injectHeader": {
+      "label": "Inject header",
+      "placeholder": "Authorization",
+      "hint": "Pattern: <code>{pattern}</code>, max 64 chars."
+    },
+    "injectFormat": {
+      "label": "Inject format",
+      "placeholder": "Bearer '{token}'",
+      "hint": "Must contain <code>'{token}'</code>, max 256 chars."
+    },
+    "placeholder": {
+      "label": "Placeholder",
+      "placeholder": "REPLACE_ME",
+      "hint": "8–256 chars."
+    },
+    "allowedHosts": {
+      "label": "Allowed hosts",
+      "placeholder": "api.example.com\n*.other.com",
+      "hint": "One host per line (or comma-separated). Each up to 253 chars, pattern <code>{pattern}</code>."
+    }
+  },
+  "toast": {
+    "saved": "Connection for \"{server}\" saved",
+    "deleted": "Connection for \"{server}\" disconnected",
+    "deleteFailed": "Disconnect failed"
+  },
+  "errors": {
+    "saveFailed": "Failed to save connection"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "title": "Benutzer",
+  "description": "Alle registrierten Benutzer. Nur für Admins sichtbar.",
+  "adminOnly": {
+    "title": "Nur für Admins",
+    "description": "Du benötigst ein Admin-Konto, um diese Seite anzuzeigen."
+  },
+  "table": {
+    "id": "ID",
+    "email": "E-Mail",
+    "displayName": "Anzeigename",
+    "role": "Rolle",
+    "actions": "Aktionen",
+    "noValue": "—"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "Benutzer"
+  },
+  "empty": "Keine Benutzer gefunden.",
+  "actions": {
+    "impersonate": "Impersonieren",
+    "stopViewing": "Ansicht beenden",
+    "stopping": "Wird beendet…"
+  },
+  "dialog": {
+    "title": "Ansicht als {name}",
+    "description": "Du siehst das Dashboard aus der Perspektive dieses Benutzers. Alle Änderungen sind während der Impersonation gesperrt.",
+    "ttlLabel": "Dauer (Minuten, max. 60)",
+    "submit": "Als Benutzer anzeigen",
+    "starting": "Wird gestartet…"
+  },
+  "toast": {
+    "viewingAs": "Ansicht als {email}",
+    "impersonationFailed": "Impersonation fehlgeschlagen"
+  }
+}

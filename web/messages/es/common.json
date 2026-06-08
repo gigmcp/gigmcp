@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "overview": "Resumen",
+    "apps": "Aplicaciones",
+    "profiles": "Perfiles",
+    "connectedAccounts": "Cuentas conectadas",
+    "users": "Usuarios",
+    "authConfigs": "Configuraciones de autenticación",
+    "audit": "Auditoría"
+  },
+  "signOut": "Cerrar sesión",
+  "theme": {
+    "label": "Tema",
+    "system": "Sistema",
+    "light": "Claro",
+    "dark": "Oscuro"
+  },
+  "language": {
+    "label": "Idioma"
+  },
+  "impersonation": {
+    "viewingAs": "Viendo como <strong>{user}</strong> (eres {realUser}). Todos los cambios están bloqueados durante la suplantación.",
+    "stop": "Detener"
+  },
+  "table": {
+    "empty": "Sin datos."
+  },
+  "dialog": {
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "delete": "Eliminar",
+    "working": "Procesando…"
+  },
+  "token": {
+    "title": "Tu token",
+    "description": "Copia tu token ahora. <strong>No</strong> se volverá a mostrar.",
+    "copy": "Copiar token",
+    "copied": "¡Copiado!",
+    "copiedToast": "Token copiado al portapapeles",
+    "confirm": "He copiado mi token"
+  },
+  "loading": "Cargando…",
+  "error": "Algo salió mal",
+  "readOnly": "Solo lectura durante la suplantación"
+}

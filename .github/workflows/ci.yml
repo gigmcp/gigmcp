@@ -1,0 +1,130 @@
+# CI for the Gig'MCP gateway (Go), dashboard (Next.js), and Docker images.
+#
+# Layout note: the registry schema is consumed as a published Go module
+# (github.com/gigmcp/registry/schema, pinned in go.mod), so every job runs
+# against a single checkout of this repo at the workspace root.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      # Sandbox/e2e tests gate on sandbox.Available() == linux && bwrap on
+      # PATH. They need NET_ADMIN/root privileges the runner user does not
+      # have, so if the image ever ships bubblewrap they would FAIL instead of
+      # skip. Remove it here so they skip deterministically; the e2e job runs
+      # them inside Docker with the required privileges.
+      - name: Ensure bwrap absent so privileged sandbox tests self-skip
+        run: |
+          if command -v bwrap >/dev/null 2>&1; then
+            sudo apt-get remove -y bubblewrap
+          fi
+      - name: gofmt
+        run: |
+          files=$(git ls-files '*.go' | xargs gofmt -l)
+          if [ -n "$files" ]; then
+            echo "gofmt needed on:" >&2
+            echo "$files" >&2
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json # reads "packageManager" for the version
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        working-directory: web
+        run: pnpm exec tsc --noEmit
+      - name: Lint
+        working-directory: web
+        run: pnpm run lint
+      # Guards message-key + ICU-placeholder parity across all locales so a
+      # dropped key or mangled {placeholder} fails CI instead of throwing at
+      # render time. Runs standalone too (in addition to being part of lint).
+      - name: i18n parity
+        working-directory: web
+        run: pnpm run test:i18n
+      - name: Build
+        working-directory: web
+        env:
+          # Build-time only: next.config.ts bakes this into the /api and /mcp
+          # rewrites. Any syntactically valid URL works for a CI smoke build —
+          # nothing is contacted during `next build`.
+          GATEWAY_INTERNAL_URL: http://gateway.invalid:8080
+        run: pnpm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      # Build-only smoke test (no push). The schema module is fetched from the
+      # Go module proxy during `go mod download`, so the repo context suffices.
+      - name: Build gateway image
+        run: docker buildx build .
+      - name: Build web image
+        # GATEWAY_INTERNAL_URL build arg has an in-Dockerfile default; set it
+        # explicitly anyway so the smoke build is self-describing.
+        run: docker buildx build --build-arg GATEWAY_INTERNAL_URL=http://gateway.invalid:8080 ./web
+
+  # Full sandbox suite (bwrap + veth/NET_ADMIN + seccomp tests) via `make test`,
+  # which runs go test inside a Docker container with seccomp/apparmor
+  # unconfined and NET_ADMIN — same as local dev.
+  #
+  # BLOCKING: a hosted-runner run (30c7d32) proved the full sandbox suite
+  # executes after the sysctl relaxation below, so failures here are real.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      # Ubuntu 24.04 restricts unprivileged user namespaces by default; relax
+      # the sysctls so bwrap inside the unconfined dev container can create
+      # them. Best-effort — the job is non-blocking either way.
+      - name: Allow unprivileged user namespaces
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+      - name: make test (full suite in Docker)
+        run: make test

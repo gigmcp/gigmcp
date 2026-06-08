@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "apps": "Apps",
+    "profiles": "Profiles",
+    "connectedAccounts": "Connected Accounts",
+    "users": "Users",
+    "authConfigs": "Auth Configs",
+    "audit": "Audit"
+  },
+  "signOut": "Sign out",
+  "theme": {
+    "label": "Theme",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "impersonation": {
+    "viewingAs": "Viewing as <strong>{user}</strong> (you are {realUser}). All changes are blocked while impersonating.",
+    "stop": "Stop"
+  },
+  "table": {
+    "empty": "No data."
+  },
+  "dialog": {
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "working": "Working…"
+  },
+  "token": {
+    "title": "Your token",
+    "description": "Copy your token now. It will <strong>not</strong> be shown again.",
+    "copy": "Copy token",
+    "copied": "Copied!",
+    "copiedToast": "Token copied to clipboard",
+    "confirm": "I have copied my token"
+  },
+  "loading": "Loading…",
+  "error": "Something went wrong",
+  "readOnly": "Read-only while impersonating"
+}

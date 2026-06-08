@@ -1,0 +1,24 @@
+{
+  "title": "Auth Configs",
+  "subtitle": "OAuth vendor client credentials. Managed vendors use our verified apps; BYO vendors use your own OAuth project.",
+  "vendor": "Vendor (e.g. google)",
+  "modeByo": "Bring your own",
+  "modeManaged": "Managed",
+  "authorizeUrl": "Authorize URL",
+  "tokenUrl": "Token URL",
+  "clientId": "Client ID",
+  "clientSecret": "Client secret (leave blank to keep current)",
+  "defaultScopes": "Default scopes (space-separated)",
+  "pkce": "Use PKCE",
+  "save": "Save",
+  "saving": "Saving…",
+  "secretSet": "secret set",
+  "secretMissing": "no secret",
+  "delete": "Delete",
+  "loading": "Loading…",
+  "empty": "No auth configs yet.",
+  "errors": {
+    "saveFailed": "Failed to save auth config",
+    "deleteFailed": "Failed to delete auth config"
+  }
+}

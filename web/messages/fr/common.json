@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "overview": "Aperçu",
+    "apps": "Applications",
+    "profiles": "Profils",
+    "connectedAccounts": "Comptes connectés",
+    "users": "Utilisateurs",
+    "authConfigs": "Configurations d'authentification",
+    "audit": "Audit"
+  },
+  "signOut": "Se déconnecter",
+  "theme": {
+    "label": "Thème",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "language": {
+    "label": "Langue"
+  },
+  "impersonation": {
+    "viewingAs": "Affichage en tant que <strong>{user}</strong> (vous êtes {realUser}). Toutes les modifications sont bloquées pendant l'usurpation.",
+    "stop": "Arrêter"
+  },
+  "table": {
+    "empty": "Aucune donnée."
+  },
+  "dialog": {
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "delete": "Supprimer",
+    "working": "En cours…"
+  },
+  "token": {
+    "title": "Votre token",
+    "description": "Copiez votre token maintenant. Il ne sera <strong>pas</strong> affiché à nouveau.",
+    "copy": "Copier le token",
+    "copied": "Copié !",
+    "copiedToast": "Token copié dans le presse-papiers",
+    "confirm": "J'ai copié mon token"
+  },
+  "loading": "Chargement…",
+  "error": "Une erreur est survenue",
+  "readOnly": "Lecture seule pendant l'usurpation"
+}

@@ -1,0 +1,46 @@
+{
+  "title": "Serveurs",
+  "description": "Serveurs MCP installés, disponibles pour les profils.",
+  "readOnlyTooltip": "Lecture seule lors de la consultation en tant qu'un autre utilisateur",
+  "table": {
+    "id": "ID",
+    "name": "Nom",
+    "actions": "Actions"
+  },
+  "install": {
+    "button": "Installer un serveur",
+    "dialogTitle": "Installer un serveur",
+    "dialogDescription": "Choisissez un serveur dans le catalogue du registre, ou installez par référence.",
+    "searchPlaceholder": "Rechercher des serveurs…",
+    "noResults": "Aucun serveur ne correspond à votre recherche.",
+    "emptyCatalog": "Le catalogue du registre est vide.",
+    "installedBadge": "Installé",
+    "confirmInstall": "Installer {name}",
+    "byRefToggle": "Installer par référence à la place",
+    "refLabel": "Référence du serveur",
+    "refPlaceholder": "nom@version ou sha256:digest",
+    "submit": "Installer",
+    "submitting": "Installation…",
+    "success": "Serveur « {name} » installé",
+    "error": "Échec de l'installation",
+    "registryDisabled": {
+      "title": "Aucun registre configuré",
+      "description": "Aucun registre de serveurs n'est configuré pour cette passerelle. Vous pouvez toujours installer par référence ci-dessous."
+    },
+    "registryUnavailable": {
+      "title": "Le registre est inaccessible.",
+      "retry": "Réessayer"
+    }
+  },
+  "uninstall": {
+    "button": "Désinstaller",
+    "confirmTitle": "Désinstaller « {name} » ?",
+    "confirmDescription": "Le serveur sera retiré de tous les profils qui l'utilisent.",
+    "confirmLabel": "Désinstaller",
+    "success": "Serveur « {name} » désinstallé",
+    "error": "Échec de la désinstallation"
+  },
+  "empty": {
+    "title": "Aucun serveur installé pour l'instant"
+  }
+}

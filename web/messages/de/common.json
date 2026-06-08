@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "overview": "Übersicht",
+    "apps": "Apps",
+    "profiles": "Profile",
+    "connectedAccounts": "Verbundene Konten",
+    "users": "Benutzer",
+    "authConfigs": "Auth-Konfigurationen",
+    "audit": "Audit"
+  },
+  "signOut": "Abmelden",
+  "theme": {
+    "label": "Design",
+    "system": "System",
+    "light": "Hell",
+    "dark": "Dunkel"
+  },
+  "language": {
+    "label": "Sprache"
+  },
+  "impersonation": {
+    "viewingAs": "Ansicht als <strong>{user}</strong> (angemeldet als {realUser}). Änderungen sind während der Impersonation gesperrt.",
+    "stop": "Beenden"
+  },
+  "table": {
+    "empty": "Keine Daten."
+  },
+  "dialog": {
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "confirm": "Bestätigen",
+    "delete": "Löschen",
+    "working": "Wird ausgeführt…"
+  },
+  "token": {
+    "title": "Dein Token",
+    "description": "Kopiere deinen Token jetzt. Er wird <strong>nicht</strong> erneut angezeigt.",
+    "copy": "Token kopieren",
+    "copied": "Kopiert!",
+    "copiedToast": "Token in die Zwischenablage kopiert",
+    "confirm": "Ich habe meinen Token kopiert"
+  },
+  "loading": "Wird geladen…",
+  "error": "Etwas ist schiefgelaufen",
+  "readOnly": "Schreibgeschützt während der Impersonation"
+}

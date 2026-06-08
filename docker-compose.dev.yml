@@ -1,0 +1,42 @@
+# Dev-only fixture: a local Zitadel IdP for OIDC development and the Task 1
+# spike. NOT for production. Start with:
+#   docker compose -f docker-compose.dev.yml up -d
+# Console: http://localhost:8082/ui/console  (admin / Password1!)
+services:
+  zitadel:
+    # Pinned to v2.71.0 (last v2 release): bundles Console + Login UI (v1) in a
+    # single container. v3/v4 :latest split the login UI into a SEPARATE
+    # login-v2 container, so /ui/v2/login/* 404s and the console can't complete
+    # a login flow (the {"code":5,"message":"Not Found"} the human hit).
+    image: ghcr.io/zitadel/zitadel:v2.71.0
+    command: 'start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled'
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: zitadel-db
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 8082
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: Password1!
+    ports:
+      - "8082:8080"
+    depends_on:
+      zitadel-db:
+        condition: service_healthy
+  zitadel-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

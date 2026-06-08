@@ -1,0 +1,24 @@
+{
+  "title": "Configurations d'authentification",
+  "subtitle": "Identifiants clients OAuth par fournisseur. Les fournisseurs gérés utilisent nos apps vérifiées ; les fournisseurs BYO utilisent votre propre projet OAuth.",
+  "vendor": "Fournisseur (ex. google)",
+  "modeByo": "Vos propres identifiants",
+  "modeManaged": "Géré",
+  "authorizeUrl": "URL d'autorisation",
+  "tokenUrl": "URL de token",
+  "clientId": "ID client",
+  "clientSecret": "Secret client (laisser vide pour conserver l'actuel)",
+  "defaultScopes": "Scopes par défaut (séparés par des espaces)",
+  "pkce": "Utiliser PKCE",
+  "save": "Enregistrer",
+  "saving": "Enregistrement…",
+  "secretSet": "secret défini",
+  "secretMissing": "pas de secret",
+  "delete": "Supprimer",
+  "loading": "Chargement…",
+  "empty": "Aucune configuration d'authentification.",
+  "errors": {
+    "saveFailed": "Échec de l'enregistrement de la configuration d'authentification",
+    "deleteFailed": "Échec de la suppression de la configuration d'authentification"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "title": "Comptes connectés",
+  "description": "Vos connexions par clé API et auth basique. Les secrets sont en écriture seule et injectés au proxy d'egress — l'application en bac à sable ne les voit jamais.",
+  "add": "Ajouter une connexion",
+  "readOnlyTooltip": "Lecture seule lors de la consultation en tant qu'un autre utilisateur",
+  "table": {
+    "server": "Application",
+    "injectHeader": "En-tête injecté",
+    "allowedHosts": "Hôtes autorisés",
+    "actions": "Actions",
+    "hostCount": "{count, plural, one {# hôte} other {# hôtes}}",
+    "none": "—"
+  },
+  "actions": {
+    "update": "Mettre à jour",
+    "delete": "Déconnecter"
+  },
+  "empty": {
+    "description": "Aucun compte connecté pour l'instant. Connectez une application depuis sa page de détail."
+  },
+  "deleteDialog": {
+    "title": "Déconnecter « {server} » ?",
+    "description": "Le secret stocké sera définitivement supprimé.",
+    "confirm": "Déconnecter"
+  },
+  "dialog": {
+    "addTitle": "Ajouter une connexion",
+    "updateTitle": "Mettre à jour la connexion — {server}",
+    "description": "Les secrets sont en écriture seule. L'enregistrement remplace le secret existant ; rien n'est jamais affiché.",
+    "save": "Enregistrer la connexion",
+    "saving": "Enregistrement…"
+  },
+  "form": {
+    "server": {
+      "label": "Nom de l'application",
+      "placeholder": "ex. : stripe",
+      "hint": "Modèle : <code>{pattern}</code>"
+    },
+    "secret": {
+      "label": "Secret",
+      "placeholder": "Collez votre secret ici…"
+    },
+    "advanced": {
+      "toggle": "Avancé (transitoire)",
+      "note": "Ces champs seront à terme récupérés depuis le manifeste."
+    },
+    "injectHeader": {
+      "label": "En-tête injecté",
+      "placeholder": "Authorization",
+      "hint": "Modèle : <code>{pattern}</code>, 64 caractères max."
+    },
+    "injectFormat": {
+      "label": "Format d'injection",
+      "placeholder": "Bearer '{token}'",
+      "hint": "Doit contenir <code>'{token}'</code>, 256 caractères max."
+    },
+    "placeholder": {
+      "label": "Valeur de substitution",
+      "placeholder": "REPLACE_ME",
+      "hint": "8–256 caractères."
+    },
+    "allowedHosts": {
+      "label": "Hôtes autorisés",
+      "placeholder": "api.example.com\n*.other.com",
+      "hint": "Un hôte par ligne (ou séparés par des virgules). Jusqu'à 253 caractères chacun, modèle : <code>{pattern}</code>."
+    }
+  },
+  "toast": {
+    "saved": "Connexion pour « {server} » enregistrée",
+    "deleted": "Connexion pour « {server} » déconnectée",
+    "deleteFailed": "Échec de la déconnexion"
+  },
+  "errors": {
+    "saveFailed": "Impossible d'enregistrer la connexion"
+  }
+}

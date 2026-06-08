@@ -1,0 +1,84 @@
+{
+  "title": "Apps",
+  "description": "Installed integrations available to your profiles.",
+  "uncategorized": "Integration",
+  "readOnlyTooltip": "Read-only while viewing as another user",
+  "authType": {
+    "oauth2": "OAuth",
+    "api_key": "API key",
+    "basic": "Basic auth",
+    "custom_env": "Custom",
+    "none": "No setup"
+  },
+  "action": {
+    "manage": "Manage",
+    "addKey": "Add key",
+    "addToProfile": "Add to profile",
+    "connectComingSoon": "Connect (coming soon)"
+  },
+  "empty": {
+    "title": "No apps installed yet"
+  },
+  "install": {
+    "button": "Install app",
+    "dialogTitle": "Install app",
+    "dialogDescription": "Pick an app from the registry catalog, or install by ref.",
+    "searchPlaceholder": "Search apps…",
+    "noResults": "No apps match your search.",
+    "emptyCatalog": "The registry catalog is empty.",
+    "installedBadge": "Installed",
+    "confirmInstall": "Install {name}",
+    "byRefToggle": "Install by ref instead",
+    "refLabel": "App ref",
+    "refPlaceholder": "name@version or sha256:digest",
+    "submit": "Install",
+    "submitting": "Installing…",
+    "success": "Installed app \"{name}\"",
+    "error": "Install failed",
+    "registryDisabled": {
+      "title": "No registry configured",
+      "description": "This gateway has no app registry configured. You can still install by ref below."
+    },
+    "registryUnavailable": {
+      "title": "The registry could not be reached.",
+      "retry": "Retry"
+    }
+  },
+  "detail": {
+    "back": "Apps",
+    "version": "Version {version}",
+    "connect": {
+      "title": "Connect your account",
+      "apiKeyDescription": "Enter your credential. It is encrypted and injected at the egress proxy — the sandboxed app never sees it.",
+      "secretLabel": "Secret",
+      "secretPlaceholder": "Paste your secret…",
+      "save": "Save",
+      "saving": "Saving…",
+      "connected": "Connected",
+      "noSetupTitle": "No setup needed",
+      "noSetupDescription": "This app needs no credentials. Just add it to a profile.",
+      "oauthTitle": "Connect with OAuth",
+      "oauthComingSoon": "OAuth connect is coming soon.",
+      "saved": "Connected {name}",
+      "saveFailed": "Could not save your credential"
+    },
+    "network": {
+      "title": "Network access",
+      "enforced": "enforced",
+      "intro": "This app may only reach:",
+      "noHosts": "This app has no declared network access.",
+      "injectionNote": "Your token is injected at the proxy — the sandboxed app never sees it."
+    },
+    "tools": {
+      "title": "Available tools ({count})",
+      "empty": "This app declares no tools."
+    },
+    "profiles": {
+      "title": "Use in profiles",
+      "empty": "You have no profiles yet.",
+      "saved": "Updated profile \"{name}\"",
+      "saveFailed": "Could not update profile"
+    },
+    "notFound": "App not found."
+  }
+}

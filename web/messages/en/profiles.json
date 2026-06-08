@@ -1,0 +1,80 @@
+{
+  "readOnlyTooltip": "Read-only while viewing as another user",
+  "list": {
+    "title": "Profiles",
+    "description": "MCP endpoint profiles with bundled server sets.",
+    "columns": {
+      "name": "Name",
+      "slug": "Slug",
+      "endpoint": "Endpoint",
+      "servers": "Servers"
+    },
+    "empty": {
+      "title": "No profiles yet",
+      "description": "Create a profile to get an MCP endpoint with a curated set of servers."
+    }
+  },
+  "create": {
+    "trigger": "Create profile",
+    "title": "Create profile",
+    "description": "A profile provides an MCP endpoint with a curated set of servers.",
+    "nameLabel": "Name",
+    "namePlaceholder": "My profile",
+    "slugLabel": "Slug",
+    "slugPlaceholder": "my-profile",
+    "slugHint": "Lowercase letters, digits, and hyphens (2–63 chars, must start with a letter/digit).",
+    "submit": "Create",
+    "submitting": "Creating…",
+    "successToast": "Profile \"{name}\" created",
+    "errors": {
+      "slugTaken": "Slug is already taken. Please choose a different slug.",
+      "generic": "Failed to create profile"
+    }
+  },
+  "detail": {
+    "description": "Profile detail — slug: <mono>{slug}</mono>",
+    "notFound": "Profile not found.",
+    "endpoint": {
+      "title": "Endpoint URL",
+      "description": "Point your MCP client at this URL.",
+      "copy": "Copy",
+      "copiedToast": "Endpoint URL copied"
+    },
+    "bundle": {
+      "title": "Server bundle",
+      "description": "Choose which installed servers this profile exposes.",
+      "save": "Save bundle",
+      "saving": "Saving…",
+      "savedToast": "Bundle saved",
+      "saveFailed": "Save failed",
+      "noServers": "No servers installed yet."
+    },
+    "rename": {
+      "title": "Rename profile",
+      "description": "The display name for this profile.",
+      "inputLabel": "Profile name",
+      "submit": "Rename",
+      "submitting": "Saving…",
+      "successToast": "Profile renamed",
+      "failed": "Rename failed"
+    },
+    "rotate": {
+      "title": "Rotate token",
+      "description": "Generates a new token and immediately invalidates the previous one.",
+      "submit": "Rotate token",
+      "submitting": "Rotating…",
+      "successToast": "Token rotated",
+      "failed": "Rotate failed"
+    },
+    "delete": {
+      "title": "Delete profile",
+      "description": "This is permanent. The endpoint will stop working immediately.",
+      "submit": "Delete profile",
+      "confirmTitle": "Delete \"{name}\"?",
+      "confirmDescription": "This will permanently delete the profile and its endpoint. This action cannot be undone.",
+      "confirmLabel": "Delete",
+      "successToast": "Profile deleted",
+      "failed": "Delete failed"
+    }
+  }
+}

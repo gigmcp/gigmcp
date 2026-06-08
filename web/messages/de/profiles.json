@@ -1,0 +1,80 @@
+{
+  "readOnlyTooltip": "Schreibgeschützt bei Ansicht als anderer Benutzer",
+  "list": {
+    "title": "Profile",
+    "description": "MCP-Endpunkt-Profile mit gebündelten Server-Sets.",
+    "columns": {
+      "name": "Name",
+      "slug": "Slug",
+      "endpoint": "Endpunkt",
+      "servers": "Server"
+    },
+    "empty": {
+      "title": "Noch keine Profile",
+      "description": "Erstelle ein Profil, um einen MCP-Endpunkt mit einem ausgewählten Server-Set zu erhalten."
+    }
+  },
+  "create": {
+    "trigger": "Profil erstellen",
+    "title": "Profil erstellen",
+    "description": "Ein Profil stellt einen MCP-Endpunkt mit einem ausgewählten Server-Set bereit.",
+    "nameLabel": "Name",
+    "namePlaceholder": "Mein Profil",
+    "slugLabel": "Slug",
+    "slugPlaceholder": "mein-profil",
+    "slugHint": "Kleinbuchstaben, Ziffern und Bindestriche (2–63 Zeichen, muss mit Buchstabe/Ziffer beginnen).",
+    "submit": "Erstellen",
+    "submitting": "Wird erstellt…",
+    "successToast": "Profil \"{name}\" erstellt",
+    "errors": {
+      "slugTaken": "Dieser Slug ist bereits vergeben. Bitte wähle einen anderen.",
+      "generic": "Profil konnte nicht erstellt werden"
+    }
+  },
+  "detail": {
+    "description": "Profildetails — Slug: <mono>{slug}</mono>",
+    "notFound": "Profil nicht gefunden.",
+    "endpoint": {
+      "title": "Endpunkt-URL",
+      "description": "Richte deinen MCP-Client auf diese URL.",
+      "copy": "Kopieren",
+      "copiedToast": "Endpunkt-URL kopiert"
+    },
+    "bundle": {
+      "title": "Server-Bundle",
+      "description": "Wähle, welche installierten Server dieses Profil bereitstellt.",
+      "save": "Bundle speichern",
+      "saving": "Wird gespeichert…",
+      "savedToast": "Bundle gespeichert",
+      "saveFailed": "Speichern fehlgeschlagen",
+      "noServers": "Noch keine Server installiert."
+    },
+    "rename": {
+      "title": "Profil umbenennen",
+      "description": "Der Anzeigename dieses Profils.",
+      "inputLabel": "Profilname",
+      "submit": "Umbenennen",
+      "submitting": "Wird gespeichert…",
+      "successToast": "Profil umbenannt",
+      "failed": "Umbenennen fehlgeschlagen"
+    },
+    "rotate": {
+      "title": "Token rotieren",
+      "description": "Erstellt einen neuen Token und macht den vorherigen sofort ungültig.",
+      "submit": "Token rotieren",
+      "submitting": "Wird rotiert…",
+      "successToast": "Token rotiert",
+      "failed": "Rotation fehlgeschlagen"
+    },
+    "delete": {
+      "title": "Profil löschen",
+      "description": "Dies ist dauerhaft. Der Endpunkt wird sofort deaktiviert.",
+      "submit": "Profil löschen",
+      "confirmTitle": "\"{name}\" löschen?",
+      "confirmDescription": "Das Profil und sein Endpunkt werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "confirmLabel": "Löschen",
+      "successToast": "Profil gelöscht",
+      "failed": "Löschen fehlgeschlagen"
+    }
+  }
+}

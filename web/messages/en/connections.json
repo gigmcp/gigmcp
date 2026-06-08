@@ -1,0 +1,12 @@
+{
+  "loading": "Loading…",
+  "noneConnected": "No connected accounts yet.",
+  "noScopes": "No scopes granted",
+  "connectPrompt": "Connect your {vendor} account to use this app.",
+  "connect": "Connect {vendor}",
+  "connected": "Connected to {vendor}",
+  "incrementalConsent": "This app needs additional permissions: {scopes}. Reconnect to grant them.",
+  "grantMore": "Grant additional access",
+  "reconnect": "Reconnect",
+  "disconnect": "Disconnect"
+}

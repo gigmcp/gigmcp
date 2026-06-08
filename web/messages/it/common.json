@@ -1,0 +1,46 @@
+{
+  "nav": {
+    "overview": "Panoramica",
+    "apps": "App",
+    "profiles": "Profili",
+    "connectedAccounts": "Account collegati",
+    "users": "Utenti",
+    "authConfigs": "Configurazioni di autenticazione",
+    "audit": "Audit"
+  },
+  "signOut": "Esci",
+  "theme": {
+    "label": "Tema",
+    "system": "Sistema",
+    "light": "Chiaro",
+    "dark": "Scuro"
+  },
+  "language": {
+    "label": "Lingua"
+  },
+  "impersonation": {
+    "viewingAs": "Stai visualizzando come <strong>{user}</strong> (sei {realUser}). Tutte le modifiche sono bloccate durante l'impersonazione.",
+    "stop": "Interrompi"
+  },
+  "table": {
+    "empty": "Nessun dato."
+  },
+  "dialog": {
+    "cancel": "Annulla",
+    "close": "Chiudi",
+    "confirm": "Conferma",
+    "delete": "Elimina",
+    "working": "In corso…"
+  },
+  "token": {
+    "title": "Il tuo token",
+    "description": "Copia il token adesso. <strong>Non</strong> verrà mostrato di nuovo.",
+    "copy": "Copia token",
+    "copied": "Copiato!",
+    "copiedToast": "Token copiato negli appunti",
+    "confirm": "Ho copiato il mio token"
+  },
+  "loading": "Caricamento…",
+  "error": "Qualcosa è andato storto",
+  "readOnly": "Sola lettura durante l'impersonazione"
+}

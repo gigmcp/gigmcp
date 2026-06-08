@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="205 303 612 410" fill="none" stroke="#000000" stroke-width="26" stroke-linecap="butt">
+  <style>@media (prefers-color-scheme: dark){ path,line{stroke:#ededed} }</style>
+  <line x1="375" y1="325" x2="800" y2="510" />
+  <line x1="425" y1="425" x2="800" y2="510" />
+  <line x1="215" y1="510" x2="800" y2="510" />
+  <line x1="425" y1="597" x2="800" y2="510" />
+  <line x1="375" y1="690" x2="800" y2="510" />
+</svg>

@@ -1,0 +1,18 @@
+/bin/
+*.db
+.env
+# OAuth client credentials — operator-side, never published
+client_secret*.json
+*client_secret*.json
+.mcp.json
+.claude/
+/fetch-mcp
+/echo-mcp
+/gateway
+/bootstrap
+
+# brainstorming visual companion
+.superpowers/
+
+# local design specs (kept local, not published)
+docs/superpowers/

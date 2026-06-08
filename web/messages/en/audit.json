@@ -1,0 +1,39 @@
+{
+  "title": "Audit log",
+  "description": "Event history for all MCP activity.",
+  "filters": {
+    "kind": "Kind",
+    "userId": "User ID",
+    "userIdPlaceholder": "Filter by user ID"
+  },
+  "kinds": {
+    "egress": "egress",
+    "auth": "auth",
+    "admin": "admin"
+  },
+  "decisions": {
+    "allow": "allow",
+    "deny": "deny",
+    "denied": "denied",
+    "error": "error",
+    "resolved": "resolved"
+  },
+  "columns": {
+    "time": "Time",
+    "kind": "Kind",
+    "decision": "Decision",
+    "server": "Server",
+    "host": "Host",
+    "user": "User",
+    "profile": "Profile",
+    "detail": "Detail"
+  },
+  "empty": {
+    "title": "No audit events",
+    "description": "Events will appear here as MCP activity occurs."
+  },
+  "loadMore": "Load more",
+  "loadingMore": "Loading…",
+  "endOfList": "You've reached the end of the audit log.",
+  "noValue": "—"
+}

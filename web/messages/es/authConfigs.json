@@ -1,0 +1,24 @@
+{
+  "title": "Configuraciones de autenticación",
+  "subtitle": "Credenciales de cliente OAuth por proveedor. Los proveedores gestionados usan nuestras apps verificadas; los proveedores BYO usan tu propio proyecto OAuth.",
+  "vendor": "Proveedor (p.ej. google)",
+  "modeByo": "Usa las tuyas",
+  "modeManaged": "Gestionado",
+  "authorizeUrl": "URL de autorización",
+  "tokenUrl": "URL de token",
+  "clientId": "ID de cliente",
+  "clientSecret": "Secreto de cliente (dejar en blanco para conservar el actual)",
+  "defaultScopes": "Scopes por defecto (separados por espacio)",
+  "pkce": "Usar PKCE",
+  "save": "Guardar",
+  "saving": "Guardando…",
+  "secretSet": "secreto configurado",
+  "secretMissing": "sin secreto",
+  "delete": "Eliminar",
+  "loading": "Cargando…",
+  "empty": "Aún no hay configuraciones de autenticación.",
+  "errors": {
+    "saveFailed": "Error al guardar la configuración de autenticación",
+    "deleteFailed": "Error al eliminar la configuración de autenticación"
+  }
+}

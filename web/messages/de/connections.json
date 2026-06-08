@@ -1,0 +1,12 @@
+{
+  "loading": "Wird geladen…",
+  "noneConnected": "Noch keine verbundenen Konten.",
+  "noScopes": "Keine Berechtigungen erteilt",
+  "connectPrompt": "Verbinde dein {vendor}-Konto, um diese App zu nutzen.",
+  "connect": "{vendor} verbinden",
+  "connected": "Mit {vendor} verbunden",
+  "incrementalConsent": "Diese App benötigt zusätzliche Berechtigungen: {scopes}. Neu verbinden, um sie zu erteilen.",
+  "grantMore": "Weitere Berechtigungen erteilen",
+  "reconnect": "Neu verbinden",
+  "disconnect": "Trennen"
+}

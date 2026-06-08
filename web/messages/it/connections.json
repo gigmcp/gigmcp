@@ -1,0 +1,12 @@
+{
+  "loading": "Caricamento…",
+  "noneConnected": "Nessun account connesso ancora.",
+  "noScopes": "Nessuna autorizzazione concessa",
+  "connectPrompt": "Connetti il tuo account {vendor} per usare questa app.",
+  "connect": "Connetti {vendor}",
+  "connected": "Connesso a {vendor}",
+  "incrementalConsent": "Questa app richiede autorizzazioni aggiuntive: {scopes}. Riconnettiti per concederle.",
+  "grantMore": "Concedi accessi aggiuntivi",
+  "reconnect": "Riconnetti",
+  "disconnect": "Disconnetti"
+}

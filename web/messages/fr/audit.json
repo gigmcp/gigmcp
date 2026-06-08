@@ -1,0 +1,39 @@
+{
+  "title": "Journal d'audit",
+  "description": "Historique des événements de toute l'activité MCP.",
+  "filters": {
+    "kind": "Type",
+    "userId": "ID utilisateur",
+    "userIdPlaceholder": "Filtrer par ID utilisateur"
+  },
+  "kinds": {
+    "egress": "egress",
+    "auth": "auth",
+    "admin": "admin"
+  },
+  "decisions": {
+    "allow": "allow",
+    "deny": "deny",
+    "denied": "denied",
+    "error": "error",
+    "resolved": "resolved"
+  },
+  "columns": {
+    "time": "Heure",
+    "kind": "Type",
+    "decision": "Décision",
+    "server": "Serveur",
+    "host": "Hôte",
+    "user": "Utilisateur",
+    "profile": "Profil",
+    "detail": "Détail"
+  },
+  "empty": {
+    "title": "Aucun événement d'audit",
+    "description": "Les événements apparaîtront ici au fil de l'activité MCP."
+  },
+  "loadMore": "Charger plus",
+  "loadingMore": "Chargement…",
+  "endOfList": "Vous avez atteint la fin du journal d'audit.",
+  "noValue": "—"
+}
