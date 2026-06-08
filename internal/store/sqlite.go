@@ -58,13 +58,27 @@ func migrateServers(ctx context.Context, db *sql.DB) error {
 }
 
 // OpenSQLite opens (creating if necessary) a SQLite-backed Store at path.
+//
+// Concurrency: the gateway hits this store from many goroutines at once — every
+// /mcp/p/{slug} request does a profile auth read while the AuditingResolver's
+// writer goroutine streams egress-audit writes. Plain SQLite would have those
+// concurrent reads fail instantly with SQLITE_BUSY ("database is locked"); on
+// the auth path that surfaces to the client as a spurious 401 Unauthorized.
+// We close that race two ways:
+//   - journal_mode=WAL lets readers proceed while a write is in progress
+//     (readers never block on the writer, writer never blocks on readers).
+//   - busy_timeout=5000 makes the rare remaining contention (writer-vs-writer,
+//     WAL checkpoint) WAIT up to 5s and retry instead of erroring immediately.
+//
+// foreign_keys is left at the SQLite default (off); the schema does not rely on
+// FK enforcement. These pragmas are set via the DSN so they apply to every
+// pooled connection, not just the one that ran them.
 func OpenSQLite(path string) (Store, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
-	// NOTE: modernc/sqlite serialises writes; if write contention appears,
-	// cap the pool with db.SetMaxOpenConns(1).
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		db.Close()
