@@ -98,6 +98,14 @@ func (h *ProfileHost) serve(w http.ResponseWriter, r *http.Request) {
 	rt, err := h.getOrCreate(p)
 	if err != nil {
 		log.Printf("profile %q runtime: %v", p.Slug, err)
+		// An architecture mismatch is a configuration fault with a precise,
+		// actionable cause — surface it verbatim instead of the generic
+		// "backend unavailable" so the dashboard/client shows the real reason.
+		var archErr *ArchMismatchError
+		if errors.As(err, &archErr) {
+			http.Error(w, archErr.Error(), http.StatusBadGateway)
+			return
+		}
 		http.Error(w, "backend unavailable", http.StatusBadGateway)
 		return
 	}

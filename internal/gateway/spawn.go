@@ -148,6 +148,14 @@ func SpawnEgressBackend(
 	if placeholder == "" {
 		placeholder = "PLACEHOLDER" // legacy GIG_ECHO_BIN demo path
 	}
+	// Fail fast on an architecture mismatch BEFORE forking the sandbox: a
+	// foreign-arch binary has no interpreter inside bwrap, so it would die on
+	// exec and surface only as an opaque MCP "calling initialize: EOF". Reading
+	// the already-extracted binary's ELF header turns that into a clear, typed
+	// error (see checkBinaryArch / ArchMismatchError).
+	if err := checkBinaryArch(srv); err != nil {
+		return nil, err
+	}
 	sub, err := alloc.Allocate()
 	if err != nil {
 		return nil, fmt.Errorf("allocate subnet: %w", err)
