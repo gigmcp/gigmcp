@@ -1,0 +1,37 @@
+{
+  "title": "Users",
+  "description": "All registered users. Admin-only screen.",
+  "adminOnly": {
+    "title": "Admins only",
+    "description": "You need an admin account to view this page."
+  },
+  "table": {
+    "id": "ID",
+    "email": "Email",
+    "displayName": "Display name",
+    "role": "Role",
+    "actions": "Actions",
+    "noValue": "—"
+  },
+  "role": {
+    "admin": "Admin",
+    "user": "User"
+  },
+  "empty": "No users found.",
+  "actions": {
+    "impersonate": "Impersonate",
+    "stopViewing": "Stop viewing",
+    "stopping": "Stopping…"
+  },
+  "dialog": {
+    "title": "View as {name}",
+    "description": "You will see the dashboard as this user. All mutations are blocked while viewing as another user.",
+    "ttlLabel": "Duration (minutes, max 60)",
+    "submit": "View as user",
+    "starting": "Starting…"
+  },
+  "toast": {
+    "viewingAs": "Viewing as {email}",
+    "impersonationFailed": "Impersonation failed"
+  }
+}

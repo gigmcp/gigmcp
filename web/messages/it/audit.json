@@ -1,0 +1,39 @@
+{
+  "title": "Log di audit",
+  "description": "Cronologia degli eventi per tutta l'attività MCP.",
+  "filters": {
+    "kind": "Tipo",
+    "userId": "ID utente",
+    "userIdPlaceholder": "Filtra per ID utente"
+  },
+  "kinds": {
+    "egress": "egress",
+    "auth": "auth",
+    "admin": "admin"
+  },
+  "decisions": {
+    "allow": "allow",
+    "deny": "deny",
+    "denied": "denied",
+    "error": "error",
+    "resolved": "resolved"
+  },
+  "columns": {
+    "time": "Ora",
+    "kind": "Tipo",
+    "decision": "Decisione",
+    "server": "Server",
+    "host": "Host",
+    "user": "Utente",
+    "profile": "Profilo",
+    "detail": "Dettaglio"
+  },
+  "empty": {
+    "title": "Nessun evento di audit",
+    "description": "Gli eventi appariranno qui al verificarsi di attività MCP."
+  },
+  "loadMore": "Carica altri",
+  "loadingMore": "Caricamento…",
+  "endOfList": "Hai raggiunto la fine del log di audit.",
+  "noValue": "—"
+}

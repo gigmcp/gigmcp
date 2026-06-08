@@ -1,0 +1,46 @@
+{
+  "title": "Server",
+  "description": "Installierte MCP-Server, die für Profile verfügbar sind.",
+  "readOnlyTooltip": "Schreibgeschützt bei Ansicht als anderer Benutzer",
+  "table": {
+    "id": "ID",
+    "name": "Name",
+    "actions": "Aktionen"
+  },
+  "install": {
+    "button": "Server installieren",
+    "dialogTitle": "Server installieren",
+    "dialogDescription": "Wähle einen Server aus dem Registry-Katalog oder installiere per Referenz.",
+    "searchPlaceholder": "Server suchen…",
+    "noResults": "Keine Server entsprechen deiner Suche.",
+    "emptyCatalog": "Der Registry-Katalog ist leer.",
+    "installedBadge": "Installiert",
+    "confirmInstall": "{name} installieren",
+    "byRefToggle": "Stattdessen per Referenz installieren",
+    "refLabel": "Server-Referenz",
+    "refPlaceholder": "name@version oder sha256:digest",
+    "submit": "Installieren",
+    "submitting": "Wird installiert…",
+    "success": "Server \"{name}\" installiert",
+    "error": "Installation fehlgeschlagen",
+    "registryDisabled": {
+      "title": "Keine Registry konfiguriert",
+      "description": "Für dieses Gateway ist keine Server-Registry konfiguriert. Du kannst unten weiterhin per Referenz installieren."
+    },
+    "registryUnavailable": {
+      "title": "Die Registry ist nicht erreichbar.",
+      "retry": "Erneut versuchen"
+    }
+  },
+  "uninstall": {
+    "button": "Deinstallieren",
+    "confirmTitle": "\"{name}\" deinstallieren?",
+    "confirmDescription": "Dadurch wird der Server aus allen Profilen entfernt, die auf ihn verweisen.",
+    "confirmLabel": "Deinstallieren",
+    "success": "Server \"{name}\" deinstalliert",
+    "error": "Deinstallation fehlgeschlagen"
+  },
+  "empty": {
+    "title": "Noch keine Server installiert"
+  }
+}

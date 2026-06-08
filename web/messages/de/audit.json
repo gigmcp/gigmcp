@@ -1,0 +1,39 @@
+{
+  "title": "Audit-Log",
+  "description": "Ereignishistorie aller MCP-Aktivitäten.",
+  "filters": {
+    "kind": "Kategorie",
+    "userId": "Benutzer-ID",
+    "userIdPlaceholder": "Nach Benutzer-ID filtern"
+  },
+  "kinds": {
+    "egress": "egress",
+    "auth": "auth",
+    "admin": "admin"
+  },
+  "decisions": {
+    "allow": "allow",
+    "deny": "deny",
+    "denied": "denied",
+    "error": "error",
+    "resolved": "resolved"
+  },
+  "columns": {
+    "time": "Zeit",
+    "kind": "Kategorie",
+    "decision": "Entscheidung",
+    "server": "Server",
+    "host": "Host",
+    "user": "Benutzer",
+    "profile": "Profil",
+    "detail": "Detail"
+  },
+  "empty": {
+    "title": "Keine Audit-Ereignisse",
+    "description": "Ereignisse erscheinen hier, sobald MCP-Aktivität aufgezeichnet wird."
+  },
+  "loadMore": "Mehr laden",
+  "loadingMore": "Wird geladen…",
+  "endOfList": "Ende des Audit-Logs erreicht.",
+  "noValue": "—"
+}

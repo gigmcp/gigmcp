@@ -1,0 +1,89 @@
+services:
+  # Dev OIDC shim: the gateway's issuer URL is http://localhost:8082 (the exact
+  # string go-oidc verifies against Zitadel's discovery doc), but inside the
+  # gateway container "localhost" is the container itself. This sidecar OWNS
+  # the network namespace the gateway joins (network_mode: service:issuer-proxy
+  # below) and runs socat listening on localhost:8082, forwarding to the
+  # `zitadel` service from docker-compose.dev.yml — both files live in this
+  # directory, so they share one compose project ("gigmcp") and one default
+  # network, and service DNS resolves across them. Starting the sidecar before
+  # the gateway also removes any race against the gateway's fatal 10s OIDC
+  # discovery at boot. Same shim covers the token + JWKS hops (issuer-host
+  # URLs).
+  # NOTE: bring up docker-compose.dev.yml (zitadel) FIRST, and never pass
+  # --remove-orphans here — it would tear down the zitadel containers, which
+  # belong to the same project.
+  issuer-proxy:
+    image: alpine/socat
+    command: TCP-LISTEN:8082,fork,reuseaddr TCP:zitadel:8080
+    restart: unless-stopped
+    # The gateway's listener is published HERE because the gateway shares this
+    # container's network namespace (only the netns owner can publish ports).
+    ports:
+      - "8080:8080"
+
+  gateway:
+    build:
+      context: .
+    network_mode: "service:issuer-proxy"
+    depends_on:
+      - issuer-proxy
+    environment:
+      # GIG_MASTER_KEY: hex-encoded 32-byte master KEK for the credential vault.
+      # Generate with: openssl rand -hex 32
+      # Required — the gateway will refuse to start without it.
+      GIG_MASTER_KEY: ${GIG_MASTER_KEY:?set GIG_MASTER_KEY (openssl rand -hex 32)}
+      # Registry index (signature-verified). Set GIG_INSTALL to enable boot installs.
+      GIG_REGISTRY_INDEX_URL: ${GIG_REGISTRY_INDEX_URL:-}
+      GIG_REGISTRY_PUBKEY: ${GIG_REGISTRY_PUBKEY:-}
+      # OIDC control plane (optional — unset disables /api with a descriptive
+      # 404; the /mcp/p/{slug} profile endpoints keep working).
+      GIG_OIDC_ISSUER: ${GIG_OIDC_ISSUER:-}
+      GIG_OIDC_CLIENT_ID: ${GIG_OIDC_CLIENT_ID:-}
+      GIG_OIDC_CLIENT_SECRET: ${GIG_OIDC_CLIENT_SECRET:-}
+      GIG_OIDC_REDIRECT_URL: ${GIG_OIDC_REDIRECT_URL:-}
+      GIG_OIDC_ADMIN_ROLE: ${GIG_OIDC_ADMIN_ROLE:-gigmcp-admin}
+      GIG_SESSION_TTL: ${GIG_SESSION_TTL:-168h}
+      GIG_PUBLIC_URL: ${GIG_PUBLIC_URL:-http://localhost:8080}
+    volumes:
+      - gigmcp-data:/data
+    # NET_ADMIN is required: the egress proxy creates a veth pair per sandbox and
+    # moves the peer end into the bwrap child's network namespace (LinkSetNsPid).
+    # No SYS_ADMIN or privileged mode is needed — NET_ADMIN is sufficient.
+    cap_add:
+      - NET_ADMIN
+    # bwrap needs unprivileged user namespaces, which Docker's default
+    # seccomp/apparmor profiles block — hence seccomp=unconfined at the Docker
+    # layer (a scoped allow-userns Docker profile is a follow-up item).
+    # Defense in depth: inside each sandbox an application-level seccomp-BPF
+    # filter (internal/seccomp, installed by cmd/bootstrap before execve)
+    # closes the nested-userns escape — unshare/setns and clone(CLONE_NEWUSER)
+    # are killed, clone3 returns ENOSYS — and denies mount, ptrace, keyctl,
+    # bpf, and module-loading syscalls. See DESIGN.md "SECCOMP STATUS".
+    # systempaths=unconfined unmasks /proc so bwrap can mount a fresh procfs
+    # in the sandbox's pid namespace (see Makefile test target).
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+      - systempaths=unconfined
+
+  web:
+    build:
+      context: ./web
+      # Server-side rewrite target — BAKED AT BUILD TIME by next.config
+      # rewrites (the standalone server ignores the runtime env var). The
+      # gateway shares the issuer-proxy sidecar's network namespace
+      # (network_mode above), so its service DNS name is the sidecar's, not
+      # "gateway".
+      # Note: for the OIDC callback to land on the right origin, the gateway's
+      # GIG_OIDC_REDIRECT_URL / GIG_PUBLIC_URL should point at the browser-facing
+      # origin, e.g. http://localhost:3000 when the dashboard is the entry point.
+      args:
+        GATEWAY_INTERNAL_URL: http://issuer-proxy:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+
+volumes:
+  gigmcp-data:

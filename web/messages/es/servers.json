@@ -1,0 +1,46 @@
+{
+  "title": "Servidores",
+  "description": "Servidores MCP instalados disponibles para los perfiles.",
+  "readOnlyTooltip": "Solo lectura mientras se visualiza como otro usuario",
+  "table": {
+    "id": "ID",
+    "name": "Nombre",
+    "actions": "Acciones"
+  },
+  "install": {
+    "button": "Instalar servidor",
+    "dialogTitle": "Instalar servidor",
+    "dialogDescription": "Elige un servidor del catálogo del registro o instala por referencia.",
+    "searchPlaceholder": "Buscar servidores…",
+    "noResults": "Ningún servidor coincide con tu búsqueda.",
+    "emptyCatalog": "El catálogo del registro está vacío.",
+    "installedBadge": "Instalado",
+    "confirmInstall": "Instalar {name}",
+    "byRefToggle": "Instalar por referencia en su lugar",
+    "refLabel": "Referencia del servidor",
+    "refPlaceholder": "nombre@versión o sha256:digest",
+    "submit": "Instalar",
+    "submitting": "Instalando…",
+    "success": "Servidor \"{name}\" instalado",
+    "error": "Error al instalar",
+    "registryDisabled": {
+      "title": "Sin registro configurado",
+      "description": "Esta pasarela no tiene un registro de servidores configurado. Aún puedes instalar por referencia más abajo."
+    },
+    "registryUnavailable": {
+      "title": "No se pudo acceder al registro.",
+      "retry": "Reintentar"
+    }
+  },
+  "uninstall": {
+    "button": "Desinstalar",
+    "confirmTitle": "¿Desinstalar \"{name}\"?",
+    "confirmDescription": "Esto eliminará el servidor de todos los perfiles que lo referencien.",
+    "confirmLabel": "Desinstalar",
+    "success": "Servidor \"{name}\" desinstalado",
+    "error": "Error al desinstalar"
+  },
+  "empty": {
+    "title": "Sin servidores instalados aún"
+  }
+}

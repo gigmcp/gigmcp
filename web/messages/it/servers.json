@@ -1,0 +1,46 @@
+{
+  "title": "Server",
+  "description": "Server MCP installati, disponibili per i profili.",
+  "readOnlyTooltip": "Sola lettura mentre si visualizza come un altro utente",
+  "table": {
+    "id": "ID",
+    "name": "Nome",
+    "actions": "Azioni"
+  },
+  "install": {
+    "button": "Installa server",
+    "dialogTitle": "Installa server",
+    "dialogDescription": "Scegli un server dal catalogo del registry o installa tramite riferimento.",
+    "searchPlaceholder": "Cerca server…",
+    "noResults": "Nessun server corrisponde alla ricerca.",
+    "emptyCatalog": "Il catalogo del registro è vuoto.",
+    "installedBadge": "Installato",
+    "confirmInstall": "Installa {name}",
+    "byRefToggle": "Installa tramite riferimento",
+    "refLabel": "Riferimento server",
+    "refPlaceholder": "nome@versione o sha256:digest",
+    "submit": "Installa",
+    "submitting": "Installazione…",
+    "success": "Server \"{name}\" installato",
+    "error": "Installazione non riuscita",
+    "registryDisabled": {
+      "title": "Nessun registry configurato",
+      "description": "Questo gateway non ha un registry di server configurato. Puoi comunque installare tramite riferimento qui sotto."
+    },
+    "registryUnavailable": {
+      "title": "Il registry non è raggiungibile.",
+      "retry": "Riprova"
+    }
+  },
+  "uninstall": {
+    "button": "Disinstalla",
+    "confirmTitle": "Disinstallare \"{name}\"?",
+    "confirmDescription": "Il server verrà rimosso da tutti i profili che lo referenziano.",
+    "confirmLabel": "Disinstalla",
+    "success": "Server \"{name}\" disinstallato",
+    "error": "Disinstallazione non riuscita"
+  },
+  "empty": {
+    "title": "Nessun server installato"
+  }
+}

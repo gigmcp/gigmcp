@@ -1,0 +1,38 @@
+{
+  "title": "Aperçu",
+  "welcome": "Bienvenue, {name}",
+  "description": "Vue d'ensemble de votre plan de contrôle Gig'MCP.",
+  "placeholder": "—",
+  "stats": {
+    "profiles": "Profils",
+    "servers": "Serveurs",
+    "credentials": "Identifiants",
+    "users": "Utilisateurs"
+  },
+  "activity": {
+    "title": "Activité récente",
+    "empty": "Aucune activité pour l'instant.",
+    "columns": {
+      "time": "Heure",
+      "kind": "Type",
+      "server": "Serveur",
+      "host": "Hôte",
+      "decision": "Décision",
+      "detail": "Détail"
+    }
+  },
+  "kinds": {
+    "egress": "Egress",
+    "auth": "Auth",
+    "admin": "Admin"
+  },
+  "decisions": {
+    "allow": "Autorisé",
+    "deny": "Refusé",
+    "denied": "Refusé",
+    "resolved": "Résolu",
+    "error": "Erreur",
+    "login": "Connexion",
+    "logout": "Déconnexion"
+  }
+}
