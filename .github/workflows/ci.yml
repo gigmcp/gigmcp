@@ -130,16 +130,11 @@ jobs:
   # which runs go test inside a Docker container with seccomp/apparmor
   # unconfined and NET_ADMIN — same as local dev.
   #
-  # NON-BLOCKING (continue-on-error): bwrap needs unprivileged user namespaces,
-  # and GitHub's Ubuntu 24.04 runners ship AppArmor's
-  # kernel.apparmor_restrict_unprivileged_userns mitigation; whether the
-  # in-container unconfined profiles are enough on the hosted kernel could not
-  # be verified from the (macOS) dev machine. Flip to blocking once a green run
-  # on the hosted runner proves the sandbox tests execute rather than fail.
+  # BLOCKING: a hosted-runner run (30c7d32) proved the full sandbox suite
+  # executes after the sysctl relaxation below, so failures here are real.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - name: Checkout gigmcp
         uses: actions/checkout@v6
