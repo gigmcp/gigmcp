@@ -16,6 +16,7 @@ test: dev-image
 		--security-opt apparmor=unconfined \
 		--security-opt systempaths=unconfined \
 		--cap-add NET_ADMIN \
+		-e GOFLAGS=-buildvcs=false \
 		-v $(PWD):/src -w /src \
 		-v $(abspath $(PWD)/../gigmcp-registry):/gigmcp-registry \
 		-v gigmcp-gomod:/go/pkg/mod \
