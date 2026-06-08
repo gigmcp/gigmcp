@@ -26,21 +26,26 @@ export function Providers({ children }: { children: React.ReactNode }) {
     unexpectedErrorMessage = translatedError;
   }, [translatedError]);
   const [client] = useState(() => {
-    const onError = (err: unknown) => {
-      if (err instanceof ApiError) {
+    const onError = (err: unknown, meta?: Record<string, unknown>) => {
+      if (err instanceof ApiError && err.status === 401) {
         // Session gone (or control plane disabled probed via /api/me): bounce.
-        if (err.status === 401) {
-          router.replace("/login");
-          return;
-        }
-        toast.error(err.message);
+        router.replace("/login");
         return;
       }
-      toast.error(unexpectedErrorMessage);
+      // Queries that render their own error UI (e.g. the registry catalog's
+      // in-dialog empty/retry states) opt out of the global toast.
+      if (meta?.suppressErrorToast) return;
+      toast.error(
+        err instanceof ApiError ? err.message : unexpectedErrorMessage,
+      );
     };
     return new QueryClient({
-      queryCache: new QueryCache({ onError }),
-      mutationCache: new MutationCache({ onError }),
+      queryCache: new QueryCache({
+        onError: (err, query) => onError(err, query.meta),
+      }),
+      mutationCache: new MutationCache({
+        onError: (err, _vars, _ctx, mutation) => onError(err, mutation.meta),
+      }),
       defaultOptions: { queries: { staleTime: 10_000, retry: false } },
     });
   });

@@ -28,6 +28,17 @@ export interface Server {
   name: string;
 }
 
+/** One entry of the signed registry index served by /api/registry/servers. */
+export interface CatalogServer {
+  name: string;
+  description: string; // may be ""
+  latest: string;
+}
+
+export interface CatalogResponse {
+  servers: CatalogServer[];
+}
+
 export interface Credential {
   server: string;
   inject_header: string;

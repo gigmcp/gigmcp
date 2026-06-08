@@ -26,7 +26,10 @@ type Server struct {
 	Vault     *vault.Vault
 	Auth      *auth.Authenticator // nil = OIDC unconfigured (auth routes unmounted)
 	Installer registry.Installer  // nil = fall back to Store.ListServers for GET /api/servers; install/uninstall return 501 (nil-guarded in handlers)
+	Registry  IndexFetcher        // nil = registry unconfigured; GET /api/registry/servers returns 501 (nil-guarded in handler)
 	Profiles  ProfileInvalidator
+
+	regCache indexCache // 5-minute memo of the verified registry index (registry.go)
 }
 
 // invalidate is a nil-safe ProfileInvalidator call.
@@ -53,6 +56,7 @@ func (s *Server) Routes() *http.ServeMux {
 	authed.HandleFunc("PUT /api/credentials/{server}", s.handlePutCredential)
 	authed.HandleFunc("DELETE /api/credentials/{server}", s.handleDeleteCredential)
 	authed.HandleFunc("GET /api/servers", s.handleListServers)
+	authed.HandleFunc("GET /api/registry/servers", s.handleRegistryServers)
 	authed.Handle("POST /api/servers/install", auth.RequireAdmin(http.HandlerFunc(s.handleInstallServer)))
 	authed.Handle("DELETE /api/servers/{name}", auth.RequireAdmin(http.HandlerFunc(s.handleUninstallServer)))
 	authed.Handle("GET /api/users", auth.RequireAdmin(http.HandlerFunc(s.handleListUsers)))

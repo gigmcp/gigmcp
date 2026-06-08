@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/gigmcp/gigmcp/internal/gateway"
@@ -27,6 +26,9 @@ func buildEchoBinary(t *testing.T) string {
 	return out
 }
 
+// bearerTransport sets a bearer Authorization header on every request. Shared
+// by the profile-endpoint tests (profilehost_test.go, profile_e2e_test.go),
+// which authenticate with per-profile tokens.
 type bearerTransport struct{ token string }
 
 func (b *bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -35,6 +37,10 @@ func (b *bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
+// TestEndToEnd exercises the sandbox → aggregator → streamable-HTTP pipeline
+// directly (no auth layer: in production the aggregator is only reachable
+// through the ProfileHost, which enforces per-profile tokens — see
+// profilehost_test.go).
 func TestEndToEnd(t *testing.T) {
 	if !sandbox.Available() {
 		t.Skip("sandbox requires Linux with bwrap installed — run `make test`")
@@ -58,27 +64,13 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gateway.New: %v", err)
 	}
-	handler := gateway.RequireBearer("sekrit",
-		mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gw }, nil))
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gw }, nil)
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	// Unauthenticated requests are rejected before reaching MCP.
-	resp, err := http.Post(ts.URL, "application/json", strings.NewReader("{}"))
-	if err != nil {
-		t.Fatalf("unauthed post: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthed request: got %d, want 401", resp.StatusCode)
-	}
-
-	// Real MCP client over streamable HTTP with the bearer token.
+	// Real MCP client over streamable HTTP.
 	c := mcp.NewClient(&mcp.Implementation{Name: "e2e-client", Version: "0.0.0"}, nil)
-	sess, err := c.Connect(ctx, &mcp.StreamableClientTransport{
-		Endpoint:   ts.URL,
-		HTTPClient: &http.Client{Transport: &bearerTransport{token: "sekrit"}},
-	}, nil)
+	sess, err := c.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: ts.URL}, nil)
 	if err != nil {
 		t.Fatalf("client connect: %v", err)
 	}

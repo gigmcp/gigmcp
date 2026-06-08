@@ -12,6 +12,7 @@ export const keys = {
   profiles: ["profiles"] as const,
   profile: (id: number) => ["profile", id] as const,
   servers: ["servers"] as const,
+  catalog: ["catalog"] as const,
   credentials: ["credentials"] as const,
   users: ["users"] as const,
   audit: ["audit"] as const,
@@ -34,6 +35,19 @@ export const useProfile = (id: number) =>
 
 export const useServers = () =>
   useQuery({ queryKey: keys.servers, queryFn: api.listServers });
+/** Registry catalog. The gateway caches the verified index for ~5 minutes;
+ *  staleTime mirrors that so reopening the picker doesn't refetch. The
+ *  caller gates `enabled` so we only fetch while the picker is open. */
+export const useCatalog = (enabled = true) =>
+  useQuery({
+    queryKey: keys.catalog,
+    queryFn: api.catalog,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    // The catalog dialog renders 501 registry_disabled / 502
+    // registry_unavailable as in-dialog states; skip the global error toast.
+    meta: { suppressErrorToast: true },
+  });
 export const useCredentials = () =>
   useQuery({ queryKey: keys.credentials, queryFn: api.listCredentials });
 export const useUsers = (enabled = true) =>

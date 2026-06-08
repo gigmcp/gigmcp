@@ -26,8 +26,9 @@ type IndexInstaller struct {
 	Puller  *oci.Puller
 	DataDir string // extracted binaries land in <DataDir>/servers/<name>@<version>/server
 	// AutoConsent records consent at install time. Set for operator-initiated
-	// boot installs (GIG_INSTALL); leave false for API installs so the
-	// frontend's consent flow gates the spawn (DESIGN #7).
+	// boot installs (GIG_INSTALL); leave false for API installs, which keep
+	// consented_hash empty so the gateway's spawn path refuses the server
+	// until consent is recorded via store.RecordConsent (DESIGN #7).
 	AutoConsent bool
 }
 

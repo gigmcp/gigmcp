@@ -10,13 +10,27 @@
   "install": {
     "button": "Installa server",
     "dialogTitle": "Installa server",
-    "dialogDescription": "Fornisci un riferimento server: un nome, nome@versione o sha256:digest — es. \"bitwarden\".",
+    "dialogDescription": "Scegli un server dal catalogo del registry o installa tramite riferimento.",
+    "searchPlaceholder": "Cerca server…",
+    "noResults": "Nessun server corrisponde alla ricerca.",
+    "emptyCatalog": "Il catalogo del registro è vuoto.",
+    "installedBadge": "Installato",
+    "confirmInstall": "Installa {name}",
+    "byRefToggle": "Installa tramite riferimento",
     "refLabel": "Riferimento server",
-    "refPlaceholder": "bitwarden",
+    "refPlaceholder": "nome@versione o sha256:digest",
     "submit": "Installa",
     "submitting": "Installazione…",
     "success": "Server \"{name}\" installato",
-    "error": "Installazione non riuscita"
+    "error": "Installazione non riuscita",
+    "registryDisabled": {
+      "title": "Nessun registry configurato",
+      "description": "Questo gateway non ha un registry di server configurato. Puoi comunque installare tramite riferimento qui sotto."
+    },
+    "registryUnavailable": {
+      "title": "Il registry non è raggiungibile.",
+      "retry": "Riprova"
+    }
   },
   "uninstall": {
     "button": "Disinstalla",

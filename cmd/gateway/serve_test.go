@@ -71,23 +71,21 @@ func TestBuildMuxRouting(t *testing.T) {
 			return nil, nil
 		},
 	}
-	legacy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTeapot) // sentinel for "legacy handler reached"
-	})
-
 	t.Run("OIDC disabled", func(t *testing.T) {
-		// OIDC unconfigured: authn == nil → /api is NOT mounted.
-		// Pass nil for Installer (no registry configured in this routing-only test).
-		mux := buildMux(st, v, nil, nil, profiles, legacy)
+		// OIDC unconfigured: authn == nil → /api answers control_plane_disabled.
+		// Pass nil for Installer and registry client (no registry configured
+		// in this routing-only test).
+		mux := buildMux(st, v, nil, nil, nil, profiles)
 		ts := httptest.NewServer(mux)
 		defer ts.Close()
 
-		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusTeapot {
-			t.Fatalf("/mcp must reach legacy handler: %d", resp.StatusCode)
+		// The legacy single-tenant "/mcp" path and the "/" catch-all are retired:
+		// both must 404 (canonical client endpoint is /mcp/p/<slug>).
+		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("/mcp is retired and must 404: %d", resp.StatusCode)
 		}
-		// "/" catch-all must also reach the legacy handler (backward compat for README-documented URL).
-		if resp, _ := http.Get(ts.URL + "/"); resp.StatusCode != http.StatusTeapot {
-			t.Fatalf("/ catch-all must reach legacy handler: %d", resp.StatusCode)
+		if resp, _ := http.Get(ts.URL + "/"); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("/ has no handler and must 404: %d", resp.StatusCode)
 		}
 		if resp, _ := http.Post(ts.URL+"/mcp/p/some-slug", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("/mcp/p/{slug} without token must 401: %d", resp.StatusCode)
@@ -114,7 +112,7 @@ func TestBuildMuxRouting(t *testing.T) {
 	t.Run("OIDC enabled", func(t *testing.T) {
 		// Stand up a real *auth.Authenticator against a minimal fake OIDC issuer.
 		// This validates that when authn != nil, /api/ is mounted (SessionMiddleware
-		// responds 401 for unauthenticated requests) and legacy paths are unaffected.
+		// responds 401 for unauthenticated requests) and profile routing is unaffected.
 		iss := newMinimalFakeIssuer(t)
 		cfg := config.Config{
 			OIDCIssuer:      iss.srv.URL,
@@ -129,12 +127,12 @@ func TestBuildMuxRouting(t *testing.T) {
 			t.Fatalf("NewAuthenticator: %v", err)
 		}
 
-		mux := buildMux(st, v, authn, nil, profiles, legacy)
+		mux := buildMux(st, v, authn, nil, nil, profiles)
 		ts := httptest.NewServer(mux)
 		defer ts.Close()
 
 		// /api/me with authn non-nil must return 401 JSON from SessionMiddleware
-		// (not 418 from legacy, not 404 from disabled handler).
+		// (not 404 from the disabled handler).
 		resp, _ := http.Get(ts.URL + "/api/me")
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("/api/me with OIDC enabled but no session must 401: %d", resp.StatusCode)
@@ -152,9 +150,9 @@ func TestBuildMuxRouting(t *testing.T) {
 			t.Fatal("/api/me 401 must include error.code field")
 		}
 
-		// /mcp still reaches the legacy handler (teapot sentinel).
-		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusTeapot {
-			t.Fatalf("/mcp must still reach legacy handler when OIDC enabled: %d", resp.StatusCode)
+		// /mcp (retired legacy path) must 404 regardless of OIDC state.
+		if resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader("{}")); resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("/mcp is retired and must 404 when OIDC enabled: %d", resp.StatusCode)
 		}
 
 		// /mcp/p/x without a bearer token must 401 from ProfileHost.

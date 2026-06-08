@@ -10,7 +10,6 @@ import (
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "/usr/local/bin/echo-mcp")
 	t.Setenv("GIG_LISTEN", "")
 	t.Setenv("GIG_DB_PATH", "")
@@ -25,21 +24,32 @@ func TestFromEnv(t *testing.T) {
 	if cfg.DBPath != "gigmcp.db" {
 		t.Errorf("DBPath default: got %q", cfg.DBPath)
 	}
-	if cfg.BearerToken != "tok" || cfg.EchoBinary != "/usr/local/bin/echo-mcp" {
+	if cfg.EchoBinary != "/usr/local/bin/echo-mcp" {
 		t.Errorf("unexpected cfg: %+v", cfg)
 	}
 }
 
-func TestFromEnvRequiresToken(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "")
-	t.Setenv("GIG_ECHO_BIN", "/x")
-	if _, err := config.FromEnv(); err == nil {
-		t.Fatal("expected error when GIG_BEARER_TOKEN is empty")
+// TestFromEnvNoAuthEnvRequired pins the cutover contract: the gateway boots
+// with NO auth-related environment at all. Profile endpoints authenticate
+// with per-profile tokens; /api stays disabled until GIG_OIDC_* is set.
+func TestFromEnvNoAuthEnvRequired(t *testing.T) {
+	for _, k := range []string{
+		"GIG_ECHO_BIN", "GIG_INSTALL",
+		"GIG_OIDC_ISSUER", "GIG_OIDC_CLIENT_ID", "GIG_OIDC_REDIRECT_URL",
+		"GIG_OIDC_CLIENT_SECRET", "GIG_OIDC_CLIENT_SECRET_FILE",
+	} {
+		t.Setenv(k, "")
+	}
+	cfg, err := config.FromEnv()
+	if err != nil {
+		t.Fatalf("FromEnv with empty environment must succeed: %v", err)
+	}
+	if cfg.OIDCEnabled() {
+		t.Fatal("OIDC must be disabled with no GIG_OIDC_* set")
 	}
 }
 
 func TestFromEnvEchoBinOptional(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "")
 	if _, err := config.FromEnv(); err != nil {
 		t.Fatalf("GIG_ECHO_BIN is now optional; got unexpected error: %v", err)
@@ -47,13 +57,10 @@ func TestFromEnvEchoBinOptional(t *testing.T) {
 }
 
 func TestFromEnvNewFields(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "/bin/echo-mcp")
 	t.Setenv("GIG_MASTER_KEY", "abc123")
 	t.Setenv("GIG_PROXY_PORT", "9090")
 	t.Setenv("GIG_BOOTSTRAP_PATH", "/usr/local/bin/bootstrap")
-	t.Setenv("GIG_DEMO_TOKEN", "demotoken")
-	t.Setenv("GIG_DEMO_ALLOW", "api.example.com")
 
 	cfg, err := config.FromEnv()
 	if err != nil {
@@ -68,16 +75,9 @@ func TestFromEnvNewFields(t *testing.T) {
 	if cfg.BootstrapPath != "/usr/local/bin/bootstrap" {
 		t.Errorf("BootstrapPath: got %q", cfg.BootstrapPath)
 	}
-	if cfg.DemoToken != "demotoken" {
-		t.Errorf("DemoToken: got %q", cfg.DemoToken)
-	}
-	if cfg.DemoAllow != "api.example.com" {
-		t.Errorf("DemoAllow: got %q", cfg.DemoAllow)
-	}
 }
 
 func TestFromEnvProxyPortDefault(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "/bin/echo-mcp")
 	t.Setenv("GIG_PROXY_PORT", "")
 	t.Setenv("GIG_BOOTSTRAP_PATH", "")
@@ -96,7 +96,6 @@ func TestFromEnvProxyPortDefault(t *testing.T) {
 
 func setBaseEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "/bin/echo-mcp")
 }
 

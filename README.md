@@ -6,34 +6,50 @@ network boundary so one compromised tool never exposes your keys.
 See [DESIGN.md](DESIGN.md)
 for the full architecture and decision record.
 
-> **Status: egress proxy + credential vault complete.** One bundled echo server,
-> bearer auth, bubblewrap sandboxing, SQLite, embedded MITM egress proxy with
-> XChaCha20-Poly1305 envelope-encrypted vault. Each sandbox runs in its own
-> network namespace; the only route is the proxy; credentials never enter the
-> sandbox (placeholder-in-env → real key injected at the proxy boundary).
-> Registry, multi-user auth, and dashboard are landing per DESIGN.md §5.
+> **Status: profile-scoped endpoints + OIDC control plane.** Per-profile MCP
+> endpoints (`/mcp/p/<profile>`) with per-profile tokens, OIDC-backed REST API
+> and dashboard, signed registry installs, bubblewrap sandboxing, SQLite,
+> embedded MITM egress proxy with XChaCha20-Poly1305 envelope-encrypted vault.
+> Each sandbox runs in its own network namespace; the only route is the proxy;
+> credentials never enter the sandbox (placeholder-in-env → real key injected
+> at the proxy boundary).
 
 ## Quickstart
 
+All MCP endpoints are profile-scoped and authenticated by per-profile bearer
+tokens, which can only be minted through the OIDC-gated dashboard/REST API —
+so a fresh install needs an OIDC identity provider configured:
+
 ```bash
-GIG_BEARER_TOKEN=$(openssl rand -hex 24) \
 GIG_MASTER_KEY=$(openssl rand -hex 32) \
+GIG_OIDC_ISSUER=https://<your-idp> \
+GIG_OIDC_CLIENT_ID=<client-id> \
+GIG_OIDC_REDIRECT_URL=http://localhost:8080/api/auth/callback \
 docker compose up --build -d
 ```
+
+No IdP handy? `docker-compose.dev.yml` provides a Zitadel fixture at
+`http://localhost:8082` (console: `/ui/console`, admin / Password1!) — bring it
+up first with `docker compose -f docker-compose.dev.yml up -d`, create an OIDC
+client there, and point `GIG_OIDC_ISSUER` at `http://localhost:8082`.
 
 **Required environment variables:**
 
 | Variable | Description |
 |---|---|
-| `GIG_BEARER_TOKEN` | Bearer token for authenticating MCP clients |
 | `GIG_MASTER_KEY` | 32-byte hex master key for the credential vault (`openssl rand -hex 32`) |
 
-**Optional:**
+**OIDC control plane** (all-or-none; required to create profiles and mint
+profile tokens — only an already-provisioned gateway can leave these unset, in
+which case `/api` and the dashboard are disabled while existing profile MCP
+endpoints keep working):
 
 | Variable | Description |
 |---|---|
-| `GIG_DEMO_TOKEN` | Seeds a demo credential for the echo server on startup |
-| `GIG_DEMO_ALLOW` | Comma-separated allowed hosts for the demo credential (default: `api.example.com`) |
+| `GIG_OIDC_ISSUER` | OIDC issuer URL (e.g. your Zitadel/Okta/Authentik instance) |
+| `GIG_OIDC_CLIENT_ID` | OIDC client id |
+| `GIG_OIDC_REDIRECT_URL` | Callback URL, e.g. `http://localhost:8080/api/auth/callback` |
+| `GIG_OIDC_CLIENT_SECRET` | Optional (omit for PKCE public clients); `_FILE` variant supported |
 
 **Runtime requirements:** the gateway container needs `cap_add: NET_ADMIN` (already
 in `docker-compose.yml`). No `SYS_ADMIN` or privileged mode is needed — `NET_ADMIN`
@@ -45,16 +61,18 @@ the embedded proxy identifies the tenant by the connection's source IP (unforgea
 — each sandbox sits in its own `/30`), checks the domain allowlist, and swaps the
 placeholder for the vault-decrypted real key. The real key never enters the sandbox.
 
-Connect Claude Code:
+**Connecting an MCP client:** every MCP endpoint is profile-scoped. Create a
+profile in the dashboard (`http://localhost:3000`, OIDC login) or via the REST
+API, assign servers to it, and mint a profile token (shown exactly once). Then:
 
 ```bash
-claude mcp add --transport http gigmcp http://localhost:8080 \
-  --header "Authorization: Bearer <your token>"
+claude mcp add --transport http gigmcp http://localhost:8080/mcp/p/<profile-slug> \
+  --header "Authorization: Bearer <profile token>"
 ```
 
-You should see one tool, `echo_echo`, served by an MCP server running in an
-egress-isolated bubblewrap sandbox: private network namespace, no host filesystem,
-cleared environment, credential injected only at the proxy.
+Each server in the profile runs in an egress-isolated bubblewrap sandbox:
+private network namespace, no host filesystem, cleared environment, credential
+injected only at the proxy.
 
 ## Building
 

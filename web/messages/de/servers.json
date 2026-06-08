@@ -10,13 +10,27 @@
   "install": {
     "button": "Server installieren",
     "dialogTitle": "Server installieren",
-    "dialogDescription": "Gib eine Server-Referenz an: einen Namen, name@version oder sha256:digest — z. B. \"bitwarden\".",
+    "dialogDescription": "Wähle einen Server aus dem Registry-Katalog oder installiere per Referenz.",
+    "searchPlaceholder": "Server suchen…",
+    "noResults": "Keine Server entsprechen deiner Suche.",
+    "emptyCatalog": "Der Registry-Katalog ist leer.",
+    "installedBadge": "Installiert",
+    "confirmInstall": "{name} installieren",
+    "byRefToggle": "Stattdessen per Referenz installieren",
     "refLabel": "Server-Referenz",
-    "refPlaceholder": "bitwarden",
+    "refPlaceholder": "name@version oder sha256:digest",
     "submit": "Installieren",
     "submitting": "Wird installiert…",
     "success": "Server \"{name}\" installiert",
-    "error": "Installation fehlgeschlagen"
+    "error": "Installation fehlgeschlagen",
+    "registryDisabled": {
+      "title": "Keine Registry konfiguriert",
+      "description": "Für dieses Gateway ist keine Server-Registry konfiguriert. Du kannst unten weiterhin per Referenz installieren."
+    },
+    "registryUnavailable": {
+      "title": "Die Registry ist nicht erreichbar.",
+      "retry": "Erneut versuchen"
+    }
   },
   "uninstall": {
     "button": "Deinstallieren",

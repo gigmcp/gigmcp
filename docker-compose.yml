@@ -34,19 +34,15 @@ services:
     depends_on:
       - issuer-proxy
     environment:
-      GIG_BEARER_TOKEN: ${GIG_BEARER_TOKEN:?set GIG_BEARER_TOKEN in .env or the environment}
       # GIG_MASTER_KEY: hex-encoded 32-byte master KEK for the credential vault.
       # Generate with: openssl rand -hex 32
       # Required — the gateway will refuse to start without it.
       GIG_MASTER_KEY: ${GIG_MASTER_KEY:?set GIG_MASTER_KEY (openssl rand -hex 32)}
-      # Optional: seed a demo credential for the echo server on startup.
-      # GIG_DEMO_TOKEN and GIG_DEMO_ALLOW are pass-through; unset = no demo cred.
-      GIG_DEMO_TOKEN: ${GIG_DEMO_TOKEN:-}
-      GIG_DEMO_ALLOW: ${GIG_DEMO_ALLOW:-}
       # Registry index (signature-verified). Set GIG_INSTALL to enable boot installs.
       GIG_REGISTRY_INDEX_URL: ${GIG_REGISTRY_INDEX_URL:-}
       GIG_REGISTRY_PUBKEY: ${GIG_REGISTRY_PUBKEY:-}
-      # OIDC control plane (optional — unset disables /api; /mcp keeps working).
+      # OIDC control plane (optional — unset disables /api with a descriptive
+      # 404; the /mcp/p/{slug} profile endpoints keep working).
       GIG_OIDC_ISSUER: ${GIG_OIDC_ISSUER:-}
       GIG_OIDC_CLIENT_ID: ${GIG_OIDC_CLIENT_ID:-}
       GIG_OIDC_CLIENT_SECRET: ${GIG_OIDC_CLIENT_SECRET:-}

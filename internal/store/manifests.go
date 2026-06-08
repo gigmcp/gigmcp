@@ -47,7 +47,8 @@ type ManifestRecord struct {
 
 // NeedsReconsent reports whether the installed manifest differs from what the
 // user last consented to (DESIGN #7: manifest changes on update ⇒ re-consent).
-// The gateway refuses to spawn such servers; the frontend renders the prompt.
+// The gateway's profile spawn path refuses to launch such servers (fail
+// closed) until RecordConsent moves consented_hash to the new manifest hash.
 func (m ManifestRecord) NeedsReconsent() bool { return m.ManifestHash != m.ConsentedHash }
 
 const manifestSchema = `

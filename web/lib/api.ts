@@ -3,6 +3,8 @@ import type {
   User,
   Profile,
   Server,
+  CatalogResponse,
+  CatalogServer,
   Credential,
   CredentialPutBody,
   AuditPage,
@@ -107,6 +109,14 @@ export const api = {
     request<Server>("/api/servers/install", { method: "POST", json: { ref } }),
   uninstallServer: (name: string) =>
     request<void>(`/api/servers/${seg(name)}`, { method: "DELETE" }),
+
+  // Registry catalog (signed index, cached gateway-side for ~5 minutes).
+  // 501 registry_disabled when no registry is configured; 502
+  // registry_unavailable when the index cannot be fetched or verified.
+  catalog: async (): Promise<CatalogServer[]> => {
+    const res = await request<CatalogResponse>("/api/registry/servers");
+    return res.servers;
+  },
 
   listCredentials: () => request<Credential[]>("/api/credentials"),
   putCredential: (server: string, body: CredentialPutBody) =>

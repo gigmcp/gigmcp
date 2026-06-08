@@ -1,9 +1,10 @@
 // Command gateway is the gigmcp gateway: it seeds the echo backend only if
 // GIG_ECHO_BIN is set (legacy/dev fallback), installs GIG_INSTALL refs from
-// the signed registry index, spawns each stored server in an egress-isolated
-// bubblewrap sandbox behind an embedded MITM proxy (vault-backed credential
-// injection), and serves an aggregated, bearer-authed streamable-HTTP MCP
-// endpoint.
+// the signed registry index, and serves profile-scoped streamable-HTTP MCP
+// endpoints (/mcp/p/{slug}, per-profile bearer tokens) plus the OIDC-gated
+// /api control plane. Server runtimes are profile-scoped and spawned lazily
+// by the ProfileHost, each in an egress-isolated bubblewrap sandbox behind an
+// embedded MITM proxy (vault-backed credential injection).
 package main
 
 import (
@@ -29,7 +30,6 @@ import (
 	"github.com/gigmcp/gigmcp/internal/sandbox"
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/gigmcp/gigmcp/internal/vault"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const version = "0.1.0"
@@ -86,15 +86,10 @@ func run(ctx context.Context) error {
 	}
 
 	// Registry-driven install of the configured boot set (GIG_INSTALL).
+	// Install is record-only: runtimes are profile-scoped and spawned lazily
+	// by the ProfileHost on first request to /mcp/p/{slug}.
 	if err := installFromIndex(ctx, st, cfg); err != nil {
 		return err
-	}
-
-	// If GIG_DEMO_TOKEN is set, seed a demo credential for the echo server.
-	if cfg.DemoToken != "" {
-		if err := seedDemoCredential(ctx, st, v, cfg); err != nil {
-			return fmt.Errorf("seed demo credential: %w", err)
-		}
 	}
 
 	// Build the egress proxy.
@@ -137,31 +132,38 @@ func run(ctx context.Context) error {
 	// Subnet allocator for per-sandbox /30s.
 	alloc := netmgr.NewAllocator("10.88.0.0/16")
 
-	servers, err := st.ListServers(ctx)
-	if err != nil {
-		return fmt.Errorf("list servers: %w", err)
-	}
-
-	backends, cleanups, err := spawnInstalled(ctx, st, servers, alloc, reg, cfg, caFile)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		for _, c := range cleanups {
-			c()
-		}
-	}()
-
 	profiles := &gw.ProfileHost{
 		Store:   st,
 		Version: version,
 		Spawn: func(ctx context.Context, srv store.Server, tenant string) (*gw.EgressBackend, error) {
-			// placeholder is sourced from the manifest at spawn time (same as
-			// spawnInstalled does); for profile runtimes we pass "" here and
-			// let SpawnEgressBackend fall back to "PLACEHOLDER" for legacy
-			// servers — manifest-installed servers already carry the placeholder
-			// in the sandbox env from the registry installer.
-			return gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, tenant, "")
+			// The placeholder sentinel lives ONLY in the manifests table — the
+			// installer never writes it into any environment. It must be looked
+			// up here and passed to SpawnEgressBackend, which sets it as
+			// GIG_PLACEHOLDER inside the sandbox; the proxy matches the same
+			// manifest sentinel when swapping in the real credential.
+			//
+			// This is also the re-consent fail-closed gate (DESIGN #7): a server
+			// whose installed manifest differs from the last user-consented hash
+			// is refused, so registry updates (expanded allowed_hosts,
+			// injections, …) never take effect silently on the next spawn.
+			placeholder := ""
+			rec, err := st.GetManifest(ctx, srv.Name)
+			switch {
+			case err == nil:
+				if rec.NeedsReconsent() {
+					return nil, fmt.Errorf("server %q requires re-consent (manifest changed); refusing to spawn", srv.Name)
+				}
+				if len(rec.Injections) > 0 {
+					placeholder = rec.Injections[0].Placeholder
+				}
+			case errors.Is(err, store.ErrManifestNotFound):
+				// Legacy server (GIG_ECHO_BIN): no manifest; SpawnEgressBackend
+				// falls back to the literal "PLACEHOLDER" sentinel, matching the
+				// credential row's default.
+			default:
+				return nil, fmt.Errorf("manifest for %q: %w", srv.Name, err)
+			}
+			return gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, tenant, placeholder)
 		},
 	}
 	defer profiles.Close()
@@ -176,42 +178,11 @@ func run(ctx context.Context) error {
 		}
 		log.Printf("OIDC configured (issuer %s) — /api control plane enabled", cfg.OIDCIssuer)
 	} else {
-		log.Printf("WARN: GIG_OIDC_* not configured — /api control plane disabled (legacy /mcp still served)")
+		log.Printf("WARN: GIG_OIDC_* not configured — /api control plane disabled (/mcp/p/{slug} profile endpoints still served)")
 	}
 
-	gwServer, err := gw.New(ctx, version, backends)
-	if err != nil {
-		return err
-	}
-	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return gwServer }, nil)
-	log.Printf("gigmcp %s listening on %s (%d backend(s))", version, cfg.Listen, len(backends))
-	legacy := gw.RequireBearer(cfg.BearerToken, handler)
-	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, newInstaller(cfg, st, false), profiles, legacy))
-}
-
-// seedDemoCredential encrypts GIG_DEMO_TOKEN and stores it for the echo server
-// so the stack works out-of-the-box without extra setup.
-func seedDemoCredential(ctx context.Context, st store.Store, v *vault.Vault, cfg config.Config) error {
-	encrypted, err := v.Encrypt([]byte(cfg.DemoToken))
-	if err != nil {
-		return err
-	}
-	allowed := []string{"api.example.com"}
-	if cfg.DemoAllow != "" {
-		allowed = strings.Split(cfg.DemoAllow, ",")
-		for i, h := range allowed {
-			allowed[i] = strings.TrimSpace(h)
-		}
-	}
-	return st.PutCredential(ctx, store.Credential{
-		Server:       "echo",
-		Tenant:       "default",
-		EncryptedKey: encrypted,
-		InjectHeader: "Authorization",
-		InjectFormat: "Bearer {token}",
-		Placeholder:  "PLACEHOLDER",
-		AllowedHosts: allowed,
-	})
+	log.Printf("gigmcp %s listening on %s", version, cfg.Listen)
+	return http.ListenAndServe(cfg.Listen, buildMux(st, v, authn, newInstaller(cfg, st, false), newRegistryClient(cfg), profiles))
 }
 
 // applyForwardDrop sets the iptables FORWARD chain default policy to DROP.
@@ -260,7 +231,9 @@ func writeTempCA(pem []byte) (string, error) {
 
 // newInstaller constructs an *registry.IndexInstaller from cfg and st.
 // autoConsent should be true for operator-initiated boot installs (GIG_INSTALL)
-// and false for API-driven installs so the frontend consent flow gates the spawn.
+// and false for API-driven installs, which leave consented_hash empty so the
+// ProfileHost spawn path refuses the server until consent is recorded via
+// store.RecordConsent (DESIGN #7).
 func newInstaller(cfg config.Config, st store.Store, autoConsent bool) *registry.IndexInstaller {
 	return &registry.IndexInstaller{
 		Store:       st,
@@ -271,9 +244,19 @@ func newInstaller(cfg config.Config, st store.Store, autoConsent bool) *registry
 	}
 }
 
+// newRegistryClient builds the catalog-browsing registry client, or nil when
+// GIG_REGISTRY_INDEX_URL/GIG_REGISTRY_PUBKEY are unset (the catalog endpoint
+// then answers 501 registry_disabled).
+func newRegistryClient(cfg config.Config) *registry.Client {
+	if cfg.RegistryIndexURL == "" || cfg.RegistryPubKey == "" {
+		return nil
+	}
+	return &registry.Client{IndexURL: cfg.RegistryIndexURL, PublicKeyHex: cfg.RegistryPubKey}
+}
+
 // installFromIndex installs each GIG_INSTALL ref from the signed registry
-// index (record-only; spawning happens in spawnInstalled). Boot installs are
-// operator-initiated, so consent is recorded at install time.
+// index (record-only; the ProfileHost spawns lazily on first profile request).
+// Boot installs are operator-initiated, so consent is recorded at install time.
 func installFromIndex(ctx context.Context, st store.Store, cfg config.Config) error {
 	if cfg.Install == "" {
 		return nil
@@ -290,58 +273,4 @@ func installFromIndex(ctx context.Context, st store.Store, cfg config.Config) er
 		log.Printf("installed %q from registry index", ref)
 	}
 	return nil
-}
-
-// spawnInstalled spawns every stored server, enforcing re-consent (fail
-// closed) and wiring the manifest's placeholder + default tool subset.
-func spawnInstalled(
-	ctx context.Context,
-	st store.Store,
-	servers []store.Server,
-	alloc *netmgr.Allocator,
-	reg *proxy.Registry,
-	cfg config.Config,
-	caFile string,
-) ([]gw.Backend, []func(), error) {
-	var backends []gw.Backend
-	var cleanups []func()
-	for _, srv := range servers {
-		placeholder := ""
-		var expose map[string]bool
-		rec, err := st.GetManifest(ctx, srv.Name)
-		switch {
-		case err == nil:
-			if rec.NeedsReconsent() {
-				log.Printf("backend %q requires re-consent (manifest changed); NOT spawning", srv.Name)
-				continue
-			}
-			if len(rec.Injections) > 0 {
-				placeholder = rec.Injections[0].Placeholder
-			}
-			expose = map[string]bool{}
-			for _, tl := range rec.Tools {
-				if tl.Default {
-					expose[tl.Name] = true
-				}
-			}
-		case errors.Is(err, store.ErrManifestNotFound):
-			// legacy server (GIG_ECHO_BIN): no manifest, expose all tools
-		default:
-			for _, c := range cleanups {
-				c()
-			}
-			return nil, nil, fmt.Errorf("manifest for %q: %w", srv.Name, err)
-		}
-		eb, err := gw.SpawnEgressBackend(ctx, srv, alloc, reg, cfg.ProxyPort, caFile, cfg.BootstrapPath, "default", placeholder)
-		if err != nil {
-			for _, c := range cleanups {
-				c()
-			}
-			return nil, nil, fmt.Errorf("spawn egress backend %q: %w", srv.Name, err)
-		}
-		cleanups = append(cleanups, eb.Cleanup)
-		backends = append(backends, gw.Backend{Name: srv.Name, Session: eb.Session, Expose: expose})
-		log.Printf("backend %q running in egress sandbox (pid=%d)", srv.Name, eb.ChildPID)
-	}
-	return backends, cleanups, nil
 }

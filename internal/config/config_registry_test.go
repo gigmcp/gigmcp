@@ -6,7 +6,6 @@ import (
 )
 
 func TestFromEnvRegistryFields(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "")
 	t.Setenv("GIG_INSTALL", "echo@0.1.0, fetch")
 	t.Setenv("GIG_REGISTRY_INDEX_URL", "file:///tmp/index.json")
@@ -25,7 +24,6 @@ func TestFromEnvRegistryFields(t *testing.T) {
 }
 
 func TestEchoBinNowOptional(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_ECHO_BIN", "")
 	t.Setenv("GIG_INSTALL", "")
 	if _, err := FromEnv(); err != nil {
@@ -34,7 +32,6 @@ func TestEchoBinNowOptional(t *testing.T) {
 }
 
 func TestInstallRequiresIndexURLAndKey(t *testing.T) {
-	t.Setenv("GIG_BEARER_TOKEN", "tok")
 	t.Setenv("GIG_INSTALL", "echo")
 	t.Setenv("GIG_REGISTRY_INDEX_URL", "")
 	t.Setenv("GIG_REGISTRY_PUBKEY", "")
