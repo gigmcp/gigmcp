@@ -90,6 +90,14 @@ func (a *AuditingResolver) writer() {
 
 // Resolve delegates to Inner and records the outcome
 // (resolved | denied | error). The inner result is returned unchanged.
+//
+// The decision is derived SOLELY from Inner's returned (cred, err), so it
+// mirrors the real resolver by construction — including the credential-less,
+// manifest-backed case (public-API "sealed" servers): Inner returns a
+// no-secret Credential carrying the manifest's AllowedHosts with err==nil, so
+// the hostAllowed branch below records "resolved" for entitled hosts and
+// "denied" otherwise, never "error". This keeps the decorator and the resolver
+// from disagreeing without re-querying the store here.
 func (a *AuditingResolver) Resolve(id proxy.Identity, host string) (proxy.Credential, error) {
 	cred, err := a.Inner.Resolve(id, host)
 	rec := auditRecord{server: id.Server, tenant: id.Tenant, host: host}

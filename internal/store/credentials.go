@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// ErrCredentialNotFound is returned by GetCredential when no credential row
+// exists for the (server, tenant). It is a sentinel so callers can branch on
+// it via errors.Is — a credential-less server (e.g. a public-API "sealed"
+// server with a manifest but no secret) is distinct from a genuine error.
+var ErrCredentialNotFound = errors.New("store: credential not found")
+
 // UserTenant returns the canonical tenant key for per-user credentials
 // (decimal user ID). The resolver and API must agree on this encoding so that
 // credentials stored via the API are found by the egress proxy's resolver.
@@ -102,7 +108,7 @@ func (s *sqliteStore) GetCredential(ctx context.Context, server, tenant string) 
 		 FROM credentials WHERE server=? AND tenant=?`, server, tenant).
 		Scan(&c.Server, &c.Tenant, &c.EncryptedKey, &c.InjectHeader, &c.InjectFormat, &c.Placeholder, &hosts)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Credential{}, errors.New("store: credential not found")
+		return Credential{}, ErrCredentialNotFound
 	}
 	if err != nil {
 		return Credential{}, err

@@ -115,6 +115,64 @@ func TestProxyInjectsCredentialForAllowedHost(t *testing.T) {
 	}
 }
 
+// TestProxyNoInjectionEmptySecretAllowsEntitledHost covers the credential-less
+// "sealed" server case (e.g. hackernews, a public API): the resolver returns a
+// Credential with an empty secret/header/placeholder but a populated allowlist.
+// The proxy must allow egress to the entitled host and perform NO injection —
+// any header the sandbox sent is forwarded verbatim, untouched.
+func TestProxyNoInjectionEmptySecretAllowsEntitledHost(t *testing.T) {
+	var gotAuth string
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(200)
+	}))
+	defer upstream.Close()
+	upHost := upstream.Listener.Addr().String()
+
+	reg := proxy.NewRegistry()
+	reg.Bind("127.0.0.1", proxy.Identity{Server: "hackernews", Tenant: "default"})
+
+	// No secret, no inject header, no placeholder — only an allowlist.
+	res := fakeResolver{cred: proxy.Credential{
+		AllowedHosts: []string{hostOnly(upHost)},
+	}}
+	p := startProxy(t, reg, res)
+	p.SetUpstreamRoots(upstreamPool(t, upstream))
+
+	client := clientThroughProxy(t, p)
+	req, _ := http.NewRequest("GET", "https://"+upHost+"/", nil)
+	// Sandbox sends something in Authorization; the proxy must NOT rewrite it
+	// (no injection config), and must NOT panic on the empty credential.
+	req.Header.Set("Authorization", "untouched")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("entitled host with empty secret must be allowed: %v", err)
+	}
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if gotAuth != "untouched" {
+		t.Fatalf("upstream saw %q, want %q (no injection for empty credential)", gotAuth, "untouched")
+	}
+}
+
+// TestProxyEmptySecretDeniesNonEntitledHost confirms default-deny still holds
+// for a credential-less server: a host outside the manifest allowlist is denied.
+func TestProxyEmptySecretDeniesNonEntitledHost(t *testing.T) {
+	reg := proxy.NewRegistry()
+	reg.Bind("127.0.0.1", proxy.Identity{Server: "hackernews", Tenant: "default"})
+	res := fakeResolver{cred: proxy.Credential{AllowedHosts: []string{"hn.algolia.com"}}}
+	p := startProxy(t, reg, res)
+	client := clientThroughProxy(t, p)
+	_, err := client.Get("https://evil.example.com/")
+	if err == nil {
+		t.Fatal("non-entitled host must be denied even for a credential-less server")
+	}
+}
+
 func TestProxyBlocksDisallowedHost(t *testing.T) {
 	reg := proxy.NewRegistry()
 	reg.Bind("127.0.0.1", proxy.Identity{Server: "github", Tenant: "alice"})

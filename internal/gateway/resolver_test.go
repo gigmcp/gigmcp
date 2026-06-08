@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -68,6 +69,65 @@ func TestResolveManifestBacked(t *testing.T) {
 	}
 	if len(cred.AllowedHosts) != 2 || cred.AllowedHosts[0] != "slack.com" {
 		t.Fatalf("allowlist must come from manifest: %v", cred.AllowedHosts)
+	}
+}
+
+// TestResolveCredentiallessManifest covers a "sealed" server fronting a public
+// API (e.g. hackernews): a manifest record with an entitled allowlist but NO
+// credential row. It must resolve to a no-secret Credential carrying the
+// manifest's AllowedHosts so egress to entitled hosts is allowed, with nothing
+// injected.
+func TestResolveCredentiallessManifest(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	v := testVault(t)
+	ctx := context.Background()
+
+	// Manifest only; NO PutCredential.
+	if err := st.PutManifest(ctx, store.ManifestRecord{
+		Server: "hackernews", Version: "1.0.0", Digest: "sha256:x", Tier: "sealed",
+		Entrypoint: "/server",
+		AllowedHosts: []string{"hacker-news.firebaseio.com", "hn.algolia.com"},
+		ManifestHash: "h1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &CredResolver{Store: st, Vault: v}
+	cred, err := r.Resolve(proxy.Identity{Server: "hackernews", Tenant: "default"}, "hacker-news.firebaseio.com")
+	if err != nil {
+		t.Fatalf("credential-less manifest-backed server must resolve, got err: %v", err)
+	}
+	if cred.RealSecret != "" || cred.InjectHeader != "" || cred.InjectFormat != "" || cred.Placeholder != "" {
+		t.Fatalf("no secret/injection expected for credential-less server: %+v", cred)
+	}
+	if len(cred.AllowedHosts) != 2 ||
+		cred.AllowedHosts[0] != "hacker-news.firebaseio.com" ||
+		cred.AllowedHosts[1] != "hn.algolia.com" {
+		t.Fatalf("allowlist must come from manifest: %v", cred.AllowedHosts)
+	}
+}
+
+// TestResolveNoCredentialNoManifest preserves fail-closed behaviour: a server
+// with neither a credential nor a manifest is genuinely unknown and must error.
+func TestResolveNoCredentialNoManifest(t *testing.T) {
+	st, err := store.OpenSQLite(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	v := testVault(t)
+
+	r := &CredResolver{Store: st, Vault: v}
+	_, err = r.Resolve(proxy.Identity{Server: "ghost", Tenant: "default"}, "evil.example")
+	if err == nil {
+		t.Fatal("unknown server (no credential, no manifest) must error")
+	}
+	if !errors.Is(err, store.ErrCredentialNotFound) {
+		t.Fatalf("want ErrCredentialNotFound, got %v", err)
 	}
 }
 
