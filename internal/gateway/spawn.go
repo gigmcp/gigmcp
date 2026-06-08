@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -199,10 +200,28 @@ func SpawnEgressBackend(
 		return nil, fmt.Errorf("pipe userns-block: %w", err)
 	}
 
+	// Mount the server payload. For a single-file (go-static) server the
+	// extracted binary is bind-mounted alone at /app/server. For a toolpack
+	// bundle the whole staging directory is bind-mounted READ-ONLY at the
+	// in-image bundle path (path.Dir(entrypoint), e.g. /app), so /app/server plus
+	// the inert sidecars /app/manifest.yaml and /app/toolspec.yaml are all present
+	// — the engine ReadFile's the sidecars at those hardcoded paths. The
+	// entrypoint stays the exec target. All other sandbox semantics (seccomp,
+	// egress proxy, netns, uid drop, read-only) are identical to the single-file
+	// path.
+	exec := "/app/server"
+	var payload sandbox.Mount
+	if srv.BundleDir != "" {
+		exec = srv.Binary // in-image entrypoint path (e.g. /app/server)
+		payload = sandbox.Mount{Src: srv.BundleDir, Dst: path.Dir(srv.Binary)}
+	} else {
+		payload = sandbox.Mount{Src: srv.Binary, Dst: exec}
+	}
+
 	spec := sandbox.Spec{
-		Exec: "/app/server",
+		Exec: exec,
 		Mounts: []sandbox.Mount{
-			{Src: srv.Binary, Dst: "/app/server"},
+			payload,
 			{Src: caFile, Dst: "/etc/gigmcp-ca.pem"},
 		},
 		Egress: &sandbox.Egress{

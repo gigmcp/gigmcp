@@ -3,6 +3,8 @@ package gateway
 import (
 	"debug/elf"
 	"fmt"
+	"path"
+	"path/filepath"
 	"runtime"
 
 	"github.com/gigmcp/gigmcp/internal/store"
@@ -58,7 +60,15 @@ var elfMachineToGOARCH = map[elf.Machine]string{
 // POSITIVELY identified foreign architecture is rejected, so the normal
 // matching-arch path is never weakened.
 func checkBinaryArch(srv store.Server) error {
-	f, err := elf.Open(srv.Binary)
+	// For a toolpack bundle, srv.Binary is the IN-IMAGE entrypoint path (e.g.
+	// /app/server) which does not exist on the host; the host artifact is the
+	// same-named file inside the staging dir. For single-file servers srv.Binary
+	// is already the host path.
+	binPath := srv.Binary
+	if srv.BundleDir != "" {
+		binPath = filepath.Join(srv.BundleDir, path.Base(srv.Binary))
+	}
+	f, err := elf.Open(binPath)
 	if err != nil {
 		// Not an ELF, or unreadable: cannot determine arch — do not block.
 		return nil

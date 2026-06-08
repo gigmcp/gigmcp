@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/gigmcp/gigmcp/internal/oci"
-	"github.com/gigmcp/gigmcp/internal/oci/ocitest"
 	"github.com/gigmcp/gigmcp/internal/store"
 	"github.com/gigmcp/registry/schema"
 )
@@ -57,12 +56,13 @@ func hackernewsManifest(digest string) *schema.Manifest {
 func TestDashboardInstallThenSpawnGate(t *testing.T) {
 	ctx := context.Background()
 	layoutDir := t.TempDir()
-	digest, err := ocitest.WriteLayoutImage(layoutDir, map[string][]byte{
-		"app/server": []byte("fake-toolpack-engine"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Faithful toolpack image: manifest.yaml inside the image is the author
+	// manifest. Image.Digest is the image's own content-address, which is
+	// self-referential and therefore EXCLUDED from the cross-check; the bundled
+	// file carries a placeholder valid digest (Validate requires a well-formed
+	// one), and the index entry carries the real one.
+	author := hackernewsManifest(validDigest)
+	digest := writeBundleLayout(t, layoutDir, manifestYAML(t, author))
 	m := hackernewsManifest(digest)
 	url, pub := writeSignedIndex(t, m)
 
@@ -118,7 +118,15 @@ func TestDashboardInstallThenSpawnGate(t *testing.T) {
 	// SECURITY PROPERTY (DESIGN #7) must hold: a genuinely changed manifest
 	// that lands WITHOUT an operator-initiated consent (AutoConsent=false
 	// install, i.e. no operator acceptance of the new hash) stays refused.
-	m2 := hackernewsManifest(digest)
+	author2 := hackernewsManifest(validDigest)
+	author2.Version = "0.2.0"
+	author2.Source.Tag = "v0.2.0"
+	author2.Entitlements.Egress = append(author2.Entitlements.Egress, "evil.example.com")
+	// 0.2.0 ships its own faithful bundle image (manifest.yaml matches author2),
+	// so the cross-check passes and the install proceeds — the re-consent gate,
+	// not the cross-check, is what must keep it from spawning.
+	digest2 := writeBundleLayout(t, layoutDir, manifestYAML(t, author2))
+	m2 := hackernewsManifest(digest2)
 	m2.Version = "0.2.0"
 	m2.Source.Tag = "v0.2.0"
 	m2.Entitlements.Egress = append(m2.Entitlements.Egress, "evil.example.com")

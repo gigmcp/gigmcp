@@ -12,7 +12,33 @@ import (
 
 	"github.com/gigmcp/gigmcp/internal/oci"
 	"github.com/gigmcp/gigmcp/internal/store"
+	"github.com/gigmcp/registry/schema"
 )
+
+// builderToolpack is the image.builder discriminator that selects the multi-file
+// bundle install path. Any other value (including "" / "go-static") uses the
+// legacy single-file path unchanged.
+const builderToolpack = "toolpack"
+
+// ManifestMismatchError reports that the manifest.yaml baked into a toolpack
+// image does not match the signed/consented index manifest for the same
+// server@version. The image-index digest is pinned and signature-verified, so a
+// mismatch means the image was tampered after signing (or the registry shipped
+// an inconsistent bundle): the install is rejected so the tampered image never
+// runs. It is surfaced through the install API so the dashboard shows a real
+// message.
+type ManifestMismatchError struct {
+	Server      string
+	Version     string
+	IndexHash   string // hash of the consented/index manifest
+	BundledHash string // hash of the manifest.yaml extracted from the image
+}
+
+func (e *ManifestMismatchError) Error() string {
+	return fmt.Sprintf(
+		"registry: toolpack %s@%s: bundled manifest.yaml does not match the signed index manifest (index hash %s, bundled %s); refusing to install a tampered image",
+		e.Server, e.Version, e.IndexHash, e.BundledHash)
+}
 
 // uninstallNameRE mirrors the schema package's manifest-name rule; Uninstall
 // takes a raw caller-supplied name (e.g. from the REST API), so it must be
@@ -62,7 +88,14 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 		return store.Server{}, err
 	}
 
-	dest := filepath.Join(i.DataDir, "servers", m.Name+"@"+m.Version, "server")
+	bundle := m.Image.Builder == builderToolpack
+
+	// stageDir is the per-server artifact directory under DataDir. For a
+	// single-file server the entrypoint binary lands at <stageDir>/server; for a
+	// toolpack bundle the whole flat bundle (server + sidecars) lands directly in
+	// stageDir, which is later bind-mounted read-only at the in-image bundle path.
+	stageDir := filepath.Join(i.DataDir, "servers", m.Name+"@"+m.Version)
+	dest := filepath.Join(stageDir, "server")
 
 	// Capture the pre-install consent state so the consent decision below can
 	// distinguish a first-ever install (no prior consent ⇒ this install is the
@@ -74,12 +107,22 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 		return store.Server{}, priorErr
 	}
 
+	// ensureRow records the server row in the correct (bundle vs single-file)
+	// mode. The entrypoint is always the exec target; for bundles bundle_dir is
+	// the staging directory the gateway mounts.
+	ensureRow := func() (store.Server, error) {
+		if bundle {
+			return i.Store.EnsureServerBundle(ctx, m.Name, m.Image.Entrypoint, stageDir)
+		}
+		return i.Store.EnsureServer(ctx, m.Name, dest)
+	}
+
 	// Idempotent by (name, version, hash): same install → refresh, keep
 	// placeholders untouched. Consent is still (re)applied: a first install
-	// whose binary is already on disk must end up consented too.
+	// whose artifact is already on disk must end up consented too.
 	if hadPrior && prior.Version == m.Version && prior.ManifestHash == hash {
 		if _, statErr := os.Stat(dest); statErr == nil {
-			srv, err := i.Store.EnsureServer(ctx, m.Name, dest)
+			srv, err := ensureRow()
 			if err != nil {
 				return store.Server{}, err
 			}
@@ -90,7 +133,21 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 		}
 	}
 
-	if err := i.Puller.Extract(ctx, m.Image.Ref, m.Image.Digest, m.Image.Entrypoint, dest); err != nil {
+	if bundle {
+		b, err := i.Puller.ExtractBundle(ctx, m.Image.Ref, m.Image.Digest, m.Image.Entrypoint, stageDir)
+		if err != nil {
+			return store.Server{}, err
+		}
+		// Defense in depth: the manifest.yaml baked into the image must equal the
+		// signed/consented index manifest for this server@version. The image-index
+		// digest is pinned+signature-verified, so a mismatch means a tampered
+		// image — reject it (toolspec.yaml is NOT cross-checked; its integrity is
+		// already covered by the pinned digest).
+		if err := crossCheckBundledManifest(b.Dir, m); err != nil {
+			os.RemoveAll(stageDir)
+			return store.Server{}, err
+		}
+	} else if err := i.Puller.Extract(ctx, m.Image.Ref, m.Image.Digest, m.Image.Entrypoint, dest); err != nil {
 		return store.Server{}, err
 	}
 
@@ -122,7 +179,7 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 	}); err != nil {
 		return store.Server{}, err
 	}
-	srv, err := i.Store.EnsureServer(ctx, m.Name, dest)
+	srv, err := ensureRow()
 	if err != nil {
 		return store.Server{}, err
 	}
@@ -181,6 +238,62 @@ func (i *IndexInstaller) Uninstall(ctx context.Context, name string) error {
 
 func (i *IndexInstaller) List(ctx context.Context) ([]store.Server, error) {
 	return i.Store.ListServers(ctx)
+}
+
+// crossCheckBundledManifest parses the manifest.yaml extracted from a toolpack
+// image and asserts it is EQUAL to the signed/consented index manifest m.
+//
+// Both sides are reduced to the canonical manifest hash (schema.Manifest.Hash: a
+// SHA-256 over canonical JSON of the parsed struct), which is robust to trailing
+// whitespace and YAML formatting and ignores fields the schema does not model.
+// The bundled manifest is re-parsed AND re-validated (a signed-but-malformed
+// bundled manifest must still not install).
+//
+// Image.Digest is EXCLUDED from the comparison: it is the content-address of the
+// image that contains manifest.yaml, so it cannot appear inside that file
+// without being self-referential — the registry fills it into the index entry
+// only after building the image. Its integrity is already covered by the pinned,
+// signature-verified image-index digest, so comparing the rest of the structured
+// manifest is the right defense-in-depth check. On any mismatch a
+// *ManifestMismatchError is returned so the tampered image is rejected.
+func crossCheckBundledManifest(bundleDir string, m *schema.Manifest) error {
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "manifest.yaml"))
+	if err != nil {
+		return fmt.Errorf("registry: read bundled manifest.yaml: %w", err)
+	}
+	bm, err := schema.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("registry: parse bundled manifest.yaml: %w", err)
+	}
+	if err := bm.Validate(); err != nil {
+		return fmt.Errorf("registry: bundled manifest.yaml invalid: %w", err)
+	}
+	wantHash, err := digestIndependentHash(m)
+	if err != nil {
+		return err
+	}
+	got, err := digestIndependentHash(bm)
+	if err != nil {
+		return err
+	}
+	if got != wantHash {
+		return &ManifestMismatchError{
+			Server: m.Name, Version: m.Version,
+			IndexHash: wantHash, BundledHash: got,
+		}
+	}
+	return nil
+}
+
+// digestIndependentHash hashes a manifest with Image.Digest cleared, so the
+// cross-check compares author-declared content (name, version, tier, egress,
+// credentials, tools, entrypoint, builder, ...) and not the self-referential
+// image content-address. It copies the value so the caller's manifest is
+// untouched.
+func digestIndependentHash(m *schema.Manifest) (string, error) {
+	c := *m
+	c.Image.Digest = ""
+	return c.Hash()
 }
 
 // newPlaceholder returns a high-entropy sentinel. The proxy matches it as a

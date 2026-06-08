@@ -12,13 +12,26 @@ import (
 type Server struct {
 	ID     int64
 	Name   string // unique; used as the tool namespace prefix
-	Binary string // absolute host path to the server's binary
+	Binary string // absolute host path to the server's entrypoint binary
+	// BundleDir is set for toolpack multi-file servers: the host staging
+	// directory holding the entrypoint plus its inert sidecars
+	// (manifest.yaml, toolspec.yaml). The gateway bind-mounts this directory
+	// read-only at the in-image bundle path (path.Dir(entrypoint)) instead of
+	// mounting Binary alone. Empty for single-file (go-static) servers, which
+	// keep the original single-binary mount — so existing rows behave exactly
+	// as before.
+	BundleDir string
 }
 
 // Store persists gateway state.
 type Store interface {
-	// EnsureServer upserts a server by name and returns the stored record.
+	// EnsureServer upserts a single-file server by name and returns the stored
+	// record. bundle_dir is cleared (single-binary mount).
 	EnsureServer(ctx context.Context, name, binary string) (Server, error)
+	// EnsureServerBundle upserts a toolpack multi-file server by name: entrypoint
+	// is the in-bundle binary path, bundleDir is the host staging directory that
+	// the gateway bind-mounts read-only at the in-image bundle path.
+	EnsureServerBundle(ctx context.Context, name, entrypoint, bundleDir string) (Server, error)
 	// ListServers returns all registered servers ordered by name.
 	ListServers(ctx context.Context) ([]Server, error)
 	// PutCredential upserts a credential by (server, tenant).
