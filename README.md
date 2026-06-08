@@ -76,10 +76,12 @@ injected only at the proxy.
 
 ## Building
 
-The docker build currently requires a sibling checkout of
-[github.com/gigmcp/registry](https://github.com/gigmcp/registry) at
-`../gigmcp-registry` — the `go.mod` `replace` directive and the compose
-`additional_contexts` both point there.
+A plain clone is all you need: the registry schema is consumed as a published
+Go module ([github.com/gigmcp/registry/schema](https://github.com/gigmcp/registry),
+pinned in `go.mod`) and fetched from the Go module proxy during the build, so
+`git clone` followed by the `docker compose up` invocation from the
+[Quickstart](#quickstart) (which sets the required environment variables)
+builds and runs everything from this repository alone.
 
 ## Development
 

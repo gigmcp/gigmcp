@@ -1,10 +1,8 @@
 # CI for the Gig'MCP gateway (Go), dashboard (Next.js), and Docker images.
 #
-# Layout note: go.mod contains
-#   replace github.com/gigmcp/registry/schema => ../gigmcp-registry/schema
-# so every Go/Docker job checks out THIS repo into ./gigmcp and the public
-# gigmcp/registry repo into ./gigmcp-registry (siblings inside the workspace),
-# then runs with working-directory: gigmcp.
+# Layout note: the registry schema is consumed as a published Go module
+# (github.com/gigmcp/registry/schema, pinned in go.mod), so every job runs
+# against a single checkout of this repo at the workspace root.
 name: ci
 
 on:
@@ -24,20 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout gigmcp
-        uses: actions/checkout@v6
-        with:
-          path: gigmcp
-      - name: Checkout gigmcp/registry (go.mod replace sibling)
-        uses: actions/checkout@v6
-        with:
-          repository: gigmcp/registry
-          path: gigmcp-registry
+      - uses: actions/checkout@v6
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: gigmcp/go.mod
-          cache-dependency-path: gigmcp/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       # Sandbox/e2e tests gate on sandbox.Available() == linux && bwrap on
       # PATH. They need NET_ADMIN/root privileges the runner user does not
       # have, so if the image ever ships bubblewrap they would FAIL instead of
@@ -49,7 +39,6 @@ jobs:
             sudo apt-get remove -y bubblewrap
           fi
       - name: gofmt
-        working-directory: gigmcp
         run: |
           files=$(git ls-files '*.go' | xargs gofmt -l)
           if [ -n "$files" ]; then
@@ -58,13 +47,10 @@ jobs:
             exit 1
           fi
       - name: go vet
-        working-directory: gigmcp
         run: go vet ./...
       - name: go build
-        working-directory: gigmcp
         run: go build ./...
       - name: go test
-        working-directory: gigmcp
         run: go test ./...
 
   web:
@@ -104,27 +90,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout gigmcp
-        uses: actions/checkout@v6
-        with:
-          path: gigmcp
-      - name: Checkout gigmcp/registry (named build context)
-        uses: actions/checkout@v6
-        with:
-          repository: gigmcp/registry
-          path: gigmcp-registry
+      - uses: actions/checkout@v6
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
-      # Build-only smoke test (no push). The Dockerfile does
-      # `COPY --from=registry schema/ ...`; docker-compose.yml maps that named
-      # context via `additional_contexts: { registry: ../gigmcp-registry }`,
-      # replicated here with --build-context.
+      # Build-only smoke test (no push). The schema module is fetched from the
+      # Go module proxy during `go mod download`, so the repo context suffices.
       - name: Build gateway image
-        run: docker buildx build --build-context registry=./gigmcp-registry ./gigmcp
+        run: docker buildx build .
       - name: Build web image
         # GATEWAY_INTERNAL_URL build arg has an in-Dockerfile default; set it
         # explicitly anyway so the smoke build is self-describing.
-        run: docker buildx build --build-arg GATEWAY_INTERNAL_URL=http://gateway.invalid:8080 ./gigmcp/web
+        run: docker buildx build --build-arg GATEWAY_INTERNAL_URL=http://gateway.invalid:8080 ./web
 
   # Full sandbox suite (bwrap + veth/NET_ADMIN + seccomp tests) via `make test`,
   # which runs go test inside a Docker container with seccomp/apparmor
@@ -136,15 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout gigmcp
-        uses: actions/checkout@v6
-        with:
-          path: gigmcp
-      - name: Checkout gigmcp/registry (mounted by make test)
-        uses: actions/checkout@v6
-        with:
-          repository: gigmcp/registry
-          path: gigmcp-registry
+      - uses: actions/checkout@v6
       # Ubuntu 24.04 restricts unprivileged user namespaces by default; relax
       # the sysctls so bwrap inside the unconfined dev container can create
       # them. Best-effort — the job is non-blocking either way.
@@ -153,5 +121,4 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
       - name: make test (full suite in Docker)
-        working-directory: gigmcp
         run: make test

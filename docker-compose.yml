@@ -25,11 +25,6 @@ services:
   gateway:
     build:
       context: .
-      # go.mod replaces github.com/gigmcp/registry/schema => ../gigmcp-registry/
-      # schema (outside this context); supply the sibling repo as a named
-      # context the Dockerfile copies in before `go mod download`.
-      additional_contexts:
-        registry: ../gigmcp-registry
     network_mode: "service:issuer-proxy"
     depends_on:
       - issuer-proxy

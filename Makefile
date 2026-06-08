@@ -18,7 +18,6 @@ test: dev-image
 		--cap-add NET_ADMIN \
 		-e GOFLAGS=-buildvcs=false \
 		-v $(PWD):/src -w /src \
-		-v $(abspath $(PWD)/../gigmcp-registry):/gigmcp-registry \
 		-v gigmcp-gomod:/go/pkg/mod \
 		-v gigmcp-gocache:/root/.cache/go-build \
 		$(DEV_IMAGE) go test ./...
