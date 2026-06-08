@@ -25,10 +25,20 @@ type IndexInstaller struct {
 	Client  *Client
 	Puller  *oci.Puller
 	DataDir string // extracted binaries land in <DataDir>/servers/<name>@<version>/server
-	// AutoConsent records consent at install time. Set for operator-initiated
-	// boot installs (GIG_INSTALL); leave false for API installs, which keep
-	// consented_hash empty so the gateway's spawn path refuses the server
-	// until consent is recorded via store.RecordConsent (DESIGN #7).
+	// AutoConsent records consent for an UPGRADE (a manifest whose hash differs
+	// from the one the server was last consented to). Set for operator-initiated
+	// boot installs (GIG_INSTALL), where the operator's deploy config is the
+	// standing consent for whatever version the index resolves to.
+	//
+	// It does NOT govern first installs: an explicit install of a server that
+	// has never been consented (admin POST /api/servers/install, or a boot
+	// install) is itself the consent for that manifest, so consent is recorded
+	// regardless of AutoConsent — otherwise an API-installed server could never
+	// spawn (there is no separate consent endpoint). What stays gated behind
+	// re-consent is a genuine manifest CHANGE to an already-consented server:
+	// with AutoConsent=false (the API path) that leaves consented_hash stale so
+	// the gateway's spawn path refuses the server until consent is re-recorded
+	// (DESIGN #7).
 	AutoConsent bool
 }
 
@@ -54,12 +64,29 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 
 	dest := filepath.Join(i.DataDir, "servers", m.Name+"@"+m.Version, "server")
 
+	// Capture the pre-install consent state so the consent decision below can
+	// distinguish a first-ever install (no prior consent ⇒ this install is the
+	// consent) from an upgrade of an already-consented server (changed manifest
+	// ⇒ re-consent, DESIGN #7).
+	prior, priorErr := i.Store.GetManifest(ctx, m.Name)
+	hadPrior := priorErr == nil
+	if !hadPrior && !errors.Is(priorErr, store.ErrManifestNotFound) {
+		return store.Server{}, priorErr
+	}
+
 	// Idempotent by (name, version, hash): same install → refresh, keep
-	// placeholders and consent untouched.
-	if existing, err := i.Store.GetManifest(ctx, m.Name); err == nil &&
-		existing.Version == m.Version && existing.ManifestHash == hash {
+	// placeholders untouched. Consent is still (re)applied: a first install
+	// whose binary is already on disk must end up consented too.
+	if hadPrior && prior.Version == m.Version && prior.ManifestHash == hash {
 		if _, statErr := os.Stat(dest); statErr == nil {
-			return i.Store.EnsureServer(ctx, m.Name, dest)
+			srv, err := i.Store.EnsureServer(ctx, m.Name, dest)
+			if err != nil {
+				return store.Server{}, err
+			}
+			if err := i.maybeConsent(ctx, m.Name, hash, prior, hadPrior); err != nil {
+				return store.Server{}, err
+			}
+			return srv, nil
 		}
 	}
 
@@ -99,12 +126,31 @@ func (i *IndexInstaller) Install(ctx context.Context, ref string) (store.Server,
 	if err != nil {
 		return store.Server{}, err
 	}
-	if i.AutoConsent {
-		if err := i.Store.RecordConsent(ctx, m.Name, hash); err != nil {
-			return store.Server{}, err
-		}
+	if err := i.maybeConsent(ctx, m.Name, hash, prior, hadPrior); err != nil {
+		return store.Server{}, err
 	}
 	return srv, nil
+}
+
+// maybeConsent records consent for the just-installed manifest hash when the
+// install action is itself the consent:
+//
+//   - first install of a server (no prior consented manifest) — the explicit
+//     install is the consent, so the server can spawn; this is true for both
+//     boot and API installs, and is what makes a dashboard install usable, OR
+//   - an operator boot install (AutoConsent), where the deploy config stands in
+//     as consent for whatever version resolves — including upgrades.
+//
+// It deliberately does NOT record consent for an API-path upgrade that CHANGES
+// an already-consented manifest: that leaves consented_hash stale so the
+// spawn-side gate (ManifestRecord.NeedsReconsent) fails closed until the change
+// is explicitly re-consented (DESIGN #7).
+func (i *IndexInstaller) maybeConsent(ctx context.Context, name, hash string, prior store.ManifestRecord, hadPrior bool) error {
+	firstConsent := !hadPrior || prior.ConsentedHash == ""
+	if i.AutoConsent || firstConsent {
+		return i.Store.RecordConsent(ctx, name, hash)
+	}
+	return nil
 }
 
 func (i *IndexInstaller) Uninstall(ctx context.Context, name string) error {

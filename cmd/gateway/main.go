@@ -230,10 +230,13 @@ func writeTempCA(pem []byte) (string, error) {
 }
 
 // newInstaller constructs an *registry.IndexInstaller from cfg and st.
-// autoConsent should be true for operator-initiated boot installs (GIG_INSTALL)
-// and false for API-driven installs, which leave consented_hash empty so the
-// ProfileHost spawn path refuses the server until consent is recorded via
-// store.RecordConsent (DESIGN #7).
+// autoConsent should be true for operator-initiated boot installs (GIG_INSTALL),
+// which auto-consent even on UPGRADE (the deploy config is the standing
+// consent), and false for API-driven installs. Either way a FIRST install is
+// self-consenting (the explicit install action is the consent), so an
+// API-installed server can spawn; only a manifest CHANGE to an already-consented
+// server stays gated behind re-consent on the API path (DESIGN #7). See
+// IndexInstaller.AutoConsent.
 func newInstaller(cfg config.Config, st store.Store, autoConsent bool) *registry.IndexInstaller {
 	return &registry.IndexInstaller{
 		Store:       st,
