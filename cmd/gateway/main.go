@@ -212,6 +212,10 @@ func applyForwardDrop() {
 }
 
 // writeTempCA writes PEM bytes to a temp file and returns its path.
+// The file is created world-readable (0644) because the CA cert is a public
+// certificate (not a secret) and the bwrap sandbox runs as uid 65534, which
+// must be able to read it at /etc/gigmcp-ca.pem. os.CreateTemp creates files
+// at 0600, so we chmod immediately after closing.
 func writeTempCA(pem []byte) (string, error) {
 	f, err := os.CreateTemp("", "gigmcp-ca-*.pem")
 	if err != nil {
@@ -223,6 +227,10 @@ func writeTempCA(pem []byte) (string, error) {
 		return "", err
 	}
 	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := os.Chmod(f.Name(), 0644); err != nil {
 		os.Remove(f.Name())
 		return "", err
 	}

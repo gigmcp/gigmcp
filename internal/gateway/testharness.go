@@ -141,6 +141,10 @@ func StartEgressGatewayForTest(
 	t.Cleanup(func() { ln.Close() })
 
 	// 5. Write proxy CA PEM to a temp file for mounting into the sandbox.
+	// IMPORTANT: keep mode 0644 here so tests exercise the sandbox uid (65534)
+	// reading the CA — this must match production's writeTempCA (cmd/gateway/main.go)
+	// which also chmods to 0644. If the two diverge, the egress E2E tests will
+	// pass while production fails with "permission denied" reading the CA cert.
 	caFile := filepath.Join(t.TempDir(), "proxy-ca.pem")
 	if err := os.WriteFile(caFile, p.CACertPEM(), 0644); err != nil {
 		t.Fatalf("write CA PEM: %v", err)

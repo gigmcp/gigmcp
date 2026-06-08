@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -160,4 +161,27 @@ func TestBuildMuxRouting(t *testing.T) {
 			t.Fatalf("/mcp/p/x without token must 401 when OIDC enabled: %d", resp.StatusCode)
 		}
 	})
+}
+
+// TestWriteTempCAPermissions verifies that writeTempCA produces a file readable
+// by processes other than the owner (mode & 0044 != 0). This is a regression
+// test for the 0600 → 0644 fix: the bwrap sandbox runs as uid 65534 and cannot
+// read a root-owned 0600 file, which caused "permission denied" opening the CA
+// cert and consequently "x509: failed to load system roots" on all HTTPS egress.
+func TestWriteTempCAPermissions(t *testing.T) {
+	pem := []byte("-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n")
+	path, err := writeTempCA(pem)
+	if err != nil {
+		t.Fatalf("writeTempCA: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat CA file: %v", err)
+	}
+	mode := info.Mode()
+	if mode&0044 == 0 {
+		t.Fatalf("CA file must be world-readable (mode & 0044 != 0) so sandbox uid 65534 can read it; got mode %04o", mode)
+	}
 }
