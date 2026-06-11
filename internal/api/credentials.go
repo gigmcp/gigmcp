@@ -82,7 +82,7 @@ func validateCredentialBody(b *credentialPutBody) (field, msg string) {
 			}
 		}
 		if !allowedHostRe.MatchString(h) {
-			return "allowed_hosts", fmt.Sprintf("allowed_hosts[%d] must match ^(\\*\\.)?[a-z0-9.-]+$", i)
+			return "allowed_hosts", fmt.Sprintf("allowed_hosts[%d] must be a valid hostname, optionally prefixed with \"*.\"", i)
 		}
 	}
 	if b.InjectFormat != "" {

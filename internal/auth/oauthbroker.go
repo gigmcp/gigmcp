@@ -31,19 +31,37 @@ const (
 	guardTLSHandshakeWait = 10 * time.Second
 )
 
+// cgnatNet is the RFC 6598 shared address space (100.64.0.0/10) used for
+// carrier-grade NAT. Some cloud metadata endpoints live here (e.g. Alibaba
+// Cloud's 100.100.100.200), so the SSRF guard must reject it alongside
+// loopback/private/link-local ranges.
+var cgnatNet = func() *net.IPNet {
+	_, n, _ := net.ParseCIDR("100.64.0.0/10")
+	return n
+}()
+
+// isBlockedIP reports whether ip is a destination the SSRF guard must refuse:
+// an unparseable address, or one in the loopback, RFC1918 private, link-local,
+// unspecified, or CGNAT (RFC 6598 100.64.0.0/10) ranges.
+func isBlockedIP(ip net.IP) bool {
+	return ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || cgnatNet.Contains(ip)
+}
+
 // newGuardedHTTPClient builds the broker's SSRF connection-time guard. The
 // broker makes server-side requests to BYO OAuth token endpoints (token
 // exchange + refresh); a malicious BYO config could point those at internal
-// services (cloud metadata at 169.254.169.254, loopback, RFC1918). The input
-// validation in internal/api (urlvalidate.go) rejects literal-IP/localhost
-// token_urls, but it cannot catch non-canonical encodings (https://2130706433/,
-// https://0x7f.0.0.1/, https://127.1/) or a hostname that DNS-resolves to a
-// private IP at connect time (DNS rebinding).
+// services (cloud metadata at 169.254.169.254 or 100.100.100.200, loopback,
+// RFC1918). The input validation in internal/api (urlvalidate.go) rejects
+// literal-IP/localhost token_urls, but it cannot catch non-canonical encodings
+// (https://2130706433/, https://0x7f.0.0.1/, https://127.1/) or a hostname that
+// DNS-resolves to a private IP at connect time (DNS rebinding).
 //
 // This guard backstops that: the net.Dialer Control callback runs AFTER name
 // resolution with the concrete resolved IP:port, so every dangerous destination
-// — however it was encoded, and even if the DNS answer changed — is refused
-// before the socket connects.
+// — including the CGNAT shared range (100.64.0.0/10), however it was encoded,
+// and even if the DNS answer changed — is refused before the socket connects.
 func newGuardedHTTPClient() *http.Client {
 	dialer := &net.Dialer{
 		Timeout: guardDialTimeout,
@@ -52,10 +70,7 @@ func newGuardedHTTPClient() *http.Client {
 			if err != nil {
 				return err
 			}
-			ip := net.ParseIP(host)
-			if ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
-				ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-				ip.IsUnspecified() {
+			if isBlockedIP(net.ParseIP(host)) {
 				return fmt.Errorf("ssrf guard: refusing connection to %s", address)
 			}
 			return nil

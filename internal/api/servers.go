@@ -72,7 +72,8 @@ func (s *Server) handleUninstallServer(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	if err := s.Installer.Uninstall(r.Context(), name); err != nil {
-		writeErr(w, http.StatusBadGateway, "uninstall_failed", err.Error())
+		log.Printf("ERROR: uninstall %s: %v", name, err)
+		writeErr(w, http.StatusBadGateway, "uninstall_failed", "uninstall failed")
 		return
 	}
 	// Remove the server from all profiles and invalidate their runtimes.

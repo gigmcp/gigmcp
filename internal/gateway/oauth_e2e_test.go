@@ -110,8 +110,9 @@ func TestOAuthEgressInjectsBearerSandboxNeverHoldsToken(t *testing.T) {
 	// 4. Install an oauth2 manifest for server "acmeapp" / vendor "acme".
 	//    The upstream host is the fake upstream we start below.
 	upstream, upstreamHost := newE2EUpstream(t)
-	// AllowedHosts uses only the bare hostname (no port); the proxy's allowed()
-	// function compares against hostname(CONNECT host) which strips the port.
+	// AllowedHosts uses only the bare hostname (no port); the proxy's
+	// HostAllowed function compares against hostname(CONNECT host) which strips
+	// the port.
 	upstreamBareHost, _, _ := net.SplitHostPort(upstreamHost)
 	if err := st.PutManifest(ctx, store.ManifestRecord{
 		Server: "acmeapp", Version: "1.0.0", Digest: "sha256:x", Tier: "sealed",

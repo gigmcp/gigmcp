@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,40 @@ import (
 
 	"github.com/gigmcp/gigmcp/internal/store"
 )
+
+// TestIsBlockedIP is a direct unit test of the SSRF guard predicate, covering
+// the existing rejection set plus the CGNAT (RFC 6598 100.64.0.0/10) range and
+// confirming a public address is still allowed.
+func TestIsBlockedIP(t *testing.T) {
+	cases := []struct {
+		ip      string
+		blocked bool
+	}{
+		{"127.0.0.1", true},       // loopback
+		{"10.0.0.1", true},        // RFC1918 private
+		{"192.168.1.1", true},     // RFC1918 private
+		{"169.254.169.254", true}, // link-local (cloud metadata)
+		{"0.0.0.0", true},         // unspecified
+		{"100.64.0.0", true},      // CGNAT lower bound
+		{"100.100.100.200", true}, // CGNAT (Alibaba metadata)
+		{"100.127.255.255", true}, // CGNAT upper bound
+		{"8.8.8.8", false},        // public
+		{"1.1.1.1", false},        // public
+		{"100.128.0.0", false},    // just outside CGNAT /10
+	}
+	for _, c := range cases {
+		ip := net.ParseIP(c.ip)
+		if ip == nil {
+			t.Fatalf("test bug: unparseable IP %q", c.ip)
+		}
+		if got := isBlockedIP(ip); got != c.blocked {
+			t.Errorf("isBlockedIP(%s) = %v, want %v", c.ip, got, c.blocked)
+		}
+	}
+	if !isBlockedIP(nil) {
+		t.Error("isBlockedIP(nil) must be true (unparseable address)")
+	}
+}
 
 // TestGuardedClientRefusesLoopback is a direct unit test of the SSRF
 // connection-time guard: a plain GET to a loopback address must be refused at
