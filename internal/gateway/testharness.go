@@ -120,7 +120,9 @@ func StartEgressGatewayForTest(
 	// 4. Proxy registry + resolver + proxy instance.
 	reg := proxy.NewRegistry()
 	resolver := &CredResolver{Store: st, Vault: v}
-	p, err := proxy.New(reg, resolver)
+	// The upstream is a loopback httptest TLS server, which the production egress
+	// SSRF guard refuses — inject the permissive dialer for the e2e flow.
+	p, err := proxy.New(reg, resolver, proxy.WithDialControl(proxy.AllowLoopbackDialControl()))
 	if err != nil {
 		t.Fatalf("proxy.New: %v", err)
 	}

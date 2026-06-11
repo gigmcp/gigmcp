@@ -9,12 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gigmcp/gigmcp/internal/netguard"
 	"github.com/gigmcp/gigmcp/internal/store"
 )
 
-// TestIsBlockedIP is a direct unit test of the SSRF guard predicate, covering
-// the existing rejection set plus the CGNAT (RFC 6598 100.64.0.0/10) range and
-// confirming a public address is still allowed.
+// TestIsBlockedIP is a direct unit test of the shared SSRF guard predicate
+// (netguard.IsBlockedIP), covering the existing rejection set plus the CGNAT
+// (RFC 6598 100.64.0.0/10) range and confirming a public address is still
+// allowed. The broker's guarded client wires this predicate into its dialer.
 func TestIsBlockedIP(t *testing.T) {
 	cases := []struct {
 		ip      string
@@ -37,12 +39,12 @@ func TestIsBlockedIP(t *testing.T) {
 		if ip == nil {
 			t.Fatalf("test bug: unparseable IP %q", c.ip)
 		}
-		if got := isBlockedIP(ip); got != c.blocked {
-			t.Errorf("isBlockedIP(%s) = %v, want %v", c.ip, got, c.blocked)
+		if got := netguard.IsBlockedIP(ip); got != c.blocked {
+			t.Errorf("netguard.IsBlockedIP(%s) = %v, want %v", c.ip, got, c.blocked)
 		}
 	}
-	if !isBlockedIP(nil) {
-		t.Error("isBlockedIP(nil) must be true (unparseable address)")
+	if !netguard.IsBlockedIP(nil) {
+		t.Error("netguard.IsBlockedIP(nil) must be true (unparseable address)")
 	}
 }
 

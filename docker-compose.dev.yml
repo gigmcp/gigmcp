@@ -1,3 +1,21 @@
+# =============================================================================
+# !! LOCAL DEV FIXTURES ONLY — DO NOT USE IN PRODUCTION !!
+# -----------------------------------------------------------------------------
+# Every credential in this file is a weak, hardcoded DEV FIXTURE: the Zitadel
+# --masterkey ("MasterkeyNeedsToHave32Characters"), the Postgres user/admin
+# passwords ("zitadel"/"postgres"), and the first-instance admin login
+# ("admin" / "Password1!"). They exist solely so this stack starts with zero
+# setup on a developer laptop.
+#
+# These values are PUBLIC (committed to the repo) and MUST NEVER be used in any
+# shared, staging, or production environment. Production deployments MUST supply
+# strong, unique secrets injected via a secrets manager / environment (never
+# committed): a freshly-generated 32-char Zitadel masterkey, unique DB
+# passwords, and a strong first-instance admin password.
+#
+# Do not change the values below — the dev stack depends on them.
+# =============================================================================
+#
 # Dev-only fixture: a local Zitadel IdP for OIDC development and the Task 1
 # spike. NOT for production. Start with:
 #   docker compose -f docker-compose.dev.yml up -d
