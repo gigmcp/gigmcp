@@ -86,7 +86,7 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no credential", http.StatusForbidden)
 		return
 	}
-	if !allowed(targetHost, cred.AllowedHosts) {
+	if !HostAllowed(targetHost, cred.AllowedHosts) {
 		log.Printf("DENY src=%s tenant=%s/%s host=%s reason=not-in-allowlist", srcIP, id.Server, id.Tenant, targetHost)
 		http.Error(w, "host not allowed", http.StatusForbidden)
 		return
@@ -176,13 +176,32 @@ func (p *Proxy) pump(client *tls.Conn, hostport string, id Identity, cred Creden
 	}
 }
 
-func allowed(host string, list []string) bool {
+// HostAllowed reports whether host is permitted by the allowlist. It is the
+// single source of truth for egress allowlist matching; both the proxy and the
+// gateway's AuditingResolver call it so the credential-exfiltration boundary
+// can never drift between them.
+//
+// An entry is either an exact host (matched case-insensitively against the full
+// host, so "github.com" matches only the apex) or a "*.SUFFIX" wildcard. A
+// wildcard matches exactly ONE label: "*.github.com" matches "api.github.com"
+// but NOT "a.b.github.com", "evil.com.github.com", or the bare apex
+// "github.com". To allow the apex too, add a separate exact entry — as the
+// manifests do with ["slack.com", "*.slack.com"].
+func HostAllowed(host string, list []string) bool {
+	hostLower := strings.ToLower(host)
 	for _, h := range list {
 		if strings.EqualFold(host, h) {
 			return true
 		}
-		if strings.HasPrefix(h, "*.") && strings.HasSuffix(strings.ToLower(host), strings.ToLower(h[1:])) {
-			return true
+		if strings.HasPrefix(h, "*.") {
+			suffix := strings.ToLower(h[1:]) // ".github.com"
+			if !strings.HasSuffix(hostLower, suffix) {
+				continue
+			}
+			label := hostLower[:len(hostLower)-len(suffix)]
+			if label != "" && !strings.Contains(label, ".") {
+				return true
+			}
 		}
 	}
 	return false

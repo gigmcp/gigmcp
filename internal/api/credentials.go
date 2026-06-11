@@ -44,7 +44,7 @@ var injectHeaderRe = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
 // allowedHostRe validates a single allowed_hosts entry: optional wildcard
 // prefix, then lowercase hostname chars only (no whitespace/newlines, which
 // would corrupt the store's newline-join encoding).
-var allowedHostRe = regexp.MustCompile(`^(\*\.)?[a-z0-9.-]+$`)
+var allowedHostRe = regexp.MustCompile(`^(\*\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // validateServerName returns an error string if the server name is invalid.
 func validateServerName(name string) string {

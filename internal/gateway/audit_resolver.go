@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"log"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,11 +27,9 @@ type auditRecord struct {
 // can never block the egress hot path; on overflow events are dropped and
 // counted, never blocking.
 //
-// It mirrors the proxy's host-allowlist semantics (exact case-insensitive
-// match, or "*.suffix" wildcard suffix match — see internal/proxy/proxy.go
-// allowed()) to RECORD the decision the proxy is about to make. This is an
-// intentional, documented duplication: the registry workstream's lint CI
-// must mirror the same rule.
+// It calls proxy.HostAllowed — the single source of truth for host-allowlist
+// matching — to RECORD the decision the proxy is about to make, so the
+// decorator and the proxy can never disagree about the egress boundary.
 //
 // Lifecycle: Close() MUST be called on shutdown or the writer goroutine
 // leaks. T16 (cmd/gateway wiring) is responsible for wiring this into the
@@ -95,7 +92,7 @@ func (a *AuditingResolver) writer() {
 // mirrors the real resolver by construction — including the credential-less,
 // manifest-backed case (public-API "sealed" servers): Inner returns a
 // no-secret Credential carrying the manifest's AllowedHosts with err==nil, so
-// the hostAllowed branch below records "resolved" for entitled hosts and
+// the HostAllowed branch below records "resolved" for entitled hosts and
 // "denied" otherwise, never "error". This keeps the decorator and the resolver
 // from disagreeing without re-querying the store here.
 func (a *AuditingResolver) Resolve(id proxy.Identity, host string) (proxy.Credential, error) {
@@ -105,7 +102,7 @@ func (a *AuditingResolver) Resolve(id proxy.Identity, host string) (proxy.Creden
 	case err != nil:
 		rec.decision = "error"
 		rec.detail = err.Error()
-	case hostAllowed(host, cred.AllowedHosts):
+	case proxy.HostAllowed(host, cred.AllowedHosts):
 		rec.decision = "resolved"
 	default:
 		rec.decision = "denied"
@@ -144,18 +141,4 @@ func (a *AuditingResolver) Close() {
 	a.mu.Unlock()
 	close(a.ch)
 	<-a.done
-}
-
-// hostAllowed mirrors internal/proxy's allowed() exactly (see the type
-// comment for why the duplication is intentional).
-func hostAllowed(host string, list []string) bool {
-	for _, h := range list {
-		if strings.EqualFold(host, h) {
-			return true
-		}
-		if strings.HasPrefix(h, "*.") && strings.HasSuffix(strings.ToLower(host), strings.ToLower(h[1:])) {
-			return true
-		}
-	}
-	return false
 }
