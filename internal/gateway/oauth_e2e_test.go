@@ -129,7 +129,9 @@ func TestOAuthEgressInjectsBearerSandboxNeverHoldsToken(t *testing.T) {
 	// 5. Real proxy with the real resolver wired to the broker.
 	reg := proxy.NewRegistry()
 	resolver := &CredResolver{Store: st, Vault: v, Broker: broker}
-	p, err := proxy.New(reg, resolver)
+	// The upstream is a loopback httptest TLS server, which the production egress
+	// SSRF guard refuses — inject the permissive dialer for the e2e flow.
+	p, err := proxy.New(reg, resolver, proxy.WithDialControl(proxy.AllowLoopbackDialControl()))
 	if err != nil {
 		t.Fatal(err)
 	}

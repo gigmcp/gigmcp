@@ -112,7 +112,7 @@ func TestProfileScopedEgressE2E(t *testing.T) {
 	auditing := gateway.NewAuditingResolver(&gateway.CredResolver{Store: st, Vault: v}, st)
 	// idempotent; guards goroutine leak on mid-test t.Fatal — explicit ordered Close below still runs first on the happy path
 	t.Cleanup(auditing.Close)
-	p, err := proxy.New(reg, auditing)
+	p, err := proxy.New(reg, auditing, proxy.WithDialControl(proxy.AllowLoopbackDialControl()))
 	if err != nil {
 		t.Fatal(err)
 	}

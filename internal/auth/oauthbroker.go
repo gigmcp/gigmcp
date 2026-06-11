@@ -20,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/gigmcp/gigmcp/internal/netguard"
 	"github.com/gigmcp/gigmcp/internal/store"
 )
 
@@ -30,24 +31,6 @@ const (
 	guardClientTimeout    = 30 * time.Second
 	guardTLSHandshakeWait = 10 * time.Second
 )
-
-// cgnatNet is the RFC 6598 shared address space (100.64.0.0/10) used for
-// carrier-grade NAT. Some cloud metadata endpoints live here (e.g. Alibaba
-// Cloud's 100.100.100.200), so the SSRF guard must reject it alongside
-// loopback/private/link-local ranges.
-var cgnatNet = func() *net.IPNet {
-	_, n, _ := net.ParseCIDR("100.64.0.0/10")
-	return n
-}()
-
-// isBlockedIP reports whether ip is a destination the SSRF guard must refuse:
-// an unparseable address, or one in the loopback, RFC1918 private, link-local,
-// unspecified, or CGNAT (RFC 6598 100.64.0.0/10) ranges.
-func isBlockedIP(ip net.IP) bool {
-	return ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || cgnatNet.Contains(ip)
-}
 
 // newGuardedHTTPClient builds the broker's SSRF connection-time guard. The
 // broker makes server-side requests to BYO OAuth token endpoints (token
@@ -70,7 +53,7 @@ func newGuardedHTTPClient() *http.Client {
 			if err != nil {
 				return err
 			}
-			if isBlockedIP(net.ParseIP(host)) {
+			if netguard.IsBlockedIP(net.ParseIP(host)) {
 				return fmt.Errorf("ssrf guard: refusing connection to %s", address)
 			}
 			return nil

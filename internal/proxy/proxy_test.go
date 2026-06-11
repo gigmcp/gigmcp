@@ -25,7 +25,10 @@ func (f fakeResolver) Resolve(id proxy.Identity, host string) (proxy.Credential,
 
 func startProxy(t *testing.T, reg *proxy.Registry, res proxy.CredentialResolver) *proxy.Proxy {
 	t.Helper()
-	p, err := proxy.New(reg, res)
+	// These tests run upstreams on loopback, which the production egress SSRF
+	// guard would refuse — inject the permissive dialer so loopback stays
+	// reachable. The guard itself is exercised by TestEgressGuardRefusesBlockedIPs.
+	p, err := proxy.New(reg, res, proxy.WithDialControl(proxy.AllowLoopbackDialControl()))
 	if err != nil {
 		t.Fatalf("new proxy: %v", err)
 	}
