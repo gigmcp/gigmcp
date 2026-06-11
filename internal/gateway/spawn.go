@@ -279,10 +279,18 @@ func SpawnEgressBackend(
 	cmd.ExtraFiles = []*os.File{r3, w4, wInfo, rBlock}
 	// Route bwrap/bootstrap stderr to the process stderr so failures are visible.
 	cmd.Stderr = os.Stderr
-	// cmd.Env controls the bwrap process itself (not the sandboxed server):
-	// bwrap uses --clearenv, so sandbox-internal vars are passed via Egress.Env
-	// which commandEgress emits as --setenv K V flags in the bwrap argv.
-	cmd.Env = os.Environ()
+	// cmd.Env controls the bwrap PARENT process itself (not the sandboxed
+	// server). We pass only a MINIMAL allowlisted env here — NOT os.Environ() —
+	// because the gateway's process environment holds secrets (GIG_MASTER_KEY,
+	// OIDC client secret, etc.). Inheriting the full env would expose those
+	// secrets to a host-level attacker via /proc/<bwrap-pid>/environ even though
+	// the sandbox CHILD never sees them. The child gets its env separately: bwrap
+	// uses --clearenv and sandbox-internal vars are passed via Egress.Env, which
+	// commandEgress emits as --setenv K V flags in the bwrap argv (sourced from
+	// config/args, never inherited from this process). The parent only needs PATH
+	// to locate the bwrap/iptables binaries; HOME/LANG/TMPDIR are passed through
+	// if present for well-behaved tool defaults.
+	cmd.Env = minimalSpawnEnv(os.Environ())
 
 	if err := cmd.Start(); err != nil {
 		r3.Close()
@@ -399,6 +407,39 @@ func SpawnEgressBackend(
 		}
 	}
 	return &EgressBackend{Session: sess, ChildPID: payloadPID, Cleanup: finalCleanup}, nil
+}
+
+// spawnEnvAllowlist is the set of environment variable names the bwrap PARENT
+// process is permitted to inherit from the gateway. It deliberately excludes all
+// secrets (notably GIG_MASTER_KEY and the OIDC client secret): the parent's env
+// is readable by a host-level attacker via /proc/<pid>/environ, and bwrap only
+// needs PATH to locate its own binary (and iptables). HOME/LANG/TMPDIR are
+// passed through when present for well-behaved tool defaults. No GIG_* var is
+// allowlisted — the sandbox child receives its (non-secret) vars via bwrap
+// --setenv, a separate code path (see commandEgress / Egress.Env), not from this
+// parent env.
+var spawnEnvAllowlist = []string{"PATH", "HOME", "LANG", "TMPDIR"}
+
+// minimalSpawnEnv filters a full environment (e.g. os.Environ()) down to the
+// allowlisted, non-secret variables the bwrap parent process needs. It never
+// passes through GIG_* secrets such as GIG_MASTER_KEY. Returned in the form
+// "KEY=VALUE" suitable for exec.Cmd.Env.
+func minimalSpawnEnv(environ []string) []string {
+	allow := make(map[string]bool, len(spawnEnvAllowlist))
+	for _, k := range spawnEnvAllowlist {
+		allow[k] = true
+	}
+	out := make([]string, 0, len(spawnEnvAllowlist))
+	for _, kv := range environ {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			continue
+		}
+		if allow[kv[:eq]] {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // readChildPid reads and parses the bwrap --info-fd JSON to extract the child PID.

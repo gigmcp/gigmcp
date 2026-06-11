@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,47 @@ import (
 // upstreamDialTimeout bounds the proxy's upstream TLS dial so a hung or
 // black-holed target cannot pin a pump goroutine indefinitely.
 const upstreamDialTimeout = 30 * time.Second
+
+// maxConcurrentPerIdentity caps the number of simultaneously-live CONNECT
+// tunnels a single sandbox identity (server+tenant) may hold. Without it a
+// malicious sandbox could spam CONNECTs to exhaust the host's fds, goroutines,
+// and memory. Tune here if a legitimate workload needs more parallelism.
+const maxConcurrentPerIdentity = 64
+
+// connLimiter caps concurrent CONNECTs per Identity. Identity is a comparable
+// struct (two strings) so it is used directly as the map key.
+type connLimiter struct {
+	mu    sync.Mutex
+	count map[Identity]int
+	max   int
+}
+
+func newConnLimiter(max int) *connLimiter {
+	return &connLimiter{count: make(map[Identity]int), max: max}
+}
+
+// acquire reserves a slot for id. It returns false (without reserving) if id is
+// already at the cap; on true the caller MUST call release exactly once.
+func (l *connLimiter) acquire(id Identity) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.count[id] >= l.max {
+		return false
+	}
+	l.count[id]++
+	return true
+}
+
+// release frees a slot previously taken by a successful acquire.
+func (l *connLimiter) release(id Identity) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.count[id] <= 1 {
+		delete(l.count, id) // keep the map from growing unboundedly
+		return
+	}
+	l.count[id]--
+}
 
 // guardDialControl is the production net.Dialer Control callback: it runs AFTER
 // name resolution on the CONCRETE resolved IP:port, immediately before the
@@ -70,6 +112,9 @@ type Proxy struct {
 	// that legitimately need a loopback upstream inject a permissive callback via
 	// WithDialControl.
 	dialControl func(network, address string, c syscall.RawConn) error
+	// limiter caps concurrent CONNECT tunnels per identity so a malicious
+	// sandbox cannot exhaust fds/goroutines/memory by spamming CONNECTs.
+	limiter *connLimiter
 }
 
 // Option customizes a Proxy at construction.
@@ -102,7 +147,7 @@ func New(reg *Registry, res CredentialResolver, opts ...Option) (*Proxy, error) 
 	if err != nil {
 		return nil, err
 	}
-	p := &Proxy{reg: reg, res: res, ca: ca, dialControl: guardDialControl}
+	p := &Proxy{reg: reg, res: res, ca: ca, dialControl: guardDialControl, limiter: newConnLimiter(maxConcurrentPerIdentity)}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -141,6 +186,15 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown source", http.StatusForbidden)
 		return
 	}
+	// Cap concurrent CONNECTs per identity BEFORE hijacking so a malicious
+	// sandbox cannot exhaust fds/goroutines/memory by spamming tunnels. On a
+	// successful acquire we release in a defer covering every return path below.
+	if !p.limiter.acquire(id) {
+		log.Printf("DENY src=%s tenant=%s/%s reason=too-many-connections cap=%d", srcIP, id.Server, id.Tenant, maxConcurrentPerIdentity)
+		http.Error(w, "too many concurrent connections", http.StatusTooManyRequests)
+		return
+	}
+	defer p.limiter.release(id)
 	targetHost := hostname(r.Host)
 	cred, err := p.res.Resolve(id, targetHost)
 	if err != nil {
