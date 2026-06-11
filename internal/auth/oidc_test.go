@@ -156,6 +156,37 @@ func startLogin(t *testing.T, a *auth.Authenticator) (state, nonce string, flow 
 	return state, nonce, flow
 }
 
+func TestLoginPromptCreate(t *testing.T) {
+	iss := newFakeIssuer(t)
+	st := openStore(t)
+	a := newAuthenticator(t, iss.srv.URL, st)
+
+	// ?prompt=create must propagate to the authorize URL (the separate "Sign up" link).
+	rec := httptest.NewRecorder()
+	a.LoginHandler(rec, httptest.NewRequest("GET", "/api/auth/login?prompt=create", nil))
+	if rec.Code != http.StatusFound {
+		t.Fatalf("login status %d: %s", rec.Code, rec.Body)
+	}
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loc.Query().Get("prompt"); got != "create" {
+		t.Fatalf("authorize URL prompt = %q, want \"create\": %s", got, loc)
+	}
+
+	// Default login must NOT set prompt (stays on the sign-in page).
+	rec = httptest.NewRecorder()
+	a.LoginHandler(rec, httptest.NewRequest("GET", "/api/auth/login", nil))
+	loc, err = url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loc.Query().Get("prompt"); got != "" {
+		t.Fatalf("default login set prompt = %q, want empty: %s", got, loc)
+	}
+}
+
 func TestLoginCallbackProvisionsUserAndSession(t *testing.T) {
 	ctx := context.Background()
 	iss := newFakeIssuer(t)

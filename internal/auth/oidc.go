@@ -164,9 +164,13 @@ func (a *Authenticator) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, a.setFlowCookie(signed, 600))
-	http.Redirect(w, r,
-		a.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(pkce)),
-		http.StatusFound)
+	opts := []oauth2.AuthCodeOption{oidc.Nonce(nonce), oauth2.S256ChallengeOption(pkce)}
+	// ?prompt=create deep-links to the IdP registration page, so the UI can offer a
+	// separate "Sign up" link distinct from "Log in". Any other prompt value is ignored.
+	if r.URL.Query().Get("prompt") == "create" {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "create"))
+	}
+	http.Redirect(w, r, a.oauth.AuthCodeURL(state, opts...), http.StatusFound)
 }
 
 // CallbackHandler — GET /api/auth/callback: state check, code exchange
