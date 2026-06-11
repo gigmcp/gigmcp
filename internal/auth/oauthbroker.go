@@ -10,9 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -20,6 +22,69 @@ import (
 
 	"github.com/gigmcp/gigmcp/internal/store"
 )
+
+// guardDialTimeout / guardClientTimeout bound the broker's server-side requests
+// to vendor token endpoints so a hung endpoint cannot pin a resolver goroutine.
+const (
+	guardDialTimeout      = 30 * time.Second
+	guardClientTimeout    = 30 * time.Second
+	guardTLSHandshakeWait = 10 * time.Second
+)
+
+// cgnatNet is the RFC 6598 shared address space (100.64.0.0/10) used for
+// carrier-grade NAT. Some cloud metadata endpoints live here (e.g. Alibaba
+// Cloud's 100.100.100.200), so the SSRF guard must reject it alongside
+// loopback/private/link-local ranges.
+var cgnatNet = func() *net.IPNet {
+	_, n, _ := net.ParseCIDR("100.64.0.0/10")
+	return n
+}()
+
+// isBlockedIP reports whether ip is a destination the SSRF guard must refuse:
+// an unparseable address, or one in the loopback, RFC1918 private, link-local,
+// unspecified, or CGNAT (RFC 6598 100.64.0.0/10) ranges.
+func isBlockedIP(ip net.IP) bool {
+	return ip == nil || ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || cgnatNet.Contains(ip)
+}
+
+// newGuardedHTTPClient builds the broker's SSRF connection-time guard. The
+// broker makes server-side requests to BYO OAuth token endpoints (token
+// exchange + refresh); a malicious BYO config could point those at internal
+// services (cloud metadata at 169.254.169.254 or 100.100.100.200, loopback,
+// RFC1918). The input validation in internal/api (urlvalidate.go) rejects
+// literal-IP/localhost token_urls, but it cannot catch non-canonical encodings
+// (https://2130706433/, https://0x7f.0.0.1/, https://127.1/) or a hostname that
+// DNS-resolves to a private IP at connect time (DNS rebinding).
+//
+// This guard backstops that: the net.Dialer Control callback runs AFTER name
+// resolution with the concrete resolved IP:port, so every dangerous destination
+// — including the CGNAT shared range (100.64.0.0/10), however it was encoded,
+// and even if the DNS answer changed — is refused before the socket connects.
+func newGuardedHTTPClient() *http.Client {
+	dialer := &net.Dialer{
+		Timeout: guardDialTimeout,
+		Control: func(_, address string, _ syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address) // post-resolution IP:port
+			if err != nil {
+				return err
+			}
+			if isBlockedIP(net.ParseIP(host)) {
+				return fmt.Errorf("ssrf guard: refusing connection to %s", address)
+			}
+			return nil
+		},
+	}
+	return &http.Client{
+		Timeout: guardClientTimeout,
+		Transport: &http.Transport{
+			DialContext:         dialer.DialContext,
+			TLSHandshakeTimeout: guardTLSHandshakeWait,
+			ForceAttemptHTTP2:   true,
+		},
+	}
+}
 
 // oauthFlowCookie is the cookie name for connect-flow state. Separate from the
 // OIDC login flow cookie (gig_oidc_flow) so a connect-in-flight never collides
@@ -65,6 +130,12 @@ type OAuthBroker struct {
 	redirect  string      // the gateway's OAuth callback URL (absolute)
 	publicURL string      // base for building ReturnTo redirects
 	now       func() time.Time
+	// httpClient is used for all SERVER-SIDE requests to vendor token endpoints
+	// (token exchange + refresh), injected into the oauth2 context. In production
+	// it is the SSRF-guarded client (see newGuardedHTTPClient); tests inject an
+	// unguarded client via WithHTTPClient so loopback httptest servers stay
+	// reachable.
+	httpClient *http.Client
 	// refreshGroup collapses concurrent refreshes for the same (userID, vendor)
 	// into a single in-flight refresh-token grant. Without it, two simultaneous
 	// resolves for the same account both fire the refresh_token grant on the same
@@ -73,23 +144,43 @@ type OAuthBroker struct {
 	refreshGroup singleflight.Group
 }
 
+// BrokerOption customizes a broker at construction. Used by tests to inject an
+// unguarded HTTP client; production callers pass no options and get the
+// SSRF-guarded client.
+type BrokerOption func(*OAuthBroker)
+
+// WithHTTPClient overrides the client the broker uses for server-side requests
+// to vendor token endpoints. Tests pass an unguarded client (e.g.
+// http.DefaultClient) so loopback httptest servers remain reachable; production
+// relies on the default guarded client.
+func WithHTTPClient(c *http.Client) BrokerOption {
+	return func(b *OAuthBroker) { b.httpClient = c }
+}
+
 // NewOAuthBroker builds a broker. redirect is the absolute callback URL
 // (e.g. https://gig.example.com/api/connections/oauth/callback); publicURL is
-// the https-aware base used for Secure-cookie + ReturnTo decisions.
-func NewOAuthBroker(st ConfigStore, vlt Vaulter, redirect, publicURL string) (*OAuthBroker, error) {
+// the https-aware base used for Secure-cookie + ReturnTo decisions. By default
+// the broker's server-side token-endpoint requests go through the SSRF
+// connection-time guard (newGuardedHTTPClient).
+func NewOAuthBroker(st ConfigStore, vlt Vaulter, redirect, publicURL string, opts ...BrokerOption) (*OAuthBroker, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	return &OAuthBroker{
-		Store:     st,
-		Vault:     vlt,
-		hmacKey:   key,
-		secure:    strings.HasPrefix(publicURL, "https://"),
-		redirect:  redirect,
-		publicURL: publicURL,
-		now:       time.Now,
-	}, nil
+	b := &OAuthBroker{
+		Store:      st,
+		Vault:      vlt,
+		hmacKey:    key,
+		secure:     strings.HasPrefix(publicURL, "https://"),
+		redirect:   redirect,
+		publicURL:  publicURL,
+		now:        time.Now,
+		httpClient: newGuardedHTTPClient(),
+	}
+	for _, opt := range opts {
+		opt(b)
+	}
+	return b, nil
 }
 
 // unionScopes returns the sorted, de-duplicated union of all scope lists.
@@ -232,7 +323,9 @@ func (b *OAuthBroker) CallbackHandler(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, http.StatusInternalServerError, "internal", "build oauth config")
 		return
 	}
-	tok, err := conf.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.VerifierOption(fs.Verifier))
+	// Route the server-side code exchange through the SSRF-guarded client.
+	exCtx := context.WithValue(r.Context(), oauth2.HTTPClient, b.httpClient)
+	tok, err := conf.Exchange(exCtx, r.URL.Query().Get("code"), oauth2.VerifierOption(fs.Verifier))
 	if err != nil {
 		log.Printf("WARN: oauth code exchange %s: %v", fs.Vendor, err)
 		writeAuthError(w, http.StatusBadGateway, "oauth", "code exchange failed")
@@ -318,9 +411,12 @@ func (b *OAuthBroker) EnsureFreshToken(ctx context.Context, userID int64, vendor
 // expired performs the refresh_token grant and persists the rotated access
 // token. Always invoked through refreshGroup so only one runs per key at a time.
 func (b *OAuthBroker) refreshAndPersist(ctx context.Context, userID int64, vendor string) (string, error) {
-	// Re-read: the first caller to win the singleflight may have refreshed
-	// already; with the (small) Forget window a later waiter could re-enter, so
-	// re-check freshness before spending another grant.
+	// Re-read before spending a grant: singleflight only collapses CONCURRENT
+	// calls, and we never call Forget, so back-to-back SEQUENTIAL resolves for the
+	// same key each enter here. A just-completed refresh for this key may have
+	// already rotated and persisted a fresh token, so re-check freshness — this
+	// double-check makes the common "another resolve refreshed it a moment ago"
+	// case cheap (cache hit) instead of firing a redundant refresh_token grant.
 	acct, err := b.Store.GetConnectedAccount(ctx, userID, vendor)
 	if err != nil {
 		return "", err
@@ -344,8 +440,11 @@ func (b *OAuthBroker) refreshAndPersist(ctx context.Context, userID int64, vendo
 	if err != nil {
 		return "", fmt.Errorf("decrypt refresh token: %w", err)
 	}
-	// TokenSource performs the refresh_token grant on demand.
-	src := conf.TokenSource(ctx, &oauth2.Token{RefreshToken: string(refreshPT)})
+	// TokenSource performs the refresh_token grant on demand. Route it through
+	// the SSRF-guarded client so the refresh request to the vendor token endpoint
+	// cannot reach internal/loopback/metadata addresses.
+	rfCtx := context.WithValue(ctx, oauth2.HTTPClient, b.httpClient)
+	src := conf.TokenSource(rfCtx, &oauth2.Token{RefreshToken: string(refreshPT)})
 	newTok, err := src.Token()
 	if err != nil {
 		return "", fmt.Errorf("refresh token grant %s: %w", vendor, err)

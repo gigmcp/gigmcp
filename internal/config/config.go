@@ -4,6 +4,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,6 +12,32 @@ import (
 	"strings"
 	"time"
 )
+
+// masterKeyBytes is the required decoded length of GIG_MASTER_KEY (XChaCha20
+// key size). 32 bytes = 64 hex characters.
+const masterKeyBytes = 32
+
+// ParseMasterKey decodes and validates the hex-encoded GIG_MASTER_KEY. It fails
+// closed with an actionable error if the key is missing, not valid hex, or not
+// exactly 32 bytes (64 hex chars), so a weak or malformed key can never silently
+// produce a degraded vault.
+func ParseMasterKey(s string) ([]byte, error) {
+	const hint = "generate with: openssl rand -hex 32"
+	if s == "" {
+		return nil, fmt.Errorf("GIG_MASTER_KEY must be set to 64 hex chars (32 bytes); %s", hint)
+	}
+	if len(s) != masterKeyBytes*2 {
+		return nil, fmt.Errorf("GIG_MASTER_KEY must be 64 hex chars (32 bytes), got %d chars; %s", len(s), hint)
+	}
+	key, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("GIG_MASTER_KEY must be valid hex: %w; %s", err, hint)
+	}
+	if len(key) != masterKeyBytes {
+		return nil, fmt.Errorf("GIG_MASTER_KEY must decode to 32 bytes, got %d; %s", len(key), hint)
+	}
+	return key, nil
+}
 
 // OAuthVendorBootstrap is a single global OAuth vendor provider configured via
 // GIG_OAUTH_<VENDOR>_* env. The DB auth_configs table is the source of truth

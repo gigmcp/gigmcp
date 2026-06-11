@@ -9,7 +9,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -56,20 +55,22 @@ func run(ctx context.Context) error {
 	// logged on failure but the gateway does NOT crash — route isolation remains.
 	applyForwardDrop()
 
-	// Build vault from GIG_MASTER_KEY (hex-encoded 32 bytes).
-	if cfg.MasterKey == "" {
-		return fmt.Errorf("GIG_MASTER_KEY must be set (hex-encoded 32-byte master key)")
-	}
-	kek, err := hex.DecodeString(cfg.MasterKey)
+	// Build vault from GIG_MASTER_KEY. ParseMasterKey fails closed if the key is
+	// missing, not hex, or not exactly 32 bytes.
+	kek, err := config.ParseMasterKey(cfg.MasterKey)
 	if err != nil {
-		return fmt.Errorf("GIG_MASTER_KEY must be hex-encoded: %w", err)
-	}
-	if len(kek) != 32 {
-		return fmt.Errorf("GIG_MASTER_KEY must decode to exactly 32 bytes, got %d", len(kek))
+		return err
 	}
 	v, err := vault.New(kek)
 	if err != nil {
 		return fmt.Errorf("create vault: %w", err)
+	}
+	// vault.New copies the KEK internally, so wiping our slice does not affect
+	// the vault. Zeroize to minimize the in-memory window for the master key
+	// (defense-in-depth; no hard GC guarantee). NOTE: cfg.MasterKey is a Go
+	// string (immutable) and cannot be zeroized — that residual copy remains.
+	for i := range kek {
+		kek[i] = 0
 	}
 
 	st, err := store.OpenSQLite(cfg.DBPath)

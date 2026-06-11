@@ -60,6 +60,17 @@ func (v *Vault) Encrypt(plaintext []byte) ([]byte, error) {
 	if _, err := rand.Read(dek); err != nil {
 		return nil, err
 	}
+	// Wipe the plaintext DEK once it has been wrapped and used to seal the
+	// plaintext. Defense-in-depth: Go's GC gives no hard guarantee, but this
+	// minimizes the window in which the key sits recoverable on the heap (core
+	// dump / swap / memory disclosure). Placed right after creation so it fires
+	// on every return path. Only the transient DEK is wiped — the returned
+	// ciphertext is unaffected.
+	defer func() {
+		for i := range dek {
+			dek[i] = 0
+		}
+	}()
 	nKEK, wrapped, err := seal(v.kek, dek)
 	if err != nil {
 		return nil, err
@@ -99,6 +110,16 @@ func (v *Vault) Decrypt(box []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("vault: unwrap DEK: %w", err)
 	}
+	// Wipe the unwrapped DEK after use. Defense-in-depth: Go's GC gives no hard
+	// guarantee, but this minimizes the in-memory window for the recovered key
+	// (core dump / swap / memory disclosure). Placed right after unwrap so it
+	// fires even if the credential open below fails. The returned plaintext is
+	// unaffected.
+	defer func() {
+		for i := range dek {
+			dek[i] = 0
+		}
+	}()
 	nDEK := box[p : p+nx]
 	p += nx
 	ct := box[p:]

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,9 +77,16 @@ func TestUninstallFailingInstaller502(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
 
-	code, _ := doJSON(t, ts, adminCookie, "DELETE", "/api/servers/echo", "")
+	code, body := doJSON(t, ts, adminCookie, "DELETE", "/api/servers/echo", "")
 	if code != http.StatusBadGateway {
 		t.Fatalf("failing installer must 502: %d", code)
+	}
+	// The client must get a generic message, never the raw installer error.
+	if !strings.Contains(string(body), "uninstall failed") {
+		t.Fatalf("expected generic message, got: %s", body)
+	}
+	if strings.Contains(string(body), "not wired") {
+		t.Fatalf("raw installer error leaked to client: %s", body)
 	}
 }
 
