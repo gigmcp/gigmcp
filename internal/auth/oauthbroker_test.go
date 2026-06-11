@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ type passthroughVault struct{}
 func (passthroughVault) Encrypt(p []byte) ([]byte, error) { return append([]byte("enc:"), p...), nil }
 func (passthroughVault) Decrypt(b []byte) ([]byte, error) { return b[len("enc:"):], nil }
 
-func newTestBroker(t *testing.T, fs *fakeBrokerStore) *OAuthBroker {
+func newTestBroker(t *testing.T, fs ConfigStore) *OAuthBroker {
 	t.Helper()
 	b, err := NewOAuthBroker(fs, passthroughVault{},
 		"http://localhost:8080/api/connections/oauth/callback", "http://localhost:8080")
@@ -237,6 +238,98 @@ func TestEnsureFreshTokenRefreshesWhenExpired(t *testing.T) {
 	}
 	if !fs.account.ExpiresAt.After(time.Now()) {
 		t.Fatal("expiry not advanced after refresh")
+	}
+}
+
+// syncBrokerStore is a thread-safe ConfigStore for the concurrency test: it
+// guards account reads/writes with a mutex so the -race detector exercises the
+// broker's serialization rather than tripping on the fake store itself.
+type syncBrokerStore struct {
+	mu      sync.Mutex
+	cfg     store.AuthConfig
+	account store.ConnectedAccount
+}
+
+func (f *syncBrokerStore) GetAuthConfig(_ context.Context, vendor string) (store.AuthConfig, error) {
+	if f.cfg.Vendor != vendor {
+		return store.AuthConfig{}, store.ErrAuthConfigNotFound
+	}
+	return f.cfg, nil
+}
+func (f *syncBrokerStore) GetConnectedAccount(_ context.Context, _ int64, vendor string) (store.ConnectedAccount, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.account.Vendor != vendor {
+		return store.ConnectedAccount{}, store.ErrConnectedAccountNotFound
+	}
+	return f.account, nil
+}
+func (f *syncBrokerStore) PutConnectedAccount(_ context.Context, c store.ConnectedAccount) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.account = c
+	return nil
+}
+func (f *syncBrokerStore) UpdateConnectedAccountTokens(_ context.Context, _ int64, _ string, enc []byte, exp time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.account.EncryptedAccessToken = enc
+	f.account.ExpiresAt = exp
+	return nil
+}
+
+// TestEnsureFreshTokenSerializesConcurrentRefresh fires N concurrent
+// EnsureFreshToken calls for the same (user, vendor) on an expired token and
+// asserts the per-key singleflight collapses them into exactly ONE refresh_token
+// grant at the provider.
+func TestEnsureFreshTokenSerializesConcurrentRefresh(t *testing.T) {
+	fp := newFakeProvider(t)
+	fs := &syncBrokerStore{
+		cfg: store.AuthConfig{
+			Vendor: "google", TokenURL: fp.srv.URL + "/token", ClientID: "cid",
+			EncryptedClientSecret: []byte("enc:sek"), Mode: "byo",
+		},
+		account: store.ConnectedAccount{
+			UserID: 42, Vendor: "google",
+			EncryptedRefreshToken: []byte("enc:refresh-tok"),
+			EncryptedAccessToken:  []byte("enc:stale-access"),
+			ExpiresAt:             time.Now().Add(-time.Minute), // expired
+			GrantedScopes:         []string{"email"},
+		},
+	}
+	b := newTestBroker(t, fs)
+
+	const n = 16
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make(chan error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start // release all goroutines together to maximize contention
+			at, err := b.EnsureFreshToken(context.Background(), 42, "google")
+			if err != nil {
+				errs <- err
+				return
+			}
+			if !strings.HasPrefix(at, "access-") {
+				t.Errorf("expected a minted access token, got %q", at)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent EnsureFreshToken errored: %v", err)
+	}
+
+	fp.mu.Lock()
+	got := fp.refreshGrants
+	fp.mu.Unlock()
+	if got != 1 {
+		t.Fatalf("expected exactly 1 refresh_token grant under %d concurrent calls, got %d", n, got)
 	}
 }
 

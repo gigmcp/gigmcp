@@ -13,13 +13,14 @@ import (
 // the redirect + scopes, hands back a code) and /token (exchanges code →
 // access+refresh, and refresh_token grant → a fresh access token). No OIDC.
 type fakeProvider struct {
-	srv          *httptest.Server
-	mu           sync.Mutex
-	lastScopes   string // raw scope param seen on /authorize or /token
-	lastGrant    string // grant_type seen on /token
-	codeToScopes map[string]string
-	accessSeq    int // increments so each minted access token is distinct
-	tokenErr     int // if non-zero, /token responds with this status
+	srv           *httptest.Server
+	mu            sync.Mutex
+	lastScopes    string // raw scope param seen on /authorize or /token
+	lastGrant     string // grant_type seen on /token
+	codeToScopes  map[string]string
+	accessSeq     int // increments so each minted access token is distinct
+	tokenErr      int // if non-zero, /token responds with this status
+	refreshGrants int // count of refresh_token grants served (concurrency tests)
 }
 
 func newFakeProvider(t *testing.T) *fakeProvider {
@@ -43,6 +44,9 @@ func newFakeProvider(t *testing.T) *fakeProvider {
 		_ = r.ParseForm()
 		f.mu.Lock()
 		f.lastGrant = r.Form.Get("grant_type")
+		if f.lastGrant == "refresh_token" {
+			f.refreshGrants++
+		}
 		f.accessSeq++
 		seq := f.accessSeq
 		if s := r.Form.Get("scope"); s != "" {

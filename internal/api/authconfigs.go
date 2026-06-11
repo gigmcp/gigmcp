@@ -48,6 +48,16 @@ func (s *Server) handlePutAuthConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, codeInvalid, "authorize_url, token_url and client_id are required")
 		return
 	}
+	// SSRF guard: the gateway makes server-side requests to these BYO endpoints
+	// (token exchange + refresh). Validate both before storing.
+	if err := validateExternalHTTPSURL(b.AuthorizeURL); err != nil {
+		writeErr(w, http.StatusBadRequest, codeInvalid, "authorize_url: "+err.Error())
+		return
+	}
+	if err := validateExternalHTTPSURL(b.TokenURL); err != nil {
+		writeErr(w, http.StatusBadRequest, codeInvalid, "token_url: "+err.Error())
+		return
+	}
 	if b.Mode != "managed" && b.Mode != "byo" {
 		writeErr(w, http.StatusBadRequest, codeInvalid, "mode must be 'managed' or 'byo'")
 		return

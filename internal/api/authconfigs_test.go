@@ -52,6 +52,21 @@ func TestAuthConfigPutGetListDelete(t *testing.T) {
 	}
 }
 
+func TestAuthConfigPutRejectsSSRFTokenURL(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+
+	// token_url pointed at the cloud-metadata link-local address must be rejected.
+	body := `{"authorize_url":"https://accounts.google.com/o/oauth2/auth","token_url":"https://169.254.169.254/latest/meta-data/","client_id":"cid","mode":"byo"}`
+	code, respBody := doJSON(t, ts, adminCookie, "PUT", "/api/auth-configs/evil", body)
+	if code != http.StatusBadRequest {
+		t.Fatalf("metadata-IP token_url must be 400, got %d %s", code, respBody)
+	}
+	if _, err := st.GetAuthConfig(t.Context(), "evil"); err == nil {
+		t.Fatal("config with SSRF token_url must not be stored")
+	}
+}
+
 func TestAuthConfigRequiresAdmin(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, userCookie := seedUserSession(t, st, "alice@x", "user")

@@ -10,6 +10,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/crypto v0.52.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
 	modernc.org/sqlite v1.52.0
 	sigs.k8s.io/yaml v1.6.0
@@ -23,7 +24,6 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
 

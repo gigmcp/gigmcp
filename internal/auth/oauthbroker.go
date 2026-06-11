@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/gigmcp/gigmcp/internal/store"
 )
@@ -64,6 +65,12 @@ type OAuthBroker struct {
 	redirect  string      // the gateway's OAuth callback URL (absolute)
 	publicURL string      // base for building ReturnTo redirects
 	now       func() time.Time
+	// refreshGroup collapses concurrent refreshes for the same (userID, vendor)
+	// into a single in-flight refresh-token grant. Without it, two simultaneous
+	// resolves for the same account both fire the refresh_token grant on the same
+	// refresh token, racing on persistence and risking invalidating one of the
+	// rotated access tokens.
+	refreshGroup singleflight.Group
 }
 
 // NewOAuthBroker builds a broker. redirect is the absolute callback URL
@@ -293,7 +300,38 @@ func (b *OAuthBroker) EnsureFreshToken(ctx context.Context, userID int64, vendor
 		}
 		return string(pt), nil
 	}
-	// Expired/near-expiry → refresh.
+	// Expired/near-expiry → refresh, serialized per (userID, vendor) so two
+	// concurrent resolves for the same account collapse into a single
+	// refresh_token grant (singleflight shares the one result among all waiters).
+	key := fmt.Sprintf("%d:%s", userID, vendor)
+	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
+		return b.refreshAndPersist(ctx, userID, vendor)
+	})
+	if err != nil {
+		return "", err
+	}
+	return v.(string), nil
+}
+
+// refreshAndPersist re-loads the account (double-check: a sibling refresh that
+// just completed may have already rotated the token), and if it is still
+// expired performs the refresh_token grant and persists the rotated access
+// token. Always invoked through refreshGroup so only one runs per key at a time.
+func (b *OAuthBroker) refreshAndPersist(ctx context.Context, userID int64, vendor string) (string, error) {
+	// Re-read: the first caller to win the singleflight may have refreshed
+	// already; with the (small) Forget window a later waiter could re-enter, so
+	// re-check freshness before spending another grant.
+	acct, err := b.Store.GetConnectedAccount(ctx, userID, vendor)
+	if err != nil {
+		return "", err
+	}
+	if b.now().Add(refreshSkew).Before(acct.ExpiresAt) {
+		pt, err := b.Vault.Decrypt(acct.EncryptedAccessToken)
+		if err != nil {
+			return "", fmt.Errorf("decrypt cached access token: %w", err)
+		}
+		return string(pt), nil
+	}
 	ac, err := b.Store.GetAuthConfig(ctx, vendor)
 	if err != nil {
 		return "", fmt.Errorf("auth config for refresh %s: %w", vendor, err)
