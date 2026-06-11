@@ -4,14 +4,28 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
-import { useApp, useProfiles, useSetProfileServers, useReadOnly } from "@/lib/queries";
+import {
+  useApp,
+  useProfiles,
+  useSetProfileServers,
+  useReadOnly,
+  useMe,
+  useSetAppTool,
+} from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { monogram, monogramColor } from "@/lib/monogram";
 import { ConnectBlock } from "./connect-block";
-import type { Profile } from "@/lib/types";
+import type { AppTool, Profile } from "@/lib/types";
 
 const AUTH_BADGE_VARIANT = {
   oauth2: "info",
@@ -63,12 +77,74 @@ function ProfileToggle({
   );
 }
 
+function ToolToggle({
+  appName,
+  tool,
+  canEdit,
+}: {
+  appName: string;
+  tool: AppTool;
+  canEdit: boolean;
+}) {
+  const t = useTranslations("apps");
+  const setTool = useSetAppTool(appName);
+
+  function toggle(next: boolean) {
+    setTool.mutate(
+      { tool: tool.name, enabled: next },
+      {
+        onSuccess: () =>
+          toast.success(
+            next
+              ? t("detail.tools.enabled", { name: tool.name })
+              : t("detail.tools.disabled", { name: tool.name }),
+          ),
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiError ? err.message : t("detail.tools.saveFailed"),
+          ),
+      },
+    );
+  }
+
+  const control = (
+    <Switch
+      checked={tool.enabled}
+      disabled={!canEdit || setTool.isPending}
+      onCheckedChange={(v) => toggle(v)}
+      aria-label={t("detail.tools.toggleLabel", { name: tool.name })}
+    />
+  );
+
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+      <code className="truncate font-mono text-xs">{tool.name}</code>
+      {canEdit ? (
+        control
+      ) : (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <span tabIndex={0}>{control}</span>
+            </TooltipTrigger>
+            <TooltipContent>{t("detail.tools.adminOnly")}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </li>
+  );
+}
+
 export default function AppDetailPage() {
   const params = useParams<{ name: string }>();
   const name = params.name;
   const t = useTranslations("apps");
   const app = useApp(name);
   const profiles = useProfiles();
+  const me = useMe();
+  const readOnly = useReadOnly();
+  const isAdmin = me.data?.user.role === "admin";
+  const canEditTools = isAdmin && !readOnly;
 
   if (app.isLoading) {
     return (
@@ -172,16 +248,20 @@ export default function AppDetailPage() {
         <h2 className="mb-3 text-base font-semibold tracking-tight">
           {t("detail.tools.title", { count: d.tools.length })}
         </h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          {t("detail.tools.helper")}
+        </p>
         {d.tools.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("detail.tools.empty")}</p>
         ) : (
-          <ul className="flex flex-wrap gap-2">
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {d.tools.map((tool) => (
-              <li key={tool.name}>
-                <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
-                  {tool.name}
-                </code>
-              </li>
+              <ToolToggle
+                key={tool.name}
+                appName={d.name}
+                tool={tool}
+                canEdit={canEditTools}
+              />
             ))}
           </ul>
         )}

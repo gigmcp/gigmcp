@@ -3,6 +3,11 @@
   "description": "Installed integrations available to your profiles.",
   "uncategorized": "Integration",
   "readOnlyTooltip": "Read-only while viewing as another user",
+  "searchPlaceholder": "Search apps…",
+  "tabs": {
+    "installed": "Installed",
+    "available": "Available"
+  },
   "authType": {
     "oauth2": "OAuth",
     "api_key": "API key",
@@ -71,7 +76,13 @@
     },
     "tools": {
       "title": "Available tools ({count})",
-      "empty": "This app declares no tools."
+      "empty": "This app declares no tools.",
+      "helper": "All tools are enabled by default; admins can disable specific tools.",
+      "toggleLabel": "Toggle {name}",
+      "enabled": "Enabled {name}",
+      "disabled": "Disabled {name}",
+      "saveFailed": "Could not update tool",
+      "adminOnly": "Only admins can change tool access"
     },
     "profiles": {
       "title": "Use in profiles",

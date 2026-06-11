@@ -3,6 +3,11 @@
   "description": "Integrazioni installate disponibili per i tuoi profili.",
   "uncategorized": "Integrazione",
   "readOnlyTooltip": "Sola lettura mentre si visualizza come un altro utente",
+  "searchPlaceholder": "Cerca app…",
+  "tabs": {
+    "installed": "Installate",
+    "available": "Disponibili"
+  },
   "authType": {
     "oauth2": "OAuth",
     "api_key": "Chiave API",
@@ -71,7 +76,13 @@
     },
     "tools": {
       "title": "Strumenti disponibili ({count})",
-      "empty": "Questa app non dichiara strumenti."
+      "empty": "Questa app non dichiara strumenti.",
+      "helper": "Tutti gli strumenti sono abilitati per impostazione predefinita; gli amministratori possono disabilitare strumenti specifici.",
+      "toggleLabel": "Attiva/disattiva {name}",
+      "enabled": "{name} abilitato",
+      "disabled": "{name} disabilitato",
+      "saveFailed": "Impossibile aggiornare lo strumento",
+      "adminOnly": "Solo gli amministratori possono modificare l'accesso agli strumenti"
     },
     "profiles": {
       "title": "Usa nei profili",

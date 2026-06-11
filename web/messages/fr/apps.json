@@ -3,6 +3,11 @@
   "description": "Intégrations installées disponibles pour vos profils.",
   "uncategorized": "Intégration",
   "readOnlyTooltip": "Lecture seule lors de la consultation en tant qu'un autre utilisateur",
+  "searchPlaceholder": "Rechercher des applications…",
+  "tabs": {
+    "installed": "Installées",
+    "available": "Disponibles"
+  },
   "authType": {
     "oauth2": "OAuth",
     "api_key": "Clé API",
@@ -71,7 +76,13 @@
     },
     "tools": {
       "title": "Outils disponibles ({count})",
-      "empty": "Cette application ne déclare aucun outil."
+      "empty": "Cette application ne déclare aucun outil.",
+      "helper": "Tous les outils sont activés par défaut ; les administrateurs peuvent désactiver des outils spécifiques.",
+      "toggleLabel": "Basculer {name}",
+      "enabled": "{name} activé",
+      "disabled": "{name} désactivé",
+      "saveFailed": "Impossible de mettre à jour l'outil",
+      "adminOnly": "Seuls les administrateurs peuvent modifier l'accès aux outils"
     },
     "profiles": {
       "title": "Utiliser dans les profils",

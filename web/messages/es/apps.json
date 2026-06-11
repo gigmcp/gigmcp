@@ -3,6 +3,11 @@
   "description": "Integraciones instaladas disponibles para tus perfiles.",
   "uncategorized": "Integración",
   "readOnlyTooltip": "Solo lectura mientras se visualiza como otro usuario",
+  "searchPlaceholder": "Buscar aplicaciones…",
+  "tabs": {
+    "installed": "Instaladas",
+    "available": "Disponibles"
+  },
   "authType": {
     "oauth2": "OAuth",
     "api_key": "Clave API",
@@ -71,7 +76,13 @@
     },
     "tools": {
       "title": "Herramientas disponibles ({count})",
-      "empty": "Esta aplicación no declara ninguna herramienta."
+      "empty": "Esta aplicación no declara ninguna herramienta.",
+      "helper": "Todas las herramientas están habilitadas de forma predeterminada; los administradores pueden deshabilitar herramientas específicas.",
+      "toggleLabel": "Alternar {name}",
+      "enabled": "{name} habilitada",
+      "disabled": "{name} deshabilitada",
+      "saveFailed": "No se pudo actualizar la herramienta",
+      "adminOnly": "Solo los administradores pueden cambiar el acceso a las herramientas"
     },
     "profiles": {
       "title": "Usar en perfiles",

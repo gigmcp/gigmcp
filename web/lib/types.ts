@@ -104,6 +104,7 @@ export interface AppSummary {
 export interface AppTool {
   name: string;
   default: boolean;
+  enabled: boolean;
 }
 
 export interface AppDetail {

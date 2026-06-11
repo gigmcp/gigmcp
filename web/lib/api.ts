@@ -97,6 +97,11 @@ export const api = {
     return res.apps;
   },
   app: (name: string) => request<AppDetail>(`/api/apps/${seg(name)}`),
+  setAppTool: (name: string, tool: string, enabled: boolean) =>
+    request<void>(`/api/apps/${seg(name)}/tools/${seg(tool)}`, {
+      method: "PUT",
+      json: { enabled },
+    }),
 
 
   listProfiles: () => request<Profile[]>("/api/profiles"),

@@ -107,6 +107,15 @@ export const useRotateToken = () => {
   });
 };
 
+export const useSetAppTool = (name: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tool, enabled }: { tool: string; enabled: boolean }) =>
+      api.setAppTool(name, tool, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.app(name) }),
+  });
+};
+
 export const useInstallServer = () => {
   const qc = useQueryClient();
   return useMutation({
