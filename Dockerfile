@@ -23,8 +23,11 @@ COPY --from=build /out/echo-mcp /usr/local/bin/echo-mcp
 # bootstrap is the trusted in-sandbox init binary; it is bind-mounted into each
 # egress sandbox at GIG_BOOTSTRAP_PATH (default /usr/local/bin/bootstrap).
 COPY --from=build /out/bootstrap /usr/local/bin/bootstrap
-ENV GIG_ECHO_BIN=/usr/local/bin/echo-mcp \
-    GIG_DB_PATH=/data/gigmcp.db \
+# GIG_ECHO_BIN is intentionally NOT defaulted: the gateway seeds a demo "echo"
+# server on boot only when it is set, so baking a default makes the demo server
+# reappear in every deployment. The echo-mcp binary is still shipped above, so
+# echo remains opt-in — set GIG_ECHO_BIN=/usr/local/bin/echo-mcp to enable it.
+ENV GIG_DB_PATH=/data/gigmcp.db \
     GIG_BOOTSTRAP_PATH=/usr/local/bin/bootstrap
 VOLUME /data
 EXPOSE 8080

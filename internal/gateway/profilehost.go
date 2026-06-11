@@ -242,13 +242,19 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 		}
 		cleanups = append(cleanups, eb.Cleanup)
 
-		// Build Expose map from manifest (DESIGN #11 default subset). Servers
-		// without a manifest (legacy GIG_ECHO_BIN) expose all tools (nil map).
+		// Build Expose map from the manifest: ALL tools are enabled by default,
+		// minus the per-app set an admin has explicitly disabled. Servers without
+		// a manifest (legacy GIG_ECHO_BIN) expose all tools (nil map).
 		var expose map[string]bool
 		if rec, merr := h.Store.GetManifest(ctx, name); merr == nil {
+			disabled, _ := h.Store.ListDisabledTools(ctx, name) // best-effort: on error, treat as none disabled
+			dset := make(map[string]bool, len(disabled))
+			for _, d := range disabled {
+				dset[d] = true
+			}
 			expose = map[string]bool{}
 			for _, tl := range rec.Tools {
-				if tl.Default {
+				if !dset[tl.Name] {
 					expose[tl.Name] = true
 				}
 			}

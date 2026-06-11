@@ -248,6 +248,11 @@ func (i *IndexInstaller) Uninstall(ctx context.Context, name string) error {
 	if err := i.Store.DeleteManifest(ctx, name); err != nil {
 		return err
 	}
+	// Clear the admin-disabled tool set for this app. Best-effort: a leftover
+	// row is harmless (it only matters when the same-named app is reinstalled).
+	if err := i.Store.DeleteDisabledToolsForServer(ctx, name); err != nil {
+		return err
+	}
 	// name re-validated above, so the glob is meta-character-free.
 	matches, err := filepath.Glob(filepath.Join(i.DataDir, "servers", name+"@*"))
 	if err != nil {

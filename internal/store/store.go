@@ -53,6 +53,13 @@ type Store interface {
 	RecordConsent(ctx context.Context, server, hash string) error
 	// DeleteManifest removes a server's manifest record.
 	DeleteManifest(ctx context.Context, server string) error
+	// ListDisabledTools returns the admin-disabled tool names for an app, sorted.
+	ListDisabledTools(ctx context.Context, server string) ([]string, error)
+	// SetToolEnabled toggles a tool for an app: enabled=false disables it
+	// (idempotent), enabled=true re-enables it (clears the disabled row).
+	SetToolEnabled(ctx context.Context, server, tool string, enabled bool) error
+	// DeleteDisabledToolsForServer clears an app's disabled set (uninstall).
+	DeleteDisabledToolsForServer(ctx context.Context, server string) error
 	// DeleteServer removes a server row (registry uninstall).
 	DeleteServer(ctx context.Context, name string) error
 	// UpsertUserByOIDC JIT-provisions or refreshes a user by (issuer, subject).

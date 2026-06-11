@@ -49,6 +49,7 @@ func (s *Server) Routes() *http.ServeMux {
 	authed.HandleFunc("GET /api/overview", s.handleOverview)
 	authed.HandleFunc("GET /api/apps", s.handleListApps)
 	authed.HandleFunc("GET /api/apps/{name}", s.handleGetApp)
+	authed.Handle("PUT /api/apps/{name}/tools/{tool}", auth.RequireAdmin(http.HandlerFunc(s.handleSetAppTool)))
 	authed.HandleFunc("GET /api/profiles", s.handleListProfiles)
 	authed.HandleFunc("POST /api/profiles", s.handleCreateProfile)
 	authed.HandleFunc("GET /api/profiles/{id}", s.handleGetProfile)

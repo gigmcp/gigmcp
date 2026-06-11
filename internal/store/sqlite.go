@@ -136,6 +136,10 @@ func OpenSQLite(path string) (Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.ExecContext(ctx, disabledToolsSchema); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := migrateManifests(ctx, db); err != nil {
 		db.Close()
 		return nil, err

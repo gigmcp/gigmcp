@@ -55,7 +55,8 @@ type appDetailJSON struct {
 
 type appToolJSON struct {
 	Name    string `json:"name"`
-	Default bool   `json:"default"`
+	Default bool   `json:"default"` // informational: the manifest's curated-default flag
+	Enabled bool   `json:"enabled"` // effective state: exposed unless an admin disabled it
 }
 
 // handleListApps — GET /api/apps: installed apps for everyone, each annotated
@@ -131,9 +132,19 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tools are enabled by default; an admin-disabled set subtracts from that.
+	disabled, err := s.Store.ListDisabledTools(ctx, name)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "load app")
+		return
+	}
+	dset := make(map[string]bool, len(disabled))
+	for _, d := range disabled {
+		dset[d] = true
+	}
 	tools := make([]appToolJSON, 0, len(rec.Tools))
 	for _, tl := range rec.Tools {
-		tools = append(tools, appToolJSON{Name: tl.Name, Default: tl.Default})
+		tools = append(tools, appToolJSON{Name: tl.Name, Default: tl.Default, Enabled: !dset[tl.Name]})
 	}
 	hosts := rec.AllowedHosts
 	if hosts == nil {
@@ -172,4 +183,55 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		Connected: connected, Version: rec.Version, AllowedHosts: hosts, Tools: tools,
 		InjectHeader: inj.Header, InjectFormat: inj.Format, Placeholder: inj.Placeholder,
 	})
+}
+
+// handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: admin-only per-app
+// toggle. Body {"enabled": bool}. enabled=false disables the tool for the app
+// (persists across re-install); enabled=true re-enables it. The route is
+// wrapped in auth.RequireAdmin, so RBAC is enforced before this runs.
+func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if msg := validateServerName(name); msg != "" {
+		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
+		return
+	}
+	tool := r.PathValue("tool")
+	ctx := r.Context()
+
+	rec, err := s.Store.GetManifest(ctx, name)
+	if err != nil {
+		if errors.Is(err, store.ErrManifestNotFound) {
+			writeErr(w, http.StatusNotFound, codeNotFound, "app not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, codeInternal, "load app")
+		return
+	}
+
+	// Only tools declared by the app's manifest may be toggled — disabling an
+	// arbitrary string would silently strand a row that never matches a tool.
+	known := false
+	for _, tl := range rec.Tools {
+		if tl.Name == tool {
+			known = true
+			break
+		}
+	}
+	if !known {
+		writeErr(w, http.StatusBadRequest, codeInvalid, "unknown tool for app")
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !decodeJSON(w, r, &body, 64<<10) {
+		return
+	}
+
+	if err := s.Store.SetToolEnabled(ctx, name, tool, body.Enabled); err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "set tool state")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
