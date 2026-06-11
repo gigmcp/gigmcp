@@ -56,8 +56,11 @@ func (passthroughVault) Decrypt(b []byte) ([]byte, error) { return b[len("enc:")
 
 func newTestBroker(t *testing.T, fs ConfigStore) *OAuthBroker {
 	t.Helper()
+	// Inject an unguarded client: these tests point token/authorize URLs at
+	// loopback httptest servers, which the production SSRF guard would refuse.
 	b, err := NewOAuthBroker(fs, passthroughVault{},
-		"http://localhost:8080/api/connections/oauth/callback", "http://localhost:8080")
+		"http://localhost:8080/api/connections/oauth/callback", "http://localhost:8080",
+		WithHTTPClient(http.DefaultClient))
 	if err != nil {
 		t.Fatal(err)
 	}

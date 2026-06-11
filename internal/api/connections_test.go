@@ -19,7 +19,8 @@ func newConnAPI(t *testing.T) (*api.Server, *httptest.Server, store.Store) {
 	t.Helper()
 	srv, ts, st, _ := newTestAPI(t)
 	broker, err := auth.NewOAuthBroker(st, srv.Vault,
-		ts.URL+"/api/connections/oauth/callback", ts.URL)
+		ts.URL+"/api/connections/oauth/callback", ts.URL,
+		auth.WithHTTPClient(http.DefaultClient))
 	if err != nil {
 		t.Fatal(err)
 	}

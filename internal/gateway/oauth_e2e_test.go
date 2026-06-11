@@ -54,7 +54,8 @@ func TestOAuthEgressInjectsBearerSandboxNeverHoldsToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	broker, err := auth.NewOAuthBroker(st, v,
-		"http://gw/api/connections/oauth/callback", "http://gw")
+		"http://gw/api/connections/oauth/callback", "http://gw",
+		auth.WithHTTPClient(http.DefaultClient))
 	if err != nil {
 		t.Fatal(err)
 	}
