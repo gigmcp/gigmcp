@@ -8,6 +8,7 @@ name: ci
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
@@ -107,6 +108,71 @@ jobs:
         # GATEWAY_INTERNAL_URL build arg has an in-Dockerfile default; set it
         # explicitly anyway so the smoke build is self-describing.
         run: docker buildx build --build-arg GATEWAY_INTERNAL_URL=http://gateway.invalid:8080 ./web
+
+  # Publishes both container images to GHCR (ghcr.io/gigmcp/{gateway,web}) on
+  # pushes to main and on v* version tags — never on PRs.
+  #
+  # The web image bakes GATEWAY_INTERNAL_URL at *build time* into the Next.js
+  # /api and /mcp rewrites (next.config.ts). We bake the reference-compose value
+  # http://issuer-proxy:8080 (the gateway shares the issuer-proxy sidecar's
+  # network namespace). Deployments with a different network topology cannot
+  # repoint this at runtime — they must rebuild the web image with their own
+  # GATEWAY_INTERNAL_URL value.
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Gateway image metadata
+        id: meta-gateway
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/gigmcp/gateway
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build and push gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta-gateway.outputs.tags }}
+          labels: ${{ steps.meta-gateway.outputs.labels }}
+
+      - name: Web image metadata
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/gigmcp/web
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          build-args: |
+            GATEWAY_INTERNAL_URL=http://issuer-proxy:8080
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
 
   # Full sandbox suite (bwrap + veth/NET_ADMIN + seccomp tests) via `make test`,
   # which runs go test inside a Docker container with seccomp/apparmor
