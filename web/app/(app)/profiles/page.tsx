@@ -1,21 +1,79 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { useFormatter, useTranslations } from "next-intl";
-import { Layers } from "lucide-react";
-import { useProfiles, useReadOnly } from "@/lib/queries";
+import { Layers, Trash2 } from "lucide-react";
+import { useProfiles, useReadOnly, useDeleteProfile } from "@/lib/queries";
 import { DataTable } from "@/components/data-table";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TokenRevealDialog } from "@/components/token-reveal-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Profile } from "@/lib/types";
 import type { Column } from "@/components/data-table";
+import { ReadOnlyTooltip, toastMutationError } from "./[id]/sections";
 import {
   CreateProfileDialog,
   CreateProfileTrigger,
 } from "./create-profile-dialog";
 
-function useProfileColumns(): Column<Profile>[] {
+function DeleteProfileButton({
+  profile: p,
+  readOnly,
+}: {
+  profile: Profile;
+  readOnly: boolean;
+}) {
+  const t = useTranslations("profiles");
+  const deleteProfile = useDeleteProfile();
+
+  function handleDelete() {
+    deleteProfile.mutate(p.id, {
+      onSuccess: () => toast.success(t("detail.delete.successToast")),
+      onError: (err) => toastMutationError(err, t("detail.delete.failed")),
+    });
+  }
+
+  if (readOnly) {
+    return (
+      <ReadOnlyTooltip readOnly={readOnly}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          aria-label={t("list.delete.ariaLabel", { name: p.name })}
+          disabled
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      </ReadOnlyTooltip>
+    );
+  }
+
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-destructive"
+          aria-label={t("list.delete.ariaLabel", { name: p.name })}
+          disabled={deleteProfile.isPending}
+        >
+          <Trash2 aria-hidden="true" />
+        </Button>
+      }
+      title={t("detail.delete.confirmTitle", { name: p.name })}
+      description={t("detail.delete.confirmDescription")}
+      confirmLabel={t("detail.delete.confirmLabel")}
+      isPending={deleteProfile.isPending}
+      onConfirm={handleDelete}
+    />
+  );
+}
+
+function useProfileColumns(readOnly: boolean): Column<Profile>[] {
   const t = useTranslations("profiles");
   const format = useFormatter();
 
@@ -47,6 +105,14 @@ function useProfileColumns(): Column<Profile>[] {
       header: t("list.columns.servers"),
       cell: (p) => (
         <span className="tabular-nums">{format.number(p.servers.length)}</span>
+      ),
+    },
+    {
+      header: t("list.columns.actions"),
+      cell: (p) => (
+        <div className="flex justify-end">
+          <DeleteProfileButton profile={p} readOnly={readOnly} />
+        </div>
       ),
     },
   ];
@@ -120,7 +186,7 @@ export default function ProfilesPage() {
   const readOnly = useReadOnly();
   const [createOpen, setCreateOpen] = useState(false);
   const [revealToken, setRevealToken] = useState<string | null>(null);
-  const columns = useProfileColumns();
+  const columns = useProfileColumns(readOnly);
 
   return (
     <div className="space-y-6">

@@ -7,7 +7,11 @@
       "name": "Nome",
       "slug": "Slug",
       "endpoint": "Endpoint",
-      "servers": "Server"
+      "servers": "Server",
+      "actions": "Azioni"
+    },
+    "delete": {
+      "ariaLabel": "Elimina profilo \"{name}\""
     },
     "empty": {
       "title": "Nessun profilo",
