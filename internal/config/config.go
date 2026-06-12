@@ -61,22 +61,28 @@ type OAuthVendorBootstrap struct {
 // answers with a descriptive control_plane_disabled 404 until GIG_OIDC_* is
 // configured.
 type Config struct {
-	Listen           string        // GIG_LISTEN, default ":8080"
-	DBPath           string        // GIG_DB_PATH, default "gigmcp.db"
-	EchoBinary       string        // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding)
-	MasterKey        string        // GIG_MASTER_KEY, required for vault (hex-encoded 32 bytes)
-	ProxyPort        int           // GIG_PROXY_PORT, default 8081 (egress MITM proxy)
-	BootstrapPath    string        // GIG_BOOTSTRAP_PATH, default "/usr/local/bin/bootstrap"
-	RegistryIndexURL string        // GIG_REGISTRY_INDEX_URL: https:// or file:// index.json location
-	RegistryPubKey   string        // GIG_REGISTRY_PUBKEY: 32-byte ed25519 hex (index trust root)
-	Install          string        // GIG_INSTALL: comma-separated refs installed at boot (auto-consented)
-	DataDir          string        // GIG_DATA_DIR, default "/data": extracted server binaries
-	OIDCIssuer       string        // GIG_OIDC_ISSUER, e.g. http://localhost:8082; empty = control plane disabled
-	OIDCClientID     string        // GIG_OIDC_CLIENT_ID
-	OIDCClientSecret string        // GIG_OIDC_CLIENT_SECRET or GIG_OIDC_CLIENT_SECRET_FILE; optional (PKCE public client)
-	OIDCRedirectURL  string        // GIG_OIDC_REDIRECT_URL, e.g. https://gig.example.com/api/auth/callback
-	OIDCAdminRole    string        // GIG_OIDC_ADMIN_ROLE — Zitadel role mapping to "admin"; default "gigmcp-admin"
-	SessionTTL       time.Duration // GIG_SESSION_TTL, default 168h
+	Listen           string // GIG_LISTEN, default ":8080"
+	DBPath           string // GIG_DB_PATH, default "gigmcp.db"
+	EchoBinary       string // GIG_ECHO_BIN, optional legacy/dev fallback (registry-driven install replaces seeding)
+	MasterKey        string // GIG_MASTER_KEY, required for vault (hex-encoded 32 bytes)
+	ProxyPort        int    // GIG_PROXY_PORT, default 8081 (egress MITM proxy)
+	BootstrapPath    string // GIG_BOOTSTRAP_PATH, default "/usr/local/bin/bootstrap"
+	RegistryIndexURL string // GIG_REGISTRY_INDEX_URL: https:// or file:// index.json location
+	RegistryPubKey   string // GIG_REGISTRY_PUBKEY: 32-byte ed25519 hex (index trust root)
+	Install          string // GIG_INSTALL: comma-separated refs installed at boot (auto-consented)
+	DataDir          string // GIG_DATA_DIR, default "/data": extracted server binaries
+	OIDCIssuer       string // GIG_OIDC_ISSUER, e.g. http://localhost:8082; empty = control plane disabled
+	OIDCClientID     string // GIG_OIDC_CLIENT_ID
+	OIDCClientSecret string // GIG_OIDC_CLIENT_SECRET or GIG_OIDC_CLIENT_SECRET_FILE; optional (PKCE public client)
+	OIDCRedirectURL  string // GIG_OIDC_REDIRECT_URL, e.g. https://gig.example.com/api/auth/callback
+	OIDCAdminRole    string // GIG_OIDC_ADMIN_ROLE — Zitadel role mapping to "admin"; default "gigmcp-admin"
+	// OIDCPostLogoutRedirectURL is GIG_OIDC_POST_LOGOUT_REDIRECT_URL — where the
+	// IdP sends the browser after RP-initiated (single) logout. When OIDC is
+	// enabled and this is unset, it defaults to PublicURL + "/login" (only when
+	// PublicURL is non-empty). It must be registered with the IdP as an allowed
+	// post-logout redirect URI.
+	OIDCPostLogoutRedirectURL string
+	SessionTTL                time.Duration // GIG_SESSION_TTL, default 168h
 	// PublicURL is GIG_PUBLIC_URL — the https prefix turns on Secure cookies.
 	// When OIDC is enabled and GIG_PUBLIC_URL is unset, PublicURL is derived
 	// from OIDCRedirectURL (scheme + host, path stripped) so that Secure-cookie
@@ -119,6 +125,7 @@ func FromEnv() (Config, error) {
 	cfg.OIDCClientSecret = secret
 	cfg.OIDCRedirectURL = os.Getenv("GIG_OIDC_REDIRECT_URL")
 	cfg.OIDCAdminRole = envOr("GIG_OIDC_ADMIN_ROLE", "gigmcp-admin")
+	cfg.OIDCPostLogoutRedirectURL = os.Getenv("GIG_OIDC_POST_LOGOUT_REDIRECT_URL")
 	cfg.PublicURL = os.Getenv("GIG_PUBLIC_URL")
 	cfg.SessionTTL = 168 * time.Hour
 	if v := os.Getenv("GIG_SESSION_TTL"); v != "" {
@@ -150,6 +157,12 @@ func FromEnv() (Config, error) {
 		if u, err := url.Parse(cfg.OIDCRedirectURL); err == nil {
 			cfg.PublicURL = u.Scheme + "://" + u.Host
 		}
+	}
+	// Default the post-logout redirect to the login page on our own origin when
+	// OIDC is enabled and the operator did not set it explicitly. Only derive it
+	// when PublicURL is known, otherwise we cannot form an absolute URL.
+	if cfg.OIDCEnabled() && cfg.OIDCPostLogoutRedirectURL == "" && cfg.PublicURL != "" {
+		cfg.OIDCPostLogoutRedirectURL = cfg.PublicURL + "/login"
 	}
 	boot, err := parseOAuthBootstrap()
 	if err != nil {

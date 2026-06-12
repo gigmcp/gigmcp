@@ -89,7 +89,10 @@ async function request<T>(
 
 export const api = {
   me: () => request<Me>("/api/me"),
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  logout: () =>
+    request<{ logout_url?: string } | undefined>("/api/auth/logout", {
+      method: "POST",
+    }),
 
   overview: () => request<OverviewStats>("/api/overview"),
   apps: async (): Promise<AppSummary[]> => {

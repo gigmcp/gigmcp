@@ -87,8 +87,15 @@ export function AppSidebar({
           size="sm"
           className="w-full justify-start gap-2.5 text-muted-foreground"
           onClick={async () => {
-            await api.logout();
-            router.replace("/login");
+            const res = await api.logout();
+            // When the gateway returns an RP-initiated logout URL, leave the SPA
+            // with a full-page navigation so we hit Zitadel and end the IdP
+            // session too. Otherwise (204 / no URL) fall back to a local redirect.
+            if (res?.logout_url) {
+              window.location.href = res.logout_url;
+            } else {
+              router.replace("/login");
+            }
           }}
         >
           <LogOut className="size-4" />

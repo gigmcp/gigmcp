@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -29,6 +30,13 @@ const RolesClaim = "urn:zitadel:iam:org:project:roles"
 // flowCookie carries state+nonce+PKCE verifier between login and callback.
 const flowCookie = "gig_oidc_flow"
 
+// idTokenCookie holds the raw, Zitadel-signed id_token captured at login. It is
+// used solely as the id_token_hint for RP-initiated (single) logout. It is
+// scoped to Path "/api/auth/logout" so the browser only ever transmits it to
+// the logout endpoint — never anywhere else, minimizing exposure. The value is
+// already a signed JWT, so it needs no additional HMAC from us.
+const idTokenCookie = "gig_idt"
+
 // Authenticator drives the OIDC authorization-code+PKCE flow and issues
 // opaque DB sessions. Zitadel is the sole IdP (generic OIDC client; social
 // login is federated inside Zitadel).
@@ -39,6 +47,15 @@ type Authenticator struct {
 	adminRole  string
 	sessionTTL time.Duration
 	secure     bool // Secure cookie flag: true iff GIG_PUBLIC_URL is https
+	// endSessionEndpoint is the IdP's RP-initiated logout endpoint, discovered
+	// from the OIDC discovery document. OPTIONAL per the OIDC spec — an empty
+	// string means the provider does not support RP-initiated logout, in which
+	// case LogoutHandler falls back to local-only logout.
+	endSessionEndpoint string
+	// postLogoutRedirectURL is where the IdP returns the browser after a
+	// successful RP-initiated logout (GIG_OIDC_POST_LOGOUT_REDIRECT_URL). Empty
+	// means we omit post_logout_redirect_uri and let the IdP use its default.
+	postLogoutRedirectURL string
 	// hmacKey signs the transient flow cookie. Random per process: in-flight
 	// logins do NOT survive a gateway restart (acceptable — users just retry),
 	// and are replica-local; this assumes a single gateway instance (SQLite
@@ -52,6 +69,15 @@ func NewAuthenticator(ctx context.Context, cfg config.Config, st store.Store) (*
 	provider, err := oidc.NewProvider(ctx, cfg.OIDCIssuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery for %s: %w", cfg.OIDCIssuer, err)
+	}
+	// Pull end_session_endpoint out of the same discovery document. It is
+	// OPTIONAL in OIDC discovery: an empty string is valid and simply means the
+	// provider does not advertise RP-initiated logout (handled in LogoutHandler).
+	var disc struct {
+		EndSessionEndpoint string `json:"end_session_endpoint"`
+	}
+	if err := provider.Claims(&disc); err != nil {
+		return nil, fmt.Errorf("oidc discovery claims: %w", err)
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -67,10 +93,12 @@ func NewAuthenticator(ctx context.Context, cfg config.Config, st store.Store) (*
 			RedirectURL:  cfg.OIDCRedirectURL,
 			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 		},
-		adminRole:  cfg.OIDCAdminRole,
-		sessionTTL: cfg.SessionTTL,
-		secure:     strings.HasPrefix(cfg.PublicURL, "https://"),
-		hmacKey:    key,
+		adminRole:             cfg.OIDCAdminRole,
+		sessionTTL:            cfg.SessionTTL,
+		secure:                strings.HasPrefix(cfg.PublicURL, "https://"),
+		endSessionEndpoint:    disc.EndSessionEndpoint,
+		postLogoutRedirectURL: cfg.OIDCPostLogoutRedirectURL,
+		hmacKey:               key,
 	}, nil
 }
 
@@ -257,6 +285,13 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 		MaxAge:   int(a.sessionTTL / time.Second),
 		HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode,
 	})
+	// Stash the raw id_token for use as the id_token_hint on RP-initiated
+	// logout. Scoped to the logout path only — see idTokenCookie's doc comment.
+	http.SetCookie(w, &http.Cookie{
+		Name: idTokenCookie, Value: rawID, Path: "/api/auth/logout",
+		MaxAge:   int(a.sessionTTL / time.Second),
+		HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode,
+	})
 	uid := user.ID
 	if err := a.Store.AppendAudit(r.Context(), store.AuditEvent{
 		Kind: "auth", UserID: &uid, Decision: "login", Detail: user.Email,
@@ -266,8 +301,13 @@ func (a *Authenticator) CallbackHandler(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// LogoutHandler — POST /api/auth/logout: delete the session row, clear the
-// cookie. Local logout only (RP-initiated Zitadel logout is a follow-up).
+// LogoutHandler — POST /api/auth/logout: delete the session row and clear both
+// the session and id_token cookies. When the IdP advertises an
+// end_session_endpoint and we still hold the id_token, it ALSO returns an
+// RP-initiated logout URL as JSON so the frontend can navigate the browser to
+// Zitadel and end the IdP session too (single logout). Without that — no
+// end_session endpoint, no id_token, or a malformed endpoint — it falls back to
+// the previous behavior and returns 204 (the frontend then redirects locally).
 func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
 		hash := HashToken(c.Value)
@@ -283,10 +323,52 @@ func (a *Authenticator) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("WARN: delete session: %v", err)
 		}
 	}
+	// Read the id_token before clearing its cookie — it's the id_token_hint.
+	var idToken string
+	if c, err := r.Cookie(idTokenCookie); err == nil {
+		idToken = c.Value
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookie, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode,
 	})
+	// Clear the id_token cookie. Path MUST match the one it was set with
+	// ("/api/auth/logout"), or the browser will not remove it.
+	http.SetCookie(w, &http.Cookie{
+		Name: idTokenCookie, Value: "", Path: "/api/auth/logout", MaxAge: -1,
+		HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode,
+	})
+	// Build the RP-initiated logout URL when we can. Any failure falls through
+	// to the local-only 204 below.
+	if a.endSessionEndpoint != "" && idToken != "" {
+		if u, err := url.Parse(a.endSessionEndpoint); err != nil {
+			log.Printf("WARN: parse end_session_endpoint %q: %v", a.endSessionEndpoint, err)
+		} else {
+			q := u.Query()
+			q.Set("id_token_hint", idToken)
+			if a.postLogoutRedirectURL != "" {
+				q.Set("post_logout_redirect_uri", a.postLogoutRedirectURL)
+			}
+			// Some providers require client_id alongside the hint.
+			q.Set("client_id", a.oauth.ClientID)
+			u.RawQuery = q.Encode()
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			if err := json.NewEncoder(w).Encode(map[string]string{"logout_url": u.String()}); err != nil {
+				log.Printf("WARN: write logout url: %v", err)
+			}
+			return
+		}
+	}
+	// Local-only logout: the provider advertises no end_session_endpoint, the
+	// id_token cookie was absent/expired, or the endpoint failed to parse. The
+	// gateway session is gone but the IdP session may persist — log it so an
+	// operator can tell "still logged into Zitadel" from a gateway bug.
+	if a.endSessionEndpoint == "" {
+		log.Printf("INFO: logout: no end_session_endpoint advertised; local-only logout")
+	} else if idToken == "" {
+		log.Printf("INFO: logout: no id_token cookie; local-only logout")
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

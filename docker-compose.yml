@@ -43,6 +43,11 @@ services:
       GIG_OIDC_CLIENT_SECRET: ${GIG_OIDC_CLIENT_SECRET:-}
       GIG_OIDC_REDIRECT_URL: ${GIG_OIDC_REDIRECT_URL:-}
       GIG_OIDC_ADMIN_ROLE: ${GIG_OIDC_ADMIN_ROLE:-gigmcp-admin}
+      # RP-initiated logout lands the browser here after the IdP session ends.
+      # MUST be registered as an allowed post-logout redirect URI in the Zitadel
+      # app config, or Zitadel rejects the logout. Defaults to GIG_PUBLIC_URL +
+      # "/login" when unset; set explicitly to the browser-facing login page.
+      GIG_OIDC_POST_LOGOUT_REDIRECT_URL: ${GIG_OIDC_POST_LOGOUT_REDIRECT_URL:-}
       GIG_SESSION_TTL: ${GIG_SESSION_TTL:-168h}
       GIG_PUBLIC_URL: ${GIG_PUBLIC_URL:-http://localhost:8080}
     volumes:
