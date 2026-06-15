@@ -22,7 +22,8 @@
     "connectComingSoon": "Connetti (in arrivo)"
   },
   "empty": {
-    "title": "Nessuna app installata"
+    "title": "Nessuna app installata",
+    "description": "Esplora la scheda Disponibili per installare un'app."
   },
   "install": {
     "button": "Installa app",

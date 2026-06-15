@@ -22,7 +22,8 @@
     "connectComingSoon": "Verbinden (bald)"
   },
   "empty": {
-    "title": "Noch keine Apps installiert"
+    "title": "Noch keine Apps installiert",
+    "description": "Wechseln Sie zum Tab „Verfügbar“, um eine App zu installieren."
   },
   "install": {
     "button": "App installieren",

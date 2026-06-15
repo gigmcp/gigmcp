@@ -22,7 +22,8 @@
     "connectComingSoon": "Connect (coming soon)"
   },
   "empty": {
-    "title": "No apps installed yet"
+    "title": "No apps installed yet",
+    "description": "Browse the Available tab to install an app."
   },
   "install": {
     "button": "Install app",

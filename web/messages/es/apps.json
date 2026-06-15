@@ -22,7 +22,8 @@
     "connectComingSoon": "Conectar (próximamente)"
   },
   "empty": {
-    "title": "No hay aplicaciones instaladas"
+    "title": "No hay aplicaciones instaladas",
+    "description": "Explora la pestaña Disponibles para instalar una aplicación."
   },
   "install": {
     "button": "Instalar aplicación",

@@ -22,7 +22,8 @@
     "connectComingSoon": "Connexion (bientôt)"
   },
   "empty": {
-    "title": "Aucune application installée"
+    "title": "Aucune application installée",
+    "description": "Parcourez l'onglet Disponibles pour installer une application."
   },
   "install": {
     "button": "Installer une application",
