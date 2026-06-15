@@ -125,6 +125,11 @@ type Store interface {
 	IsUserInstalled(ctx context.Context, userID int64, server string) (bool, error)
 	// ListUserInstalls returns the server names userID installed, sorted.
 	ListUserInstalls(ctx context.Context, userID int64) ([]string, error)
+	// SetUserToolEnabled toggles a tool for a user+server: enabled=false disables it
+	// (idempotent), enabled=true re-enables it (clears the disabled row).
+	SetUserToolEnabled(ctx context.Context, userID int64, server, tool string, enabled bool) error
+	// ListUserDisabledTools returns the tool names a user turned off for a server, sorted.
+	ListUserDisabledTools(ctx context.Context, userID int64, server string) ([]string, error)
 	// AppendAudit inserts an audit row (zero TS = now).
 	AppendAudit(ctx context.Context, e AuditEvent) error
 	// ListAudit pages audit rows newest-first (keyset: beforeID, 0 = newest; userID 0 = all).
