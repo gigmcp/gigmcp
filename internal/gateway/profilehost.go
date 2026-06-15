@@ -290,9 +290,14 @@ func (h *ProfileHost) exposeFor(ctx context.Context, p store.Profile, server str
 	}
 	rec, merr := h.Store.GetManifest(ctx, server)
 	if merr != nil {
-		// No manifest: legacy path — expose all tools (nil map). Other errors
-		// also fall through to the legacy behavior, matching the prior best-effort
-		// treatment of the manifest lookup.
+		// A genuine missing manifest is the only legitimate "expose all" case:
+		// the server predates the manifest system, so fall through to the
+		// legacy nil-expose path. Any other error (DB failure, scan error, etc.)
+		// is propagated so a transient fault does not silently widen the tool
+		// set — fail closed, matching the IsUserInstalled check above.
+		if !errors.Is(merr, store.ErrManifestNotFound) {
+			return nil, false, merr
+		}
 		return nil, false, nil
 	}
 	disabled, _ := h.Store.ListUserDisabledTools(ctx, p.UserID, server) // best-effort: on error, treat as none disabled
