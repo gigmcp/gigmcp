@@ -252,11 +252,16 @@ func (s *Server) handleUninstallForUser(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: admin-only per-app
-// toggle. Body {"enabled": bool}. enabled=false disables the tool for the app
-// (persists across re-install); enabled=true re-enables it. The route is
-// wrapped in auth.RequireAdmin, so RBAC is enforced before this runs.
+// handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: per-user per-app toggle.
+// Body {"enabled": bool}. enabled=false disables the tool for the calling user
+// (persists across re-install); enabled=true re-enables it. The user must have
+// installed the app first; tool on/off is the user's own state, not global.
 func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
 	name := r.PathValue("name")
 	if msg := validateServerName(name); msg != "" {
 		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
@@ -264,6 +269,13 @@ func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
 	}
 	tool := r.PathValue("tool")
 	ctx := r.Context()
+
+	// Tool prefs are per-install: you can only toggle tools for an app you've
+	// installed for yourself.
+	if ok, _ := s.Store.IsUserInstalled(ctx, user.ID, name); !ok {
+		writeErr(w, http.StatusNotFound, codeNotFound, "install the app before toggling its tools")
+		return
+	}
 
 	rec, err := s.Store.GetManifest(ctx, name)
 	if err != nil {
@@ -296,7 +308,7 @@ func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.SetToolEnabled(ctx, name, tool, body.Enabled); err != nil {
+	if err := s.Store.SetUserToolEnabled(ctx, user.ID, name, tool, body.Enabled); err != nil {
 		writeErr(w, http.StatusInternalServerError, codeInternal, "set tool state")
 		return
 	}
