@@ -131,6 +131,27 @@ export const useUninstallServer = () => {
   });
 };
 
+export const useInstallSelf = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.installSelf(name),
+    onSuccess: (_d, name) => {
+      qc.invalidateQueries({ queryKey: keys.apps });
+      qc.invalidateQueries({ queryKey: keys.app(name) });
+    },
+  });
+};
+export const useUninstallSelf = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.uninstallSelf(name),
+    onSuccess: (_d, name) => {
+      qc.invalidateQueries({ queryKey: keys.apps });
+      qc.invalidateQueries({ queryKey: keys.app(name) });
+    },
+  });
+};
+
 export const usePutCredential = () => {
   const qc = useQueryClient();
   return useMutation({

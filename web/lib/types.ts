@@ -99,6 +99,7 @@ export interface AppSummary {
   category: string; // "" until registry branding lands
   auth_type: AppAuthType;
   connected: boolean;
+  installed_by_me: boolean;
   version: string;
 }
 
@@ -118,6 +119,7 @@ export interface AppDetail {
   vendor: string; // canonical OAuth grouping key; == provider for un-backfilled manifests
   scopes: string[];
   connected: boolean;
+  installed_by_me: boolean;
   version: string;
   allowed_hosts: string[];
   tools: AppTool[];
