@@ -60,7 +60,7 @@ type appDetailJSON struct {
 type appToolJSON struct {
 	Name    string `json:"name"`
 	Default bool   `json:"default"` // informational: the manifest's curated-default flag
-	Enabled bool   `json:"enabled"` // effective state: exposed unless an admin disabled it
+	Enabled bool   `json:"enabled"` // effective state: true unless the user disabled this tool for themselves
 }
 
 // handleListApps — GET /api/apps: installed apps for everyone, each annotated
@@ -87,6 +87,15 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 	for _, c := range creds {
 		connected[c.Server] = true
 	}
+	installs, err := s.Store.ListUserInstalls(ctx, user.ID)
+	if err != nil {
+		log.Printf("WARN: handleListApps ListUserInstalls user=%d: %v", user.ID, err)
+		installs = nil
+	}
+	installedSet := make(map[string]bool, len(installs))
+	for _, inst := range installs {
+		installedSet[inst] = true
+	}
 
 	out := make([]appSummaryJSON, 0, len(srvs))
 	for _, srv := range srvs {
@@ -104,17 +113,10 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 		} else if !errors.Is(err, store.ErrManifestNotFound) {
 			log.Printf("WARN: handleListApps GetManifest %s: %v", srv.Name, err)
 		}
-		// Per-user install annotation; fail open with false so a store hiccup
-		// never breaks the whole list (matches the per-app annotation style above).
-		installedByMe, err := s.Store.IsUserInstalled(ctx, user.ID, srv.Name)
-		if err != nil {
-			log.Printf("WARN: handleListApps IsUserInstalled user=%d %s: %v", user.ID, srv.Name, err)
-			installedByMe = false
-		}
 		out = append(out, appSummaryJSON{
 			Name: srv.Name, DisplayName: displayName, Category: category,
 			AuthType: authType, Connected: connected[srv.Name], Version: version,
-			InstalledByMe: installedByMe,
+			InstalledByMe: installedSet[srv.Name],
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
