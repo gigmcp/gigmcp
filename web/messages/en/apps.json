@@ -64,6 +64,16 @@
   "detail": {
     "back": "Apps",
     "version": "Version {version}",
+    "install": {
+      "installButton": "Install for me",
+      "uninstallButton": "Uninstall",
+      "installing": "Installing…",
+      "uninstalling": "Uninstalling…",
+      "installSuccess": "Installed {name}",
+      "uninstallSuccess": "Uninstalled {name}",
+      "installFailed": "Could not install app",
+      "uninstallFailed": "Could not uninstall app"
+    },
     "connect": {
       "title": "Connect your account",
       "apiKeyDescription": "Enter your credential. It is encrypted and injected at the egress proxy — the sandboxed app never sees it.",
@@ -89,12 +99,12 @@
     "tools": {
       "title": "Available tools ({count})",
       "empty": "This app declares no tools.",
-      "helper": "All tools are enabled by default; admins can disable specific tools.",
+      "helper": "All tools are enabled by default. Enable or disable tools for yourself.",
       "toggleLabel": "Toggle {name}",
       "enabled": "Enabled {name}",
       "disabled": "Disabled {name}",
       "saveFailed": "Could not update tool",
-      "adminOnly": "Only admins can change tool access"
+      "installFirst": "Install this app to manage its tools."
     },
     "profiles": {
       "title": "Use in profiles",
