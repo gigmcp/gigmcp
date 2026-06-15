@@ -117,6 +117,14 @@ type Store interface {
 	UpdateConnectedAccountTokens(ctx context.Context, userID int64, vendor string, encAccess []byte, expiresAt time.Time) error
 	// DeleteConnectedAccount removes a (user, vendor) connection; idempotent.
 	DeleteConnectedAccount(ctx context.Context, userID int64, vendor string) error
+	// InstallForUser records that userID installed server (idempotent).
+	InstallForUser(ctx context.Context, userID int64, server string) error
+	// UninstallForUser removes a user's install row.
+	UninstallForUser(ctx context.Context, userID int64, server string) error
+	// IsUserInstalled reports whether userID has installed server.
+	IsUserInstalled(ctx context.Context, userID int64, server string) (bool, error)
+	// ListUserInstalls returns the server names userID installed, sorted.
+	ListUserInstalls(ctx context.Context, userID int64) ([]string, error)
 	// AppendAudit inserts an audit row (zero TS = now).
 	AppendAudit(ctx context.Context, e AuditEvent) error
 	// ListAudit pages audit rows newest-first (keyset: beforeID, 0 = newest; userID 0 = all).
