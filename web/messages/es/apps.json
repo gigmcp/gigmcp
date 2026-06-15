@@ -50,6 +50,17 @@
       "retry": "Reintentar"
     }
   },
+  "catalog": {
+    "title": "Catálogo",
+    "description": "Gestiona la lista de permitidos de la instancia desde el registro completo de conectores.",
+    "adminsOnly": "Solo administradores.",
+    "allowListedBadge": "En lista de permitidos",
+    "add": "Añadir a la instancia",
+    "remove": "Quitar",
+    "removing": "Quitando…",
+    "removed": "\"{name}\" quitado de la lista de permitidos",
+    "removeError": "No se pudo quitar la aplicación"
+  },
   "detail": {
     "back": "Aplicaciones",
     "version": "Versión {version}",

@@ -50,6 +50,17 @@
       "retry": "Retry"
     }
   },
+  "catalog": {
+    "title": "Catalog",
+    "description": "Manage the instance allow-list from the full connector registry.",
+    "adminsOnly": "Admins only.",
+    "allowListedBadge": "Allow-listed",
+    "add": "Add to instance",
+    "remove": "Remove",
+    "removing": "Removing…",
+    "removed": "Removed \"{name}\" from the allow-list",
+    "removeError": "Could not remove app"
+  },
   "detail": {
     "back": "Apps",
     "version": "Version {version}",

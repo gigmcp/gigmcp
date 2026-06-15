@@ -50,6 +50,17 @@
       "retry": "Réessayer"
     }
   },
+  "catalog": {
+    "title": "Catalogue",
+    "description": "Gérez la liste d’autorisation de l’instance à partir du registre complet de connecteurs.",
+    "adminsOnly": "Administrateurs uniquement.",
+    "allowListedBadge": "Autorisé",
+    "add": "Ajouter à l’instance",
+    "remove": "Retirer",
+    "removing": "Retrait…",
+    "removed": "« {name} » retiré de la liste d’autorisation",
+    "removeError": "Impossible de retirer l’application"
+  },
   "detail": {
     "back": "Applications",
     "version": "Version {version}",

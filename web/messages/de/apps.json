@@ -50,6 +50,17 @@
       "retry": "Erneut versuchen"
     }
   },
+  "catalog": {
+    "title": "Katalog",
+    "description": "Verwalte die Instanz-Allowlist aus der vollständigen Connector-Registry.",
+    "adminsOnly": "Nur für Admins.",
+    "allowListedBadge": "Auf Allowlist",
+    "add": "Zur Instanz hinzufügen",
+    "remove": "Entfernen",
+    "removing": "Wird entfernt…",
+    "removed": "\"{name}\" aus der Allowlist entfernt",
+    "removeError": "App konnte nicht entfernt werden"
+  },
   "detail": {
     "back": "Apps",
     "version": "Version {version}",

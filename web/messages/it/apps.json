@@ -50,6 +50,17 @@
       "retry": "Riprova"
     }
   },
+  "catalog": {
+    "title": "Catalogo",
+    "description": "Gestisci la lista consentita dell’istanza dal registro completo dei connettori.",
+    "adminsOnly": "Solo amministratori.",
+    "allowListedBadge": "In lista consentita",
+    "add": "Aggiungi all’istanza",
+    "remove": "Rimuovi",
+    "removing": "Rimozione…",
+    "removed": "\"{name}\" rimosso dalla lista consentita",
+    "removeError": "Impossibile rimuovere l’app"
+  },
   "detail": {
     "back": "App",
     "version": "Versione {version}",

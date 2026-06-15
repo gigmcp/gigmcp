@@ -2,6 +2,7 @@
   "nav": {
     "overview": "Resumen",
     "apps": "Aplicaciones",
+    "catalog": "Catálogo",
     "profiles": "Perfiles",
     "connectedAccounts": "Cuentas conectadas",
     "users": "Usuarios",
