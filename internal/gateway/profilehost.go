@@ -233,6 +233,18 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 			log.Printf("profile %d: skipping unknown server %q (uninstalled?)", p.ID, name)
 			continue
 		}
+		// Per-user gate (keyed on the profile OWNER): skip a server the owner has
+		// uninstalled, and scope the Expose map to the owner's personal disabled
+		// set. Computed BEFORE spawning so an uninstalled server costs no sandbox.
+		expose, skip, err := h.exposeFor(ctx, p, name)
+		if err != nil {
+			return fail(fmt.Errorf("expose %q: %w", name, err))
+		}
+		if skip {
+			log.Printf("profile %d: skipping %q (owner %d has not installed it)", p.ID, name, p.UserID)
+			continue
+		}
+
 		eb, err := h.Spawn(ctx, srv, tenant)
 		if err != nil {
 			// Spawn failure is unrecoverable for this server; clean up what we
@@ -242,23 +254,6 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 		}
 		cleanups = append(cleanups, eb.Cleanup)
 
-		// Build Expose map from the manifest: ALL tools are enabled by default,
-		// minus the per-app set an admin has explicitly disabled. Servers without
-		// a manifest (legacy GIG_ECHO_BIN) expose all tools (nil map).
-		var expose map[string]bool
-		if rec, merr := h.Store.GetManifest(ctx, name); merr == nil {
-			disabled, _ := h.Store.ListDisabledTools(ctx, name) // best-effort: on error, treat as none disabled
-			dset := make(map[string]bool, len(disabled))
-			for _, d := range disabled {
-				dset[d] = true
-			}
-			expose = map[string]bool{}
-			for _, tl := range rec.Tools {
-				if !dset[tl.Name] {
-					expose[tl.Name] = true
-				}
-			}
-		}
 		backends = append(backends, Backend{Name: srv.Name, Session: eb.Session, Expose: expose})
 	}
 	agg, err := New(ctx, h.Version, backends)
@@ -270,6 +265,48 @@ func (h *ProfileHost) spawnProfile(p store.Profile) (*profileRuntime, error) {
 		cleanups: cleanups,
 	}
 	return rt, nil
+}
+
+// exposeFor computes the per-server Expose map for one profile, keyed on the
+// profile OWNER (p.UserID). It returns:
+//
+//   - skip=true when the owner has NOT installed the server — the caller must
+//     drop the server from the bundle entirely (no sandbox, no tools), even if
+//     it is still referenced in profile_servers.
+//   - a manifest-driven Expose map (all manifest tools minus the OWNER's
+//     personal disabled set) when the server has a manifest.
+//   - a nil map (expose all tools) for the legacy no-manifest path
+//     (e.g. GIG_ECHO_BIN-seeded servers), preserving prior behavior.
+//
+// The disabled set is the owner's personal set (ListUserDisabledTools), NOT the
+// global admin set — per-user isolation is the whole point of this method.
+func (h *ProfileHost) exposeFor(ctx context.Context, p store.Profile, server string) (expose map[string]bool, skip bool, err error) {
+	installed, err := h.Store.IsUserInstalled(ctx, p.UserID, server)
+	if err != nil {
+		return nil, false, err
+	}
+	if !installed {
+		return nil, true, nil
+	}
+	rec, merr := h.Store.GetManifest(ctx, server)
+	if merr != nil {
+		// No manifest: legacy path — expose all tools (nil map). Other errors
+		// also fall through to the legacy behavior, matching the prior best-effort
+		// treatment of the manifest lookup.
+		return nil, false, nil
+	}
+	disabled, _ := h.Store.ListUserDisabledTools(ctx, p.UserID, server) // best-effort: on error, treat as none disabled
+	dset := make(map[string]bool, len(disabled))
+	for _, d := range disabled {
+		dset[d] = true
+	}
+	expose = map[string]bool{}
+	for _, tl := range rec.Tools {
+		if !dset[tl.Name] {
+			expose[tl.Name] = true
+		}
+	}
+	return expose, false, nil
 }
 
 // Invalidate tears down one profile's runtime (bundle change or delete);

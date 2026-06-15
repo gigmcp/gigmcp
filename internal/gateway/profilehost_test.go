@@ -38,6 +38,14 @@ func seedProfile(t *testing.T, st store.Store, slug string, servers []string) (s
 	if err := st.SetProfileServers(ctx, p.ID, servers); err != nil {
 		t.Fatal(err)
 	}
+	// Expose is now keyed on the profile owner: a bundled server is only
+	// exposed if the owner has installed it. Install every bundled server so
+	// the profile exposes its tools (matches the real install→bundle flow).
+	for _, s := range servers {
+		if err := st.InstallForUser(ctx, u.ID, s); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return p, tok
 }
 

@@ -102,6 +102,11 @@ func TestProfileScopedEgressE2E(t *testing.T) {
 		if err := st.SetProfileServers(ctx, p.ID, []string{"fetch"}); err != nil {
 			t.Fatal(err)
 		}
+		// Expose is keyed on the profile owner: install the bundled server so
+		// it is exposed for this owner's profile.
+		if err := st.InstallForUser(ctx, u.ID, "fetch"); err != nil {
+			t.Fatal(err)
+		}
 		return p, tok
 	}
 	profA, tokA := seed("alice", "alice-main", "REALKEY_A")
