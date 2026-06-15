@@ -130,6 +130,9 @@ type Store interface {
 	SetUserToolEnabled(ctx context.Context, userID int64, server, tool string, enabled bool) error
 	// ListUserDisabledTools returns the tool names a user turned off for a server, sorted.
 	ListUserDisabledTools(ctx context.Context, userID int64, server string) ([]string, error)
+	// CascadeRemoveServer deletes all per-user state for a server when an admin
+	// removes it from the instance allow-list.
+	CascadeRemoveServer(ctx context.Context, server string) error
 	// AppendAudit inserts an audit row (zero TS = now).
 	AppendAudit(ctx context.Context, e AuditEvent) error
 	// ListAudit pages audit rows newest-first (keyset: beforeID, 0 = newest; userID 0 = all).

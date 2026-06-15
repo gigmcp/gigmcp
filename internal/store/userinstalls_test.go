@@ -32,3 +32,20 @@ func TestUserInstalls(t *testing.T) {
 		t.Fatalf("after uninstall: %v", got)
 	}
 }
+
+func TestCascadeRemoveServer(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	_ = st.InstallForUser(ctx, 1, "gmail")
+	_ = st.InstallForUser(ctx, 2, "gmail")
+	_ = st.SetUserToolEnabled(ctx, 1, "gmail", "send", false)
+	if err := st.CascadeRemoveServer(ctx, "gmail"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := st.IsUserInstalled(ctx, 1, "gmail"); ok {
+		t.Fatal("install not cascaded")
+	}
+	if d, _ := st.ListUserDisabledTools(ctx, 1, "gmail"); len(d) != 0 {
+		t.Fatal("tool prefs not cascaded")
+	}
+}
