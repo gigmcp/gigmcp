@@ -74,23 +74,22 @@ function CatalogCard({
         <Badge variant="outline" className="font-mono">
           {server.latest}
         </Badge>
-        {isAdmin &&
-          (installed ? (
-            <Link
-              href={`/apps/${server.name}`}
-              className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {t("action.manage")}
-            </Link>
-          ) : (
-            <Button
-              size="xs"
-              onClick={doInstall}
-              disabled={readOnly || install.isPending}
-            >
-              {install.isPending ? t("install.submitting") : t("install.button")}
-            </Button>
-          ))}
+        {installed ? (
+          <Link
+            href={`/apps/${server.name}`}
+            className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            {t("action.manage")}
+          </Link>
+        ) : isAdmin ? (
+          <Button
+            size="xs"
+            onClick={doInstall}
+            disabled={readOnly || install.isPending}
+          >
+            {install.isPending ? t("install.submitting") : t("install.button")}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

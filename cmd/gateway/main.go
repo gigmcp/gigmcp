@@ -311,20 +311,36 @@ func newRegistryClient(cfg config.Config) *registry.Client {
 // installFromIndex installs each GIG_INSTALL ref from the signed registry
 // index (record-only; the ProfileHost spawns lazily on first profile request).
 // Boot installs are operator-initiated, so consent is recorded at install time.
+// A per-ref Install failure is logged and skipped, not fatal: with hundreds of
+// boot connectors one bad entry must never wedge the gateway. A summary line
+// reports the install/fail tally (and the failed refs) after the loop.
 func installFromIndex(ctx context.Context, st store.Store, cfg config.Config) error {
 	if cfg.Install == "" {
 		return nil
 	}
 	inst := newInstaller(cfg, st, true)
+	var total, ok int
+	var failed []string
 	for _, ref := range strings.Split(cfg.Install, ",") {
 		ref = strings.TrimSpace(ref)
 		if ref == "" {
 			continue
 		}
+		total++
 		if _, err := inst.Install(ctx, ref); err != nil {
-			return fmt.Errorf("install %q: %w", ref, err)
+			// Non-fatal: log and move on so one bad connector can't
+			// abort boot for all the others.
+			log.Printf("WARN: install %q from registry index failed: %v", ref, err)
+			failed = append(failed, ref)
+			continue
 		}
+		ok++
 		log.Printf("installed %q from registry index", ref)
 	}
+	var suffix string
+	if len(failed) > 0 {
+		suffix = fmt.Sprintf(" (failed: %s)", strings.Join(failed, ", "))
+	}
+	log.Printf("registry boot install: %d/%d installed, %d failed%s", ok, total, len(failed), suffix)
 	return nil
 }
