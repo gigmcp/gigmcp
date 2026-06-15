@@ -18,8 +18,20 @@ func (s *sqliteStore) InstallForUser(ctx context.Context, userID int64, server s
 	return err
 }
 
-// UninstallForUser removes a user's install row.
+// UninstallForUser removes a user's install row and cascades the cleanup to
+// THIS user's own state for that server: their profile_servers memberships and
+// their per-tool preferences. A second user's install of the same server is
+// untouched.
 func (s *sqliteStore) UninstallForUser(ctx context.Context, userID int64, server string) error {
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM profile_servers WHERE server_name=? AND profile_id IN (SELECT id FROM profiles WHERE user_id=?)`,
+		server, userID); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM user_disabled_tools WHERE user_id=? AND server=?`, userID, server); err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM user_installs WHERE user_id=? AND server=?`, userID, server)
 	return err

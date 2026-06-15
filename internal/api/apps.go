@@ -208,6 +208,50 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleInstallForUser — POST /api/apps/{name}/install: any authenticated user
+// installs an allow-listed app for themselves.
+func (s *Server) handleInstallForUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
+	name := r.PathValue("name")
+	if msg := validateServerName(name); msg != "" {
+		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
+		return
+	}
+	if _, err := s.Store.GetManifest(r.Context(), name); err != nil {
+		writeErr(w, http.StatusNotFound, codeNotFound, "app not allow-listed")
+		return
+	}
+	if err := s.Store.InstallForUser(r.Context(), user.ID, name); err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "install")
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// handleUninstallForUser — DELETE /api/apps/{name}/install: uninstall for self.
+// Cascades the user's own profile memberships + tool prefs via the store.
+func (s *Server) handleUninstallForUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
+	name := r.PathValue("name")
+	if msg := validateServerName(name); msg != "" {
+		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
+		return
+	}
+	if err := s.Store.UninstallForUser(r.Context(), user.ID, name); err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "uninstall")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: admin-only per-app
 // toggle. Body {"enabled": bool}. enabled=false disables the tool for the app
 // (persists across re-install); enabled=true re-enables it. The route is

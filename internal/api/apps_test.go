@@ -434,3 +434,91 @@ func TestGetAppDetailNotFound(t *testing.T) {
 		t.Fatalf("want 404 for unknown app, got %d: %s", code, body)
 	}
 }
+
+func TestInstallForUser(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	a, cookie := seedUserSession(t, st, "alice@x", "user")
+	seedApp(t, st, "stripe", "api_key", []string{"api.stripe.com"})
+
+	code, body := doJSON(t, ts, cookie, "POST", "/api/apps/stripe/install", "")
+	if code != http.StatusCreated {
+		t.Fatalf("install: want 201, got %d: %s", code, body)
+	}
+	if ok, err := st.IsUserInstalled(context.Background(), a.ID, "stripe"); err != nil || !ok {
+		t.Fatalf("IsUserInstalled after install: %v %v", ok, err)
+	}
+}
+
+func TestInstallForUserNotAllowListed(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
+
+	code, body := doJSON(t, ts, cookie, "POST", "/api/apps/ghost/install", "")
+	if code != http.StatusNotFound {
+		t.Fatalf("install of non-allow-listed app: want 404, got %d: %s", code, body)
+	}
+}
+
+func TestUninstallForUserCascades(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	a, cookie := seedUserSession(t, st, "alice@x", "user")
+	seedApp(t, st, "stripe", "api_key", []string{"api.stripe.com"})
+
+	ctx := context.Background()
+	// Alice installs, adds stripe to one of her profiles, and disables a tool.
+	if err := st.InstallForUser(ctx, a.ID, "stripe"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateProfile(ctx, "alice-prof", "Alice", a.ID, "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetProfileServers(ctx, p.ID, []string{"stripe"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserToolEnabled(ctx, a.ID, "stripe", "stripe_do", false); err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := doJSON(t, ts, cookie, "DELETE", "/api/apps/stripe/install", "")
+	if code != http.StatusNoContent {
+		t.Fatalf("uninstall: want 204, got %d: %s", code, body)
+	}
+
+	if ok, _ := st.IsUserInstalled(ctx, a.ID, "stripe"); ok {
+		t.Fatal("install row not removed")
+	}
+	if srvs, _ := st.GetProfileServers(ctx, p.ID); len(srvs) != 0 {
+		t.Fatalf("profile_servers not cleared: %v", srvs)
+	}
+	if d, _ := st.ListUserDisabledTools(ctx, a.ID, "stripe"); len(d) != 0 {
+		t.Fatalf("tool prefs not cleared: %v", d)
+	}
+}
+
+func TestUninstallForUserIsolation(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	a, cookieA := seedUserSession(t, st, "alice@x", "user")
+	b, _ := seedUserSession(t, st, "bob@x", "user")
+	seedApp(t, st, "stripe", "api_key", []string{"api.stripe.com"})
+
+	ctx := context.Background()
+	if err := st.InstallForUser(ctx, a.ID, "stripe"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InstallForUser(ctx, b.ID, "stripe"); err != nil {
+		t.Fatal(err)
+	}
+
+	code, body := doJSON(t, ts, cookieA, "DELETE", "/api/apps/stripe/install", "")
+	if code != http.StatusNoContent {
+		t.Fatalf("uninstall: want 204, got %d: %s", code, body)
+	}
+
+	if ok, _ := st.IsUserInstalled(ctx, a.ID, "stripe"); ok {
+		t.Fatal("alice install must be removed")
+	}
+	if ok, _ := st.IsUserInstalled(ctx, b.ID, "stripe"); !ok {
+		t.Fatal("bob install must be untouched")
+	}
+}
