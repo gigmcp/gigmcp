@@ -22,7 +22,8 @@
     "connectComingSoon": "Connetti (in arrivo)"
   },
   "empty": {
-    "title": "Nessuna app installata"
+    "title": "Nessuna app installata",
+    "description": "Esplora la scheda Disponibili per installare un'app."
   },
   "install": {
     "button": "Installa app",
@@ -49,9 +50,30 @@
       "retry": "Riprova"
     }
   },
+  "catalog": {
+    "title": "Catalogo",
+    "description": "Gestisci la lista consentita dell’istanza dal registro completo dei connettori.",
+    "adminsOnly": "Solo amministratori.",
+    "allowListedBadge": "In lista consentita",
+    "add": "Aggiungi all’istanza",
+    "remove": "Rimuovi",
+    "removing": "Rimozione…",
+    "removed": "\"{name}\" rimosso dalla lista consentita",
+    "removeError": "Impossibile rimuovere l’app"
+  },
   "detail": {
     "back": "App",
     "version": "Versione {version}",
+    "install": {
+      "installButton": "Installa per me",
+      "uninstallButton": "Disinstalla",
+      "installing": "Installazione…",
+      "uninstalling": "Disinstallazione…",
+      "installSuccess": "{name} installata",
+      "uninstallSuccess": "{name} disinstallata",
+      "installFailed": "Impossibile installare l'app",
+      "uninstallFailed": "Impossibile disinstallare l'app"
+    },
     "connect": {
       "title": "Connetti il tuo account",
       "apiKeyDescription": "Inserisci le tue credenziali. Vengono cifrate e iniettate al proxy di egress — l'app in sandbox non le vede mai.",
@@ -77,12 +99,12 @@
     "tools": {
       "title": "Strumenti disponibili ({count})",
       "empty": "Questa app non dichiara strumenti.",
-      "helper": "Tutti gli strumenti sono abilitati per impostazione predefinita; gli amministratori possono disabilitare strumenti specifici.",
+      "helper": "Tutti gli strumenti sono abilitati per impostazione predefinita. Abilita o disabilita gli strumenti per te stesso.",
       "toggleLabel": "Attiva/disattiva {name}",
       "enabled": "{name} abilitato",
       "disabled": "{name} disabilitato",
       "saveFailed": "Impossibile aggiornare lo strumento",
-      "adminOnly": "Solo gli amministratori possono modificare l'accesso agli strumenti"
+      "installFirst": "Installa questa app per gestire i suoi strumenti."
     },
     "profiles": {
       "title": "Usa nei profili",

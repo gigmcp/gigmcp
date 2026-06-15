@@ -132,6 +132,11 @@ export const api = {
   uninstallServer: (name: string) =>
     request<void>(`/api/servers/${seg(name)}`, { method: "DELETE" }),
 
+  installSelf: (name: string) =>
+    request<void>(`/api/apps/${seg(name)}/install`, { method: "POST" }),
+  uninstallSelf: (name: string) =>
+    request<void>(`/api/apps/${seg(name)}/install`, { method: "DELETE" }),
+
   // Registry catalog (signed index, cached gateway-side for ~5 minutes).
   // 501 registry_disabled when no registry is configured; 502
   // registry_unavailable when the index cannot be fetched or verified.

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   LayoutDashboard,
   Grid3x3,
+  Library,
   Layers,
   Plug,
   Users,
@@ -24,6 +25,7 @@ import type { User } from "@/lib/types";
 const NAV = [
   { href: "/", key: "overview", icon: LayoutDashboard, admin: false },
   { href: "/apps", key: "apps", icon: Grid3x3, admin: false },
+  { href: "/apps/catalog", key: "catalog", icon: Library, admin: true },
   { href: "/profiles", key: "profiles", icon: Layers, admin: false },
   { href: "/connected-accounts", key: "connectedAccounts", icon: Plug, admin: false },
   { href: "/users", key: "users", icon: Users, admin: true },
@@ -50,8 +52,15 @@ export function AppSidebar({
       </div>
       <nav className="flex-1 space-y-0.5 px-3">
         {items.map((n) => {
+          // Pick the longest matching nav href so nested routes (e.g.
+          // /apps/catalog) highlight only their own entry, not the parent.
+          const match = (href: string) =>
+            href === "/" ? pathname === "/" : pathname.startsWith(href);
           const active =
-            n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+            match(n.href) &&
+            !items.some(
+              (o) => o.href !== n.href && o.href.startsWith(n.href) && match(o.href),
+            );
           return (
             <Link
               key={n.href}

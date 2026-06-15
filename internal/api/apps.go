@@ -32,6 +32,8 @@ type appSummaryJSON struct {
 	AuthType    string `json:"auth_type"`    // oauth2 | api_key | basic | custom_env | none
 	Connected   bool   `json:"connected"`    // user has a credential for this app
 	Version     string `json:"version"`
+	// InstalledByMe is true when the effective user has installed this app.
+	InstalledByMe bool `json:"installed_by_me"`
 }
 
 // appDetailJSON is GET /api/apps/{name}.
@@ -51,12 +53,14 @@ type appDetailJSON struct {
 	InjectHeader string        `json:"inject_header"` // for the api_key/basic connect form hint
 	InjectFormat string        `json:"inject_format"`
 	Placeholder  string        `json:"placeholder"`
+	// InstalledByMe is true when the effective user has installed this app.
+	InstalledByMe bool `json:"installed_by_me"`
 }
 
 type appToolJSON struct {
 	Name    string `json:"name"`
 	Default bool   `json:"default"` // informational: the manifest's curated-default flag
-	Enabled bool   `json:"enabled"` // effective state: exposed unless an admin disabled it
+	Enabled bool   `json:"enabled"` // effective state: true unless the user disabled this tool for themselves
 }
 
 // handleListApps — GET /api/apps: installed apps for everyone, each annotated
@@ -83,6 +87,15 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 	for _, c := range creds {
 		connected[c.Server] = true
 	}
+	installs, err := s.Store.ListUserInstalls(ctx, user.ID)
+	if err != nil {
+		log.Printf("WARN: handleListApps ListUserInstalls user=%d: %v", user.ID, err)
+		installs = nil
+	}
+	installedSet := make(map[string]bool, len(installs))
+	for _, inst := range installs {
+		installedSet[inst] = true
+	}
 
 	out := make([]appSummaryJSON, 0, len(srvs))
 	for _, srv := range srvs {
@@ -103,6 +116,7 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 		out = append(out, appSummaryJSON{
 			Name: srv.Name, DisplayName: displayName, Category: category,
 			AuthType: authType, Connected: connected[srv.Name], Version: version,
+			InstalledByMe: installedSet[srv.Name],
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
@@ -132,8 +146,9 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Tools are enabled by default; an admin-disabled set subtracts from that.
-	disabled, err := s.Store.ListDisabledTools(ctx, name)
+	// Tools are enabled by default; the effective user's disabled set subtracts
+	// from that (per-user tool state).
+	disabled, err := s.Store.ListUserDisabledTools(ctx, user.ID, name)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, codeInternal, "load app")
 		return
@@ -159,6 +174,13 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	_, credErr := s.Store.GetCredential(ctx, name, store.UserTenant(user.ID))
 	connected := credErr == nil
 
+	// Per-user install annotation; fail open with false on a store error.
+	installedByMe, err := s.Store.IsUserInstalled(ctx, user.ID, name)
+	if err != nil {
+		log.Printf("WARN: handleGetApp IsUserInstalled user=%d %s: %v", user.ID, name, err)
+		installedByMe = false
+	}
+
 	scopes := inj.Scopes
 	if scopes == nil {
 		scopes = []string{}
@@ -182,14 +204,64 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		AuthType: appAuthType(rec), Provider: inj.Provider, Vendor: vendor, Scopes: scopes,
 		Connected: connected, Version: rec.Version, AllowedHosts: hosts, Tools: tools,
 		InjectHeader: inj.Header, InjectFormat: inj.Format, Placeholder: inj.Placeholder,
+		InstalledByMe: installedByMe,
 	})
 }
 
-// handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: admin-only per-app
-// toggle. Body {"enabled": bool}. enabled=false disables the tool for the app
-// (persists across re-install); enabled=true re-enables it. The route is
-// wrapped in auth.RequireAdmin, so RBAC is enforced before this runs.
+// handleInstallForUser — POST /api/apps/{name}/install: any authenticated user
+// installs an allow-listed app for themselves.
+func (s *Server) handleInstallForUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
+	name := r.PathValue("name")
+	if msg := validateServerName(name); msg != "" {
+		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
+		return
+	}
+	if _, err := s.Store.GetManifest(r.Context(), name); err != nil {
+		writeErr(w, http.StatusNotFound, codeNotFound, "app not allow-listed")
+		return
+	}
+	if err := s.Store.InstallForUser(r.Context(), user.ID, name); err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "install")
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// handleUninstallForUser — DELETE /api/apps/{name}/install: uninstall for self.
+// Cascades the user's own profile memberships + tool prefs via the store.
+func (s *Server) handleUninstallForUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
+	name := r.PathValue("name")
+	if msg := validateServerName(name); msg != "" {
+		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
+		return
+	}
+	if err := s.Store.UninstallForUser(r.Context(), user.ID, name); err != nil {
+		writeErr(w, http.StatusInternalServerError, codeInternal, "uninstall")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSetAppTool — PUT /api/apps/{name}/tools/{tool}: per-user per-app toggle.
+// Body {"enabled": bool}. enabled=false disables the tool for the calling user
+// (persists across re-install); enabled=true re-enables it. The user must have
+// installed the app first; tool on/off is the user's own state, not global.
 func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
+	user, ok := auth.EffectiveUser(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, codeUnauthenticated, "authentication required")
+		return
+	}
 	name := r.PathValue("name")
 	if msg := validateServerName(name); msg != "" {
 		writeErr(w, http.StatusBadRequest, codeInvalid, msg)
@@ -197,6 +269,13 @@ func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
 	}
 	tool := r.PathValue("tool")
 	ctx := r.Context()
+
+	// Tool prefs are per-install: you can only toggle tools for an app you've
+	// installed for yourself.
+	if ok, _ := s.Store.IsUserInstalled(ctx, user.ID, name); !ok {
+		writeErr(w, http.StatusNotFound, codeNotFound, "install the app before toggling its tools")
+		return
+	}
 
 	rec, err := s.Store.GetManifest(ctx, name)
 	if err != nil {
@@ -229,7 +308,7 @@ func (s *Server) handleSetAppTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.SetToolEnabled(ctx, name, tool, body.Enabled); err != nil {
+	if err := s.Store.SetUserToolEnabled(ctx, user.ID, name, tool, body.Enabled); err != nil {
 		writeErr(w, http.StatusInternalServerError, codeInternal, "set tool state")
 		return
 	}

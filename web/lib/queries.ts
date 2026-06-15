@@ -96,7 +96,14 @@ export const useSetProfileServers = () => {
   return useMutation({
     mutationFn: ({ id, servers }: { id: number; servers: string[] }) =>
       api.setProfileServers(id, servers),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: keys.profile(v.id) }),
+    onSuccess: (_d, v) => {
+      // The "Use in profiles" checkbox derives its checked state from the
+      // profiles LIST (keys.profiles), so that list must be invalidated too —
+      // invalidating only the single-profile detail leaves the list stale and
+      // the checkmark never updates.
+      qc.invalidateQueries({ queryKey: keys.profile(v.id) });
+      qc.invalidateQueries({ queryKey: keys.profiles });
+    },
   });
 };
 export const useRotateToken = () => {
@@ -120,14 +127,41 @@ export const useInstallServer = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ref: string) => api.installServer(ref),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.servers }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.servers });
+      qc.invalidateQueries({ queryKey: keys.apps });
+    },
   });
 };
 export const useUninstallServer = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => api.uninstallServer(name),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.servers }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.servers });
+      qc.invalidateQueries({ queryKey: keys.apps });
+    },
+  });
+};
+
+export const useInstallSelf = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.installSelf(name),
+    onSuccess: (_d, name) => {
+      qc.invalidateQueries({ queryKey: keys.apps });
+      qc.invalidateQueries({ queryKey: keys.app(name) });
+    },
+  });
+};
+export const useUninstallSelf = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.uninstallSelf(name),
+    onSuccess: (_d, name) => {
+      qc.invalidateQueries({ queryKey: keys.apps });
+      qc.invalidateQueries({ queryKey: keys.app(name) });
+    },
   });
 };
 

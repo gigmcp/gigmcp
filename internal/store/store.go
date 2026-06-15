@@ -117,6 +117,22 @@ type Store interface {
 	UpdateConnectedAccountTokens(ctx context.Context, userID int64, vendor string, encAccess []byte, expiresAt time.Time) error
 	// DeleteConnectedAccount removes a (user, vendor) connection; idempotent.
 	DeleteConnectedAccount(ctx context.Context, userID int64, vendor string) error
+	// InstallForUser records that userID installed server (idempotent).
+	InstallForUser(ctx context.Context, userID int64, server string) error
+	// UninstallForUser removes a user's install row.
+	UninstallForUser(ctx context.Context, userID int64, server string) error
+	// IsUserInstalled reports whether userID has installed server.
+	IsUserInstalled(ctx context.Context, userID int64, server string) (bool, error)
+	// ListUserInstalls returns the server names userID installed, sorted.
+	ListUserInstalls(ctx context.Context, userID int64) ([]string, error)
+	// SetUserToolEnabled toggles a tool for a user+server: enabled=false disables it
+	// (idempotent), enabled=true re-enables it (clears the disabled row).
+	SetUserToolEnabled(ctx context.Context, userID int64, server, tool string, enabled bool) error
+	// ListUserDisabledTools returns the tool names a user turned off for a server, sorted.
+	ListUserDisabledTools(ctx context.Context, userID int64, server string) ([]string, error)
+	// CascadeRemoveServer deletes all per-user state for a server when an admin
+	// removes it from the instance allow-list.
+	CascadeRemoveServer(ctx context.Context, server string) error
 	// AppendAudit inserts an audit row (zero TS = now).
 	AppendAudit(ctx context.Context, e AuditEvent) error
 	// ListAudit pages audit rows newest-first (keyset: beforeID, 0 = newest; userID 0 = all).

@@ -171,6 +171,21 @@ func (s *sqliteStore) DeleteServer(ctx context.Context, name string) error {
 	return err
 }
 
+// CascadeRemoveServer deletes all per-user state for a server when an admin
+// removes it from the instance allow-list. Run alongside DeleteServer/DeleteManifest.
+func (s *sqliteStore) CascadeRemoveServer(ctx context.Context, server string) error {
+	for _, q := range []string{
+		`DELETE FROM user_installs WHERE server=?`,
+		`DELETE FROM user_disabled_tools WHERE server=?`,
+		`DELETE FROM profile_servers WHERE server_name=?`,
+	} {
+		if _, err := s.db.ExecContext(ctx, q, server); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type scanner interface{ Scan(dest ...any) error }
 
 func scanManifest(row scanner) (ManifestRecord, error) {

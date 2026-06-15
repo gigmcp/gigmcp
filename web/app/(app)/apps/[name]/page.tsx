@@ -9,11 +9,13 @@ import {
   useProfiles,
   useSetProfileServers,
   useReadOnly,
-  useMe,
   useSetAppTool,
+  useInstallSelf,
+  useUninstallSelf,
 } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -127,11 +129,77 @@ function ToolToggle({
             <TooltipTrigger>
               <span tabIndex={0}>{control}</span>
             </TooltipTrigger>
-            <TooltipContent>{t("detail.tools.adminOnly")}</TooltipContent>
+            <TooltipContent>{t("detail.tools.installFirst")}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
     </li>
+  );
+}
+
+function InstallButton({
+  appName,
+  installed,
+}: {
+  appName: string;
+  installed: boolean;
+}) {
+  const t = useTranslations("apps");
+  const readOnly = useReadOnly();
+  const install = useInstallSelf();
+  const uninstall = useUninstallSelf();
+  const pending = install.isPending || uninstall.isPending;
+
+  function onInstall() {
+    install.mutate(appName, {
+      onSuccess: () =>
+        toast.success(t("detail.install.installSuccess", { name: appName })),
+      onError: (err) =>
+        toast.error(
+          err instanceof ApiError
+            ? err.message
+            : t("detail.install.installFailed"),
+        ),
+    });
+  }
+
+  function onUninstall() {
+    uninstall.mutate(appName, {
+      onSuccess: () =>
+        toast.success(t("detail.install.uninstallSuccess", { name: appName })),
+      onError: (err) =>
+        toast.error(
+          err instanceof ApiError
+            ? err.message
+            : t("detail.install.uninstallFailed"),
+        ),
+    });
+  }
+
+  if (installed) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={readOnly || pending}
+        onClick={onUninstall}
+      >
+        {uninstall.isPending
+          ? t("detail.install.uninstalling")
+          : t("detail.install.uninstallButton")}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      size="sm"
+      disabled={readOnly || pending}
+      onClick={onInstall}
+    >
+      {install.isPending
+        ? t("detail.install.installing")
+        : t("detail.install.installButton")}
+    </Button>
   );
 }
 
@@ -141,10 +209,7 @@ export default function AppDetailPage() {
   const t = useTranslations("apps");
   const app = useApp(name);
   const profiles = useProfiles();
-  const me = useMe();
   const readOnly = useReadOnly();
-  const isAdmin = me.data?.user.role === "admin";
-  const canEditTools = isAdmin && !readOnly;
 
   if (app.isLoading) {
     return (
@@ -204,6 +269,7 @@ export default function AppDetailPage() {
             <p className="mt-2 text-sm text-muted-foreground">{d.description}</p>
           )}
         </div>
+        <InstallButton appName={d.name} installed={d.installed_by_me} />
       </div>
 
       {/* Connect block */}
@@ -260,7 +326,7 @@ export default function AppDetailPage() {
                 key={tool.name}
                 appName={d.name}
                 tool={tool}
-                canEdit={canEditTools}
+                canEdit={d.installed_by_me && !readOnly}
               />
             ))}
           </ul>

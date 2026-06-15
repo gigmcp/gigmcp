@@ -22,7 +22,8 @@
     "connectComingSoon": "Conectar (próximamente)"
   },
   "empty": {
-    "title": "No hay aplicaciones instaladas"
+    "title": "No hay aplicaciones instaladas",
+    "description": "Explora la pestaña Disponibles para instalar una aplicación."
   },
   "install": {
     "button": "Instalar aplicación",
@@ -49,9 +50,30 @@
       "retry": "Reintentar"
     }
   },
+  "catalog": {
+    "title": "Catálogo",
+    "description": "Gestiona la lista de permitidos de la instancia desde el registro completo de conectores.",
+    "adminsOnly": "Solo administradores.",
+    "allowListedBadge": "En lista de permitidos",
+    "add": "Añadir a la instancia",
+    "remove": "Quitar",
+    "removing": "Quitando…",
+    "removed": "\"{name}\" quitado de la lista de permitidos",
+    "removeError": "No se pudo quitar la aplicación"
+  },
   "detail": {
     "back": "Aplicaciones",
     "version": "Versión {version}",
+    "install": {
+      "installButton": "Instalar para mí",
+      "uninstallButton": "Desinstalar",
+      "installing": "Instalando…",
+      "uninstalling": "Desinstalando…",
+      "installSuccess": "{name} instalada",
+      "uninstallSuccess": "{name} desinstalada",
+      "installFailed": "No se pudo instalar la aplicación",
+      "uninstallFailed": "No se pudo desinstalar la aplicación"
+    },
     "connect": {
       "title": "Conectar tu cuenta",
       "apiKeyDescription": "Introduce tus credenciales. Se cifran e inyectan en el proxy de egreso — la aplicación en sandbox nunca las ve.",
@@ -77,12 +99,12 @@
     "tools": {
       "title": "Herramientas disponibles ({count})",
       "empty": "Esta aplicación no declara ninguna herramienta.",
-      "helper": "Todas las herramientas están habilitadas de forma predeterminada; los administradores pueden deshabilitar herramientas específicas.",
+      "helper": "Todas las herramientas están habilitadas de forma predeterminada. Habilita o deshabilita herramientas para ti.",
       "toggleLabel": "Alternar {name}",
       "enabled": "{name} habilitada",
       "disabled": "{name} deshabilitada",
       "saveFailed": "No se pudo actualizar la herramienta",
-      "adminOnly": "Solo los administradores pueden cambiar el acceso a las herramientas"
+      "installFirst": "Instala esta aplicación para gestionar sus herramientas."
     },
     "profiles": {
       "title": "Usar en perfiles",

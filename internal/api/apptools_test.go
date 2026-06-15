@@ -62,11 +62,11 @@ func TestGetAppToolsEnabledByDefault(t *testing.T) {
 
 func TestGetAppToolsReflectsDisabled(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
-	_, cookie := seedUserSession(t, st, "alice@x", "user")
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
 	seedMultiToolApp(t, st, "slack")
 
-	// Disable "admin" directly in the store.
-	if err := st.SetToolEnabled(context.Background(), "slack", "admin", false); err != nil {
+	// Disable "admin" for this user — the detail endpoint reports per-user state.
+	if err := st.SetUserToolEnabled(context.Background(), user.ID, "slack", "admin", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,52 +95,92 @@ func TestGetAppToolsReflectsDisabled(t *testing.T) {
 	}
 }
 
-func TestToggleToolAdminOnly(t *testing.T) {
+// TestToggleToolPerUser: tool on/off is per-user. A normal user who installed
+// the app can disable/re-enable a tool for themselves; the change lands in that
+// user's own disabled set and does not leak to other users.
+func TestToggleToolPerUser(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
-	_, user := seedUserSession(t, st, "alice@x", "user")
-	_, admin := seedUserSession(t, st, "admin@x", "admin")
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
+	seedMultiToolApp(t, st, "slack")
+	if err := st.InstallForUser(context.Background(), user.ID, "slack"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Normal (non-admin) installed user disables the tool for themselves.
+	code, _ := doJSON(t, ts, cookie, "PUT", "/api/apps/slack/tools/admin", `{"enabled":false}`)
+	if code != http.StatusNoContent {
+		t.Fatalf("disable: want 204, got %d", code)
+	}
+	disabled, _ := st.ListUserDisabledTools(context.Background(), user.ID, "slack")
+	if len(disabled) != 1 || disabled[0] != "admin" {
+		t.Fatalf("user disabled set not updated: %v", disabled)
+	}
+
+	// Re-enable removes it.
+	code, _ = doJSON(t, ts, cookie, "PUT", "/api/apps/slack/tools/admin", `{"enabled":true}`)
+	if code != http.StatusNoContent {
+		t.Fatalf("enable: want 204, got %d", code)
+	}
+	disabled, _ = st.ListUserDisabledTools(context.Background(), user.ID, "slack")
+	if len(disabled) != 0 {
+		t.Fatalf("user disabled set not cleared: %v", disabled)
+	}
+}
+
+// TestToggleToolRequiresInstall: a user who hasn't installed the app gets 404.
+func TestToggleToolRequiresInstall(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	_, cookie := seedUserSession(t, st, "alice@x", "user")
 	seedMultiToolApp(t, st, "slack")
 
-	// Non-admin cannot toggle.
-	code, _ := doJSON(t, ts, user, "PUT", "/api/apps/slack/tools/admin", `{"enabled":false}`)
-	if code != http.StatusForbidden {
-		t.Fatalf("non-admin toggle: want 403, got %d", code)
+	code, _ := doJSON(t, ts, cookie, "PUT", "/api/apps/slack/tools/admin", `{"enabled":false}`)
+	if code != http.StatusNotFound {
+		t.Fatalf("not installed: want 404, got %d", code)
+	}
+}
+
+// TestToggleToolIsolation: user A disabling a tool does not affect user B.
+func TestToggleToolIsolation(t *testing.T) {
+	_, ts, st, _ := newTestAPI(t)
+	a, cookieA := seedUserSession(t, st, "alice@x", "user")
+	b, _ := seedUserSession(t, st, "bob@x", "user")
+	seedMultiToolApp(t, st, "slack")
+	ctx := context.Background()
+	if err := st.InstallForUser(ctx, a.ID, "slack"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InstallForUser(ctx, b.ID, "slack"); err != nil {
+		t.Fatal(err)
 	}
 
-	// Admin disables the tool.
-	code, _ = doJSON(t, ts, admin, "PUT", "/api/apps/slack/tools/admin", `{"enabled":false}`)
+	code, _ := doJSON(t, ts, cookieA, "PUT", "/api/apps/slack/tools/admin", `{"enabled":false}`)
 	if code != http.StatusNoContent {
-		t.Fatalf("admin disable: want 204, got %d", code)
+		t.Fatalf("A disable: want 204, got %d", code)
 	}
-	disabled, _ := st.ListDisabledTools(context.Background(), "slack")
-	if len(disabled) != 1 || disabled[0] != "admin" {
-		t.Fatalf("store not updated: %v", disabled)
+	if d, _ := st.ListUserDisabledTools(ctx, a.ID, "slack"); len(d) != 1 {
+		t.Fatalf("A disabled set: want 1, got %v", d)
 	}
-
-	// Admin re-enables the tool.
-	code, _ = doJSON(t, ts, admin, "PUT", "/api/apps/slack/tools/admin", `{"enabled":true}`)
-	if code != http.StatusNoContent {
-		t.Fatalf("admin enable: want 204, got %d", code)
-	}
-	disabled, _ = st.ListDisabledTools(context.Background(), "slack")
-	if len(disabled) != 0 {
-		t.Fatalf("store not cleared: %v", disabled)
+	if d, _ := st.ListUserDisabledTools(ctx, b.ID, "slack"); len(d) != 0 {
+		t.Fatalf("B disabled set must be unaffected, got %v", d)
 	}
 }
 
 func TestToggleToolUnknownAppAndTool(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
-	_, admin := seedUserSession(t, st, "admin@x", "admin")
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
 	seedMultiToolApp(t, st, "slack")
+	if err := st.InstallForUser(context.Background(), user.ID, "slack"); err != nil {
+		t.Fatal(err)
+	}
 
-	// Unknown app → 404.
-	code, _ := doJSON(t, ts, admin, "PUT", "/api/apps/ghost/tools/admin", `{"enabled":false}`)
+	// Unknown app → 404 (no install for it either).
+	code, _ := doJSON(t, ts, cookie, "PUT", "/api/apps/ghost/tools/admin", `{"enabled":false}`)
 	if code != http.StatusNotFound {
 		t.Fatalf("unknown app: want 404, got %d", code)
 	}
 
 	// Unknown tool (not in the manifest) → 400.
-	code, _ = doJSON(t, ts, admin, "PUT", "/api/apps/slack/tools/bogus", `{"enabled":false}`)
+	code, _ = doJSON(t, ts, cookie, "PUT", "/api/apps/slack/tools/bogus", `{"enabled":false}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("unknown tool: want 400, got %d", code)
 	}

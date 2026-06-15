@@ -22,7 +22,8 @@
     "connectComingSoon": "Connexion (bientôt)"
   },
   "empty": {
-    "title": "Aucune application installée"
+    "title": "Aucune application installée",
+    "description": "Parcourez l'onglet Disponibles pour installer une application."
   },
   "install": {
     "button": "Installer une application",
@@ -49,9 +50,30 @@
       "retry": "Réessayer"
     }
   },
+  "catalog": {
+    "title": "Catalogue",
+    "description": "Gérez la liste d’autorisation de l’instance à partir du registre complet de connecteurs.",
+    "adminsOnly": "Administrateurs uniquement.",
+    "allowListedBadge": "Autorisé",
+    "add": "Ajouter à l’instance",
+    "remove": "Retirer",
+    "removing": "Retrait…",
+    "removed": "« {name} » retiré de la liste d’autorisation",
+    "removeError": "Impossible de retirer l’application"
+  },
   "detail": {
     "back": "Applications",
     "version": "Version {version}",
+    "install": {
+      "installButton": "Installer pour moi",
+      "uninstallButton": "Désinstaller",
+      "installing": "Installation…",
+      "uninstalling": "Désinstallation…",
+      "installSuccess": "{name} installé",
+      "uninstallSuccess": "{name} désinstallé",
+      "installFailed": "Impossible d'installer l'application",
+      "uninstallFailed": "Impossible de désinstaller l'application"
+    },
     "connect": {
       "title": "Connecter votre compte",
       "apiKeyDescription": "Saisissez vos identifiants. Ils sont chiffrés et injectés au proxy d'egress — l'application en bac à sable ne les voit jamais.",
@@ -77,12 +99,12 @@
     "tools": {
       "title": "Outils disponibles ({count})",
       "empty": "Cette application ne déclare aucun outil.",
-      "helper": "Tous les outils sont activés par défaut ; les administrateurs peuvent désactiver des outils spécifiques.",
+      "helper": "Tous les outils sont activés par défaut. Activez ou désactivez les outils pour vous-même.",
       "toggleLabel": "Basculer {name}",
       "enabled": "{name} activé",
       "disabled": "{name} désactivé",
       "saveFailed": "Impossible de mettre à jour l'outil",
-      "adminOnly": "Seuls les administrateurs peuvent modifier l'accès aux outils"
+      "installFirst": "Installez cette application pour gérer ses outils."
     },
     "profiles": {
       "title": "Utiliser dans les profils",

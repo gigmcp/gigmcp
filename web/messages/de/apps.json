@@ -22,7 +22,8 @@
     "connectComingSoon": "Verbinden (bald)"
   },
   "empty": {
-    "title": "Noch keine Apps installiert"
+    "title": "Noch keine Apps installiert",
+    "description": "Wechseln Sie zum Tab „Verfügbar“, um eine App zu installieren."
   },
   "install": {
     "button": "App installieren",
@@ -49,9 +50,30 @@
       "retry": "Erneut versuchen"
     }
   },
+  "catalog": {
+    "title": "Katalog",
+    "description": "Verwalte die Instanz-Allowlist aus der vollständigen Connector-Registry.",
+    "adminsOnly": "Nur für Admins.",
+    "allowListedBadge": "Auf Allowlist",
+    "add": "Zur Instanz hinzufügen",
+    "remove": "Entfernen",
+    "removing": "Wird entfernt…",
+    "removed": "\"{name}\" aus der Allowlist entfernt",
+    "removeError": "App konnte nicht entfernt werden"
+  },
   "detail": {
     "back": "Apps",
     "version": "Version {version}",
+    "install": {
+      "installButton": "Für mich installieren",
+      "uninstallButton": "Deinstallieren",
+      "installing": "Wird installiert…",
+      "uninstalling": "Wird deinstalliert…",
+      "installSuccess": "{name} installiert",
+      "uninstallSuccess": "{name} deinstalliert",
+      "installFailed": "App konnte nicht installiert werden",
+      "uninstallFailed": "App konnte nicht deinstalliert werden"
+    },
     "connect": {
       "title": "Konto verbinden",
       "apiKeyDescription": "Gib deine Zugangsdaten ein. Sie werden verschlüsselt und am Egress-Proxy injiziert — die Sandbox-App sieht sie nie.",
@@ -77,12 +99,12 @@
     "tools": {
       "title": "Verfügbare Tools ({count})",
       "empty": "Diese App deklariert keine Tools.",
-      "helper": "Alle Tools sind standardmäßig aktiviert; Administratoren können einzelne Tools deaktivieren.",
+      "helper": "Alle Tools sind standardmäßig aktiviert. Aktiviere oder deaktiviere Tools für dich selbst.",
       "toggleLabel": "{name} umschalten",
       "enabled": "{name} aktiviert",
       "disabled": "{name} deaktiviert",
       "saveFailed": "Tool konnte nicht aktualisiert werden",
-      "adminOnly": "Nur Administratoren können den Tool-Zugriff ändern"
+      "installFirst": "Installiere diese App, um ihre Tools zu verwalten."
     },
     "profiles": {
       "title": "In Profilen verwenden",

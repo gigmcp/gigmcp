@@ -130,8 +130,11 @@ func TestProfileOwnership(t *testing.T) {
 func TestProfileServersAndRotateAndDelete(t *testing.T) {
 	ctx := context.Background()
 	_, ts, st, inv := newTestAPI(t)
-	_, cookie := seedUserSession(t, st, "alice@x", "user")
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
 	if _, err := st.EnsureServer(ctx, "echo", "/bin/echo-mcp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InstallForUser(ctx, user.ID, "echo"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -195,6 +198,40 @@ func TestProfileServersAndRotateAndDelete(t *testing.T) {
 		if !decisions[want] {
 			t.Fatalf("missing audit decision %q in %v", want, decisions)
 		}
+	}
+}
+
+// TestProfileServersRequireUserInstall verifies a user may only bundle an app
+// into their profile if THEY have installed it: an allow-listed-but-not-installed
+// app → 400; once installed → 200.
+func TestProfileServersRequireUserInstall(t *testing.T) {
+	ctx := context.Background()
+	_, ts, st, _ := newTestAPI(t)
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
+	if _, err := st.EnsureServer(ctx, "fetch", "/bin/fetch-mcp"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, body := doJSON(t, ts, cookie, "POST", "/api/profiles", `{"name":"Main","slug":"main"}`)
+	var created profileResp
+	json.Unmarshal(body, &created)
+	id := itoa(created.ID)
+
+	// Allow-listed but NOT installed by the user → 400.
+	if code, _ := doJSON(t, ts, cookie, "PUT", "/api/profiles/"+id+"/servers", `{"servers":["fetch"]}`); code != http.StatusBadRequest {
+		t.Fatalf("uninstalled app must 400: %d", code)
+	}
+
+	// After the user installs it → 200.
+	if err := st.InstallForUser(ctx, user.ID, "fetch"); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := doJSON(t, ts, cookie, "PUT", "/api/profiles/"+id+"/servers", `{"servers":["fetch"]}`); code != http.StatusOK {
+		t.Fatalf("installed app must 200: %d", code)
+	}
+	names, _ := st.GetProfileServers(ctx, created.ID)
+	if len(names) != 1 || names[0] != "fetch" {
+		t.Fatalf("servers not persisted: %v", names)
 	}
 }
 
