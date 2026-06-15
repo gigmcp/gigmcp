@@ -127,14 +127,20 @@ export const useInstallServer = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ref: string) => api.installServer(ref),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.servers }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.servers });
+      qc.invalidateQueries({ queryKey: keys.apps });
+    },
   });
 };
 export const useUninstallServer = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => api.uninstallServer(name),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.servers }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.servers });
+      qc.invalidateQueries({ queryKey: keys.apps });
+    },
   });
 };
 
