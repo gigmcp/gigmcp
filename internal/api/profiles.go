@@ -225,7 +225,8 @@ func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePutProfileServers — PUT /api/profiles/{id}/servers {servers[]}:
-// replace-all; every name must be an installed server; invalidates the runtime.
+// replace-all; every name must be an app the profile owner has installed;
+// invalidates the runtime.
 func (s *Server) handlePutProfileServers(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.loadOwnedProfile(w, r)
 	if !ok {
@@ -237,18 +238,18 @@ func (s *Server) handlePutProfileServers(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &body, 64<<10) {
 		return
 	}
-	installed, err := s.Store.ListServers(r.Context())
+	installs, err := s.Store.ListUserInstalls(r.Context(), p.UserID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, codeInternal, "list servers")
+		writeErr(w, http.StatusInternalServerError, codeInternal, "list installs")
 		return
 	}
-	known := map[string]bool{}
-	for _, srv := range installed {
-		known[srv.Name] = true
+	installed := map[string]bool{}
+	for _, name := range installs {
+		installed[name] = true
 	}
 	for _, n := range body.Servers {
-		if !known[n] {
-			writeErr(w, http.StatusBadRequest, codeInvalid, "unknown server: "+n)
+		if !installed[n] {
+			writeErr(w, http.StatusBadRequest, codeInvalid, "install the app before adding it to a profile")
 			return
 		}
 	}

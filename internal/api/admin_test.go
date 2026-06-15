@@ -147,6 +147,58 @@ func TestUninstallSuccessHTTP(t *testing.T) {
 	}
 }
 
+// TestUninstallCascadesPerUserState verifies that an admin DELETE
+// /api/servers/{name} sweeps all per-user state for the connector: the user's
+// install, their disabled tools, and their profile's bundling of the server.
+func TestUninstallCascadesPerUserState(t *testing.T) {
+	ctx := context.Background()
+	_, _, st, _ := newTestAPI(t)
+	_, adminCookie := seedUserSession(t, st, "admin@x", "admin")
+	user, _ := seedUserSession(t, st, "alice@x", "user")
+
+	if _, err := st.EnsureServer(ctx, "fetch", "/bin/fetch-mcp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InstallForUser(ctx, user.ID, "fetch"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserToolEnabled(ctx, user.ID, "fetch", "fetch_do", false); err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateProfile(ctx, "prof", "Prof", user.ID, "tok-fetch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetProfileServers(ctx, p.ID, []string{"fetch"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a fresh API server with a success-mode installer over the same store.
+	inv2 := &fakeInvalidator{}
+	successInst := &fakeInstaller{st: st, installErr: nil}
+	srv2 := &api.Server{Store: st, Installer: successInst, Profiles: inv2}
+	ts2 := httptest.NewServer(srv2.Routes())
+	t.Cleanup(ts2.Close)
+
+	code, _ := doJSON(t, ts2, adminCookie, "DELETE", "/api/servers/fetch", "")
+	if code != http.StatusNoContent {
+		t.Fatalf("success uninstall must 204: %d", code)
+	}
+
+	// The user's install must be gone.
+	if installed, err := st.IsUserInstalled(ctx, user.ID, "fetch"); err != nil || installed {
+		t.Fatalf("user install not swept: installed=%v err=%v", installed, err)
+	}
+	// The user's disabled tools for the server must be gone.
+	if disabled, err := st.ListUserDisabledTools(ctx, user.ID, "fetch"); err != nil || len(disabled) != 0 {
+		t.Fatalf("user disabled tools not swept: %v err=%v", disabled, err)
+	}
+	// The profile must no longer bundle the server.
+	if srvs, _ := st.GetProfileServers(ctx, p.ID); len(srvs) != 0 {
+		t.Fatalf("profile_servers not cleared: %v", srvs)
+	}
+}
+
 func TestUsersListAdminOnly(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
 	_, user := seedUserSession(t, st, "alice@x", "user")

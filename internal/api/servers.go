@@ -88,6 +88,13 @@ func (s *Server) handleUninstallServer(w http.ResponseWriter, r *http.Request) {
 	for _, id := range affected {
 		s.invalidate(id)
 	}
+	// Sweep all per-user state (user_installs, user_disabled_tools, and any
+	// remaining profile_servers) for the removed connector. Non-fatal like the
+	// profile cleanup above: the uninstall already succeeded; log and continue,
+	// and the idempotent DELETE can be re-run to retry.
+	if err := s.Store.CascadeRemoveServer(r.Context(), name); err != nil {
+		log.Printf("WARN: CascadeRemoveServer(%q): %v — operator retry: DELETE /api/servers/%s", name, err, name)
+	}
 	s.audit(r, "server_uninstall", "name="+name, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
