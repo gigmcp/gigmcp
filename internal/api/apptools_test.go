@@ -62,11 +62,11 @@ func TestGetAppToolsEnabledByDefault(t *testing.T) {
 
 func TestGetAppToolsReflectsDisabled(t *testing.T) {
 	_, ts, st, _ := newTestAPI(t)
-	_, cookie := seedUserSession(t, st, "alice@x", "user")
+	user, cookie := seedUserSession(t, st, "alice@x", "user")
 	seedMultiToolApp(t, st, "slack")
 
-	// Disable "admin" directly in the store.
-	if err := st.SetToolEnabled(context.Background(), "slack", "admin", false); err != nil {
+	// Disable "admin" for this user — the detail endpoint reports per-user state.
+	if err := st.SetUserToolEnabled(context.Background(), user.ID, "slack", "admin", false); err != nil {
 		t.Fatal(err)
 	}
 

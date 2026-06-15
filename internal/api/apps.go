@@ -32,6 +32,8 @@ type appSummaryJSON struct {
 	AuthType    string `json:"auth_type"`    // oauth2 | api_key | basic | custom_env | none
 	Connected   bool   `json:"connected"`    // user has a credential for this app
 	Version     string `json:"version"`
+	// InstalledByMe is true when the effective user has installed this app.
+	InstalledByMe bool `json:"installed_by_me"`
 }
 
 // appDetailJSON is GET /api/apps/{name}.
@@ -51,6 +53,8 @@ type appDetailJSON struct {
 	InjectHeader string        `json:"inject_header"` // for the api_key/basic connect form hint
 	InjectFormat string        `json:"inject_format"`
 	Placeholder  string        `json:"placeholder"`
+	// InstalledByMe is true when the effective user has installed this app.
+	InstalledByMe bool `json:"installed_by_me"`
 }
 
 type appToolJSON struct {
@@ -100,9 +104,17 @@ func (s *Server) handleListApps(w http.ResponseWriter, r *http.Request) {
 		} else if !errors.Is(err, store.ErrManifestNotFound) {
 			log.Printf("WARN: handleListApps GetManifest %s: %v", srv.Name, err)
 		}
+		// Per-user install annotation; fail open with false so a store hiccup
+		// never breaks the whole list (matches the per-app annotation style above).
+		installedByMe, err := s.Store.IsUserInstalled(ctx, user.ID, srv.Name)
+		if err != nil {
+			log.Printf("WARN: handleListApps IsUserInstalled user=%d %s: %v", user.ID, srv.Name, err)
+			installedByMe = false
+		}
 		out = append(out, appSummaryJSON{
 			Name: srv.Name, DisplayName: displayName, Category: category,
 			AuthType: authType, Connected: connected[srv.Name], Version: version,
+			InstalledByMe: installedByMe,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"apps": out})
@@ -132,8 +144,9 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Tools are enabled by default; an admin-disabled set subtracts from that.
-	disabled, err := s.Store.ListDisabledTools(ctx, name)
+	// Tools are enabled by default; the effective user's disabled set subtracts
+	// from that (per-user tool state).
+	disabled, err := s.Store.ListUserDisabledTools(ctx, user.ID, name)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, codeInternal, "load app")
 		return
@@ -159,6 +172,13 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 	_, credErr := s.Store.GetCredential(ctx, name, store.UserTenant(user.ID))
 	connected := credErr == nil
 
+	// Per-user install annotation; fail open with false on a store error.
+	installedByMe, err := s.Store.IsUserInstalled(ctx, user.ID, name)
+	if err != nil {
+		log.Printf("WARN: handleGetApp IsUserInstalled user=%d %s: %v", user.ID, name, err)
+		installedByMe = false
+	}
+
 	scopes := inj.Scopes
 	if scopes == nil {
 		scopes = []string{}
@@ -182,6 +202,7 @@ func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {
 		AuthType: appAuthType(rec), Provider: inj.Provider, Vendor: vendor, Scopes: scopes,
 		Connected: connected, Version: rec.Version, AllowedHosts: hosts, Tools: tools,
 		InjectHeader: inj.Header, InjectFormat: inj.Format, Placeholder: inj.Placeholder,
+		InstalledByMe: installedByMe,
 	})
 }
 
