@@ -56,7 +56,9 @@ function CatalogCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{server.name}</span>
+            <span className="truncate text-sm font-medium">
+              {server.display_name || server.name}
+            </span>
             {installed && (
               <Badge variant="success">{t("install.installedBadge")}</Badge>
             )}
@@ -166,6 +168,7 @@ function AvailableTab({ search }: { search: string }) {
     return all.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
+        (s.display_name ?? "").toLowerCase().includes(q) ||
         (s.description ?? "").toLowerCase().includes(q),
     );
   }, [catalog.data, search]);
@@ -244,11 +247,11 @@ export default function AppsPage() {
         <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
 
-      <Tabs defaultValue="installed">
+      <Tabs defaultValue="available">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TabsList>
-            <TabsTrigger value="installed">{t("tabs.installed")}</TabsTrigger>
             <TabsTrigger value="available">{t("tabs.available")}</TabsTrigger>
+            <TabsTrigger value="installed">{t("tabs.installed")}</TabsTrigger>
           </TabsList>
           <div className="relative sm:w-72">
             <SearchIcon
@@ -265,11 +268,11 @@ export default function AppsPage() {
           </div>
         </div>
 
-        <TabsContent value="installed" className={cn("mt-2")}>
-          <InstalledTab search={search} />
-        </TabsContent>
         <TabsContent value="available" className="mt-2">
           <AvailableTab search={search} />
+        </TabsContent>
+        <TabsContent value="installed" className={cn("mt-2")}>
+          <InstalledTab search={search} />
         </TabsContent>
       </Tabs>
     </div>

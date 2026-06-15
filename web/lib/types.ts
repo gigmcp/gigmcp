@@ -31,6 +31,7 @@ export interface Server {
 /** One entry of the signed registry index served by /api/registry/servers. */
 export interface CatalogServer {
   name: string;
+  display_name: string; // pretty manifest name; "" when absent (falls back to name)
   description: string; // may be ""
   latest: string;
 }

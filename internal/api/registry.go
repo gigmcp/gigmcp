@@ -53,6 +53,7 @@ func (s *Server) cachedIndex(ctx context.Context) (*schema.Index, error) {
 // registryServerJSON is one catalog entry in GET /api/registry/servers.
 type registryServerJSON struct {
 	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
 	Latest      string `json:"latest"`
 }
@@ -78,11 +79,13 @@ func (s *Server) handleRegistryServers(w http.ResponseWriter, r *http.Request) {
 	servers := make([]registryServerJSON, 0, len(ix.Servers))
 	for name, srv := range ix.Servers {
 		description := ""
+		displayName := ""
 		// Nil-guard: Latest may point at a version absent from Versions.
 		if m := srv.Versions[srv.Latest]; m != nil {
 			description = m.Description
+			displayName = m.DisplayName
 		}
-		servers = append(servers, registryServerJSON{Name: name, Description: description, Latest: srv.Latest})
+		servers = append(servers, registryServerJSON{Name: name, DisplayName: displayName, Description: description, Latest: srv.Latest})
 	}
 	sort.Slice(servers, func(i, j int) bool { return servers[i].Name < servers[j].Name })
 	writeJSON(w, http.StatusOK, map[string]any{"servers": servers})

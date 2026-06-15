@@ -96,12 +96,12 @@ func TestRegistryCatalog(t *testing.T) {
 		},
 		{
 			// Two servers added out of order: the response must be sorted by
-			// name ascending, carry latest, and include the description key
-			// even while it is always empty.
+			// name ascending, carry latest, and include the display_name and
+			// description keys even while they are always empty here.
 			name:     "happy path lists signed index sorted by name",
 			registry: writeSignedIndex(t, catalogManifest("zeta", "0.2.0"), catalogManifest("ably", "0.1.0")),
 			wantCode: http.StatusOK,
-			wantBody: `{"servers":[{"name":"ably","description":"","latest":"0.1.0"},{"name":"zeta","description":"","latest":"0.2.0"}]}`,
+			wantBody: `{"servers":[{"name":"ably","display_name":"","description":"","latest":"0.1.0"},{"name":"zeta","display_name":"","description":"","latest":"0.2.0"}]}`,
 		},
 		{
 			name:     "fetch failure returns 502",
@@ -128,10 +128,12 @@ func TestRegistryCatalog(t *testing.T) {
 }
 
 // TestRegistryCatalogDescription verifies the catalog surfaces the latest
-// manifest's Description, and nil-guards a missing latest version (no panic).
+// manifest's DisplayName and Description, and nil-guards a missing latest
+// version (no panic).
 func TestRegistryCatalogDescription(t *testing.T) {
-	// "ably" has a Description on its latest manifest.
+	// "ably" has a DisplayName and Description on its latest manifest.
 	branded := catalogManifest("ably", "0.1.0")
+	branded.DisplayName = "Ably"
 	branded.Description = "Realtime messaging."
 
 	// "ghost" has a Latest that points at a version absent from Versions →
@@ -143,7 +145,7 @@ func TestRegistryCatalogDescription(t *testing.T) {
 		},
 	}
 
-	t.Run("description from latest manifest", func(t *testing.T) {
+	t.Run("display name and description from latest manifest", func(t *testing.T) {
 		srv, ts, st, _ := newTestAPI(t)
 		srv.Registry = writeSignedIndex(t, branded)
 		_, cookie := seedUserSession(t, st, "user@x", "user")
@@ -152,12 +154,15 @@ func TestRegistryCatalogDescription(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("status: want 200, got %d: %s", code, body)
 		}
+		if !strings.Contains(string(body), `"display_name":"Ably"`) {
+			t.Fatalf("want display_name surfaced, got %s", body)
+		}
 		if !strings.Contains(string(body), `"description":"Realtime messaging."`) {
 			t.Fatalf("want description surfaced, got %s", body)
 		}
 	})
 
-	t.Run("nil latest manifest yields empty description, no panic", func(t *testing.T) {
+	t.Run("nil latest manifest yields empty display name and description, no panic", func(t *testing.T) {
 		srv, ts, st, _ := newTestAPI(t)
 		srv.Registry = &countingFetcher{ix: nilLatest}
 		_, cookie := seedUserSession(t, st, "user@x", "user")
@@ -166,7 +171,7 @@ func TestRegistryCatalogDescription(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("status: want 200, got %d: %s", code, body)
 		}
-		if !strings.Contains(string(body), `{"name":"ghost","description":"","latest":"9.9.9"}`) {
+		if !strings.Contains(string(body), `{"name":"ghost","display_name":"","description":"","latest":"9.9.9"}`) {
 			t.Fatalf("want empty description for nil latest, got %s", body)
 		}
 	})
